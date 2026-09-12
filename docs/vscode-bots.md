@@ -17,6 +17,14 @@ not send into, resume or copy an existing conversation.
 
 ## Enable Copilot assignments
 
+The status bar's **Usage monitor** button (or **Agent Orchestrator: Usage Monitor
+On/Off** in the Command Palette) controls background allowance checks independently
+of Copilot assignments. It reads the current status when clicked and offers On or
+Off. Opening VS Code never enables the monitor; turn it off when finished coding.
+After installing extension 0.1.1, an existing VS Code window may need a normal
+reload to show the button. The application folder comes from the saved Codex
+worker registry, or **Agent Orchestrator: Application Root** in user settings.
+
 In one trusted VS Code window, run **Agent Orchestrator: Enable VS Code Bots**
 from the Command Palette and select the model for tasks. If VS Code requests
 permission for the extension to use Copilot, allow access to enable assignments.

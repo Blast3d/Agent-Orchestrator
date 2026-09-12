@@ -2,7 +2,7 @@
   "name": "agent-orchestrator-bots",
   "displayName": "Agent Orchestrator Bots",
   "description": "Receive supplied-text orchestration tasks through VS Code's existing Copilot models.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "local-orchestrator",
   "engines": {"vscode": "^1.95.0"},
   "categories": ["Other"],
@@ -13,7 +13,17 @@
     "commands": [
       {"command": "orchestratorBots.enable", "title": "Agent Orchestrator: Enable VS Code Bots"},
       {"command": "orchestratorBots.disable", "title": "Agent Orchestrator: Disable VS Code Bots"},
-      {"command": "orchestratorBots.model", "title": "Agent Orchestrator: Choose Bot Model"}
-    ]
+      {"command": "orchestratorBots.model", "title": "Agent Orchestrator: Choose Bot Model"},
+      {"command": "orchestratorBots.usageMonitor", "title": "Agent Orchestrator: Usage Monitor On/Off"}
+    ],
+    "configuration": {
+      "title": "Agent Orchestrator",
+      "properties": {
+        "agentOrchestrator.applicationRoot": {
+          "type": "string", "default": "", "scope": "application",
+          "description": "Installed Orchestrator folder. Leave blank to use the saved Codex worker registry."
+        }
+      }
+    }
   }
 }

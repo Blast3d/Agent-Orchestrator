@@ -599,6 +599,23 @@ class HTTPTests(unittest.TestCase):
                 self.assertEqual(status, 403)
         self.assertEqual(self.store.opened, [])
 
+    def test_monitor_reads_do_not_launch_and_mutations_require_valid_intent(self):
+        from unittest.mock import patch
+        with patch('coordinator_viewer.monitor_status', return_value={'status': 'off'}) as status_reader, \
+                patch('coordinator_viewer.set_monitor_enabled', return_value={'status': 'on'}) as change:
+            self.assertEqual(self.request(path='/api/usage-monitor')[0], 200)
+            status_reader.assert_called_once_with()
+            change.assert_not_called()
+            for payload in ({}, {'enabled': 'false'}, {'enabled': 1}, {'enabled': True, 'extra': 0}):
+                self.assertEqual(self.request('POST', '/api/usage-monitor', payload=payload)[0], 400)
+            self.assertEqual(self.request('POST', '/api/usage-monitor', payload={'enabled': True}, authorized=False)[0], 403)
+            self.assertEqual(self.request('POST', '/api/usage-monitor', payload={'enabled': True}, headers={'Origin': 'http://foreign.example'})[0], 403)
+            change.assert_not_called()
+            self.assertEqual(self.request('POST', '/api/usage-monitor', payload={'enabled': True})[0], 200)
+            change.assert_called_once_with(True)
+            self.assertEqual(self.request('POST', '/api/usage-monitor', payload={'enabled': False})[0], 200)
+            self.assertEqual(change.call_args.args, (False,))
+
     def test_memory_port_can_navigate_to_exact_viewer_run_without_api_access(self):
         navigation = {'Sec-Fetch-Site': 'same-site', 'Sec-Fetch-Mode': 'navigate',
                       'Sec-Fetch-Dest': 'document'}

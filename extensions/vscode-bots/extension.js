@@ -5,9 +5,11 @@ const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 const {startBridge} = require('./bridge');
+const {registerUsageMonitor} = require('./usage-monitor');
 
 let bridge;
 async function activate(context) {
+  registerUsageMonitor(context, vscode);
   const directory = path.join(os.homedir(), '.agent-orchestrator', 'vscode-bots');
   await fs.mkdir(directory, {recursive: true});
   const token = crypto.randomBytes(32).toString('hex');

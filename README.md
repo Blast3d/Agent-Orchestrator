@@ -1,5 +1,72 @@
 # Agent Orchestrator
 
+Coordinate AI coding assistants, track their work, and keep reviewed project
+memory on your Windows PC. **Codex is the default lead**, called **ASTRA** in the
+workflow documentation.
+
+## Requirements — start here
+
+For the usual coding workflow, you need **Windows x64, VS Code, and the OpenAI
+Codex extension signed in to an account with Codex access**. Choose the portable
+Windows ZIP if you want Python and the application dependencies included.
+
+| Component | When you need it | What to install or prepare |
+| --- | --- | --- |
+| **Windows x64** | Running this application's Windows launchers and provider adapters | Extract the app to a writable local folder. The packaged runtime and native adapters target Windows x64. |
+| **[Visual Studio Code](https://code.visualstudio.com/download)** | The documented editor workflow, Codex conversations, and optional Copilot bots | Install a current stable Windows release and open your project folder. |
+| **[OpenAI Codex extension](https://developers.openai.com/codex/ide/)** | Using Codex/ASTRA as the lead in VS Code | Install the official OpenAI extension and sign in. The Codex quota reader can use its bundled executable; a separate Codex CLI on `PATH` is also supported. |
+| **Python** | Running the application | **Included in the portable Windows ZIP**: Python 3.13.15. For a source checkout, install [Python for Windows](https://www.python.org/downloads/windows/) with pip; **Python 3.13 x64 is the build target and recommended source environment**. |
+| **Web browser** | Viewing the Orchestrator, memory, and usage dashboards | Use a current browser; the dashboards open on a local loopback address. |
+| **Internet and provider account access** | Installing tools, signing in, checking account allowances, and running hosted AI work | Sign in separately to each provider you intend to use. Accounts, subscriptions, and credits are supplied by those providers. Saved reports and local memory can be viewed offline. |
+
+The Python checks require **3.11 or newer** and **SQLite 3.42+ with FTS5 secure
+deletion**. SQLite comes with Python; the portable runtime supplies the required
+version. The terminal readers use the pinned `pywinpty`, `pyte`, and `wcwidth`
+packages in [requirements.txt](requirements.txt), all included in the Windows ZIP.
+
+### Optional tools and additional workers
+
+| Tool or integration | Required only when… | Setup notes |
+| --- | --- | --- |
+| **Agent Orchestrator Bots VS Code extension** | You want Copilot assignments or the VS Code **Usage monitor** button | Install the app's `.vsix` with **Extensions: Install from VSIX**. The monitor button needs **0.1.1+**; older ZIPs may include an earlier extension. For Copilot, also enable the bot, select an available model, and grant VS Code's model-access consent. See [VS Code setup](docs/vscode-bots.md). |
+| **Claude Code** | You want Claude workers or backup coordination | Install and authenticate Claude Code. This repo's current Windows adapter expects the **npm installation** under `%APPDATA%\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe`; a standalone installation at another location requires adapter changes. See [provider setup](docs/packaging.md). |
+| **[Node.js and npm](https://nodejs.org/en/download)** | You install Claude through npm, or run this repo's JavaScript tests | Claude's current npm installer requires **Node.js 22+**; see [Anthropic's npm instructions](https://code.claude.com/docs/en/setup#install-with-npm). The Python dashboards use the Python runtime. |
+| **Grok Build CLI** | You want Grok workers | Install the official CLI and authenticate your account. The current adapter expects `%USERPROFILE%\.grok\bin\grok.exe`. Provider CLI updates may need quota-reader revalidation. |
+| **Git** | You clone the repository, contribute changes, or want Git tools in coding sessions | Install Git for Windows for that workflow; downloaded ZIPs can be extracted directly. |
+| **Other integrations** | You choose their worker routes | Gemini/Antigravity, NotebookLM, and local-model routes have separate setup. Consult [current worker controls](#current-worker-controls) before enabling them. |
+
+### First run
+
+1. Install VS Code and the official Codex extension, then sign in to Codex for the
+   lead workflow.
+2. Download the **Windows x64 ZIP** from this repository's **Releases**, extract
+   the entire archive, and run **Setup.cmd**. This checks the bundled runtime and
+   initializes missing local settings. Provider logins remain a separate step.
+3. Open **Open Orchestrator Viewer.cmd**. Install the included VSIX if you want
+   the VS Code controls or Copilot assignments.
+4. Choose the provider workers you want, complete their login/setup, and use
+   **Check Setup.cmd** to inspect application and integration status. Executable
+   detection does not itself verify a provider login or a successful AI request.
+5. If you want Codex to discover this app from other projects, follow the
+   [optional global skill registration](docs/packaging.md). Turn the **Usage
+   monitor** on for coding sessions and off when finished; opening the viewer or
+   VS Code does not enable it.
+
+**Running a source checkout instead?** Install Python 3.13 x64 with pip and make
+`python` available in your terminal. From this repository's folder in PowerShell:
+
+```powershell
+python -m pip install --target vendor/quota -r requirements.txt
+.\Setup.cmd
+& '.\Open Orchestrator Viewer.cmd'
+```
+
+The source checkout contains the extension source; follow
+[VS Code extension packaging](docs/vscode-bots.md#local-maintenance) to create its
+VSIX. See [packaging and setup](docs/packaging.md) for build and upgrade details.
+
+## Overview
+
 **Portable Windows app:** download the Windows x64 ZIP from this repository's
 Releases, extract it and run **Setup.cmd**. It includes Python, dashboard code,
 launchers and the VS Code bot extension. See [packaging and setup](docs/packaging.md).
@@ -10,13 +77,18 @@ Claude routing now uses **Opus** for workers and backup coordination. Fable is
 paused until the user resumes it (2026-09-11). See [coordinator handoffs](docs/coordinator-handoff.md)
 for the saved model policy, existing-session limits and recovery.
 
-Your local orchestration application. **ASTRA leads by default**. At 5% remaining, ASTRA can run `lead transfer` to checkpoint, yield and launch Fable itself, keeping normal permissions. Fable claims the saved run and continues orchestration. ASTRA remains a worker on assigned project tasks while quota permits; use `lead role` to check session duties. The recorded lead assigns bounded tasks, checks answers and integrates the final result. `lead transfer` opens a console attached to the new Fable session so you can watch the switchover and answer its permission prompts; **Watch Fable Coordinator.cmd** reopens it. See [Fable takeover](docs/coordinator-handoff.md).
+The recorded lead assigns bounded tasks, checks answers, and integrates the final
+result. Use `lead role` to inspect session duties and the
+[coordinator handoff guide](docs/coordinator-handoff.md) for supported transfers
+and recovery. Historical Fable records and launcher names remain for compatibility;
+the current paused-model policy still applies.
 
 The thirteen-agent experiment remains available: **Open Panel Results.cmd** shows its vote, implemented winners and estimated contribution shares.
 
 **Open Orchestrator Viewer.cmd** shows the selected run's lead, progress and saved
-conversation, with older-message paging and an explicit **Open interactive console**
-button for Fable. Viewing does not steal an attached console or start a model.
+conversation, with older-message paging and a provider-specific **Open Codex
+conversation** or **Open Claude console** control when available. Viewing does
+not steal an attached console or start a model.
 Use `python orchestrator.py viewer --run RUN_NAME` for a specific run. ASTRA history
 is supported through an exact Codex conversation binding; replies stay in Codex.
 See [the viewer guide](docs/orchestrator-viewer.md).
@@ -73,6 +145,7 @@ python orchestrator.py dashboard
 python orchestrator.py inbox --open
 python orchestrator.py tasks
 python orchestrator.py monitor
+python orchestrator.py monitor --status
 python orchestrator.py stop-monitor
 ```
 
@@ -140,12 +213,12 @@ setup, dispatch and validation limits.
 
 | Worker | Current orchestration route |
 |---|---|
-| Claude | Included account, native Claude executable, tools disabled; Sonnet/medium default; actual returned model recorded |
+| Claude | Included account, native Claude executable, tools disabled; Opus/medium default; actual returned model recorded |
 | VS Code Copilot | Supplied-text assignments through the selected Copilot model; local bridge, no model tools; requires VS Code activation/model access; allowance and actual tokens unknown |
 | Grok | Included SuperGrok account, official Grok Build, tools/web/subagents disabled |
 | Grok Bot | Atlas in the official Windows app; supervised tasks and a separate, manually refreshed weekly allowance |
 | Local Qwen | Small supplied-text jobs through loopback Ollama; pinned local model, 4K context, one active request |
-| Gemini | Antigravity `agy`: automatic supplied-text assignments verified, with a per-job deny hook, pinned binary/handler, quota guard and strict stream parser. See [validation and limits](docs/ANTIGRAVITY-AUTOMATIC-ASSIGNMENTS.md). |
+| Gemini | Optional Antigravity `agy` supplied-text route; requires separate CLI authentication and validated local boundary configuration. See the [boundary implementation](app/antigravity_boundary.py). |
 | NotebookLM | Feature-specific jobs use saved/manual allowance evidence; no verified automatic consumer quota reader |
 | Codex | Lead and integrator; official account quota reader also supports reservations for native subagents |
 
@@ -157,7 +230,19 @@ This host uses advisory quota admission: collection timeouts, stale readings and
 
 The dashboard shows last-observed allowance, observation time, reservation estimates and collection failures. The lead can inspect the same local evidence with `python orchestrator.py status` or `runtime/usage-status.json`. Snapshot generation time is separate from when usage was measured.
 
-The hidden monitor refreshes every five minutes and starts at Windows sign-in. It does not load local models. Silent Windows warnings depend on notification settings; the dashboard retains quota state.
+The usage monitor is manual. Turn it on with the **Usage monitor** switch near the
+top of the Orchestrator viewer, or click **Usage monitor** in VS Code's status bar
+and choose **Turn on usage monitor**. The Command Palette also has **Agent
+Orchestrator: Usage Monitor On/Off**. Turn it off when finished coding. Opening
+the viewer or VS Code does not start the monitor. Closing either app does not stop
+an enabled monitor; it runs until you switch it off or sign out.
+
+While on, it refreshes account allowances about every five minutes. **Stopping**
+means the current quota check is ending. Windows sign-in startup is disabled on
+this installation; `python orchestrator.py monitor --unregister-startup` removes
+a startup entry from an older setup without starting the monitor. Start/Stop
+shortcuts remain in `launchers/`. No local models are loaded. Silent Windows
+warnings depend on notification settings; the dashboard retains quota state.
 
 Timeouts and interrupted execution retain a reservation when completion is uncertain. Inspect the task record and provider session before retrying or releasing that reservation. Do not assume a closed terminal means remote inference stopped. Automatic replacement is limited to confirmed quota conditions; there is no automatic retry of uncertain execution or new paid fallback. Ordinary failures are recorded, and a failed export does not erase a saved canonical result.
 

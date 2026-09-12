@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT / 'app'))
 def main():
     actions = {'status': ('usage_guard.py', 'status'), 'refresh': ('usage_guard.py', 'refresh'),
                'run': ('dispatch_worker.py', None), 'review': ('dispatch_worker.py', 'review'),
-               'monitor': ('start_usage_monitor.py', None), 'stop-monitor': ('usage_guard.py', 'stop-monitor'),
+               'monitor': ('start_usage_monitor.py', None), 'stop-monitor': ('start_usage_monitor.py', '--stop'),
                'local': ('manage_local.py', None), 'inventory': ('inventory_agents.py', None),
                'contributions': ('contribution_cli.py', None), 'visuals': ('project_visuals.py', None),
                'inbox': ('task_inbox.py', None), 'brief-check': ('brief_check.py', None),

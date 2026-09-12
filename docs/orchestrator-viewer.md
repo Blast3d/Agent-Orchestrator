@@ -127,3 +127,11 @@ the Codex conversation link through the live dashboard and installed extension;
 its run report distinguishes a launch request from observed URI delivery. See
 each viewer run's `review/validation.md` for final
 counts and limits. A new quota-triggered takeover was not forced for this test.
+
+## Manual usage monitor
+
+The **Usage monitor** switch near the top of the viewer turns background account
+allowance checks on or off. It works without selecting a run. Opening the viewer
+only reads its status. **Stopping** lasts until an active quota check ends; an old
+saved PID is never displayed as a running monitor. Turn it off when you finish
+coding. Closing the viewer leaves the current setting in effect until sign-out.

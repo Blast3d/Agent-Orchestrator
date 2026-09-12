@@ -22,6 +22,7 @@ from coordinator_interaction import (codex_interaction, codex_support,
                                      open_codex_conversation, transcript_source)
 from paths import ROOT
 from usage_guard import file_lock, write_json
+from start_usage_monitor import monitor_status, set_monitor_enabled
 
 SERVICE = 'orchestrator-session-viewer'
 UUID = re.compile(r'[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}')
@@ -572,13 +573,15 @@ class ViewerHandler(DashboardHandler):
                 return self._reply(200, {'service': SERVICE, 'version': 1, 'instance_id': self.server.instance_id})
             if address.path == '/favicon.ico':
                 return self._reply(204, '', 'image/svg+xml')
-            if address.path not in ('/api/runs', '/api/run', '/api/history', '/api/services'):
+            if address.path not in ('/api/runs', '/api/run', '/api/history', '/api/services', '/api/usage-monitor'):
                 return self._error(404, 'This page is not available.')
             params = parse_qs(address.query, max_num_fields=3)
             allowed = {'run', 'before'} if address.path == '/api/history' else {'run'} if address.path == '/api/run' else set()
             if set(params) - allowed or any(len(v) != 1 for v in params.values()):
                 raise ValueError('Invalid run or history selection.')
-            if address.path == '/api/services':
+            if address.path == '/api/usage-monitor':
+                value = monitor_status()
+            elif address.path == '/api/services':
                 value = self._services()
             elif address.path == '/api/runs':
                 value = self.server.store.runs()
@@ -592,12 +595,16 @@ class ViewerHandler(DashboardHandler):
 
     def do_POST(self):
         if not self._gate(mutation=True): return
-        if self.path not in ('/api/attach', '/api/interact', '/api/open'):
+        if self.path not in ('/api/attach', '/api/interact', '/api/open', '/api/usage-monitor'):
             return self._error(404, 'This action is not available.')
         try:
             body = self._body()
             if body is not None:
-                if self.path == '/api/open':
+                if self.path == '/api/usage-monitor':
+                    if not isinstance(body, dict) or set(body) != {'enabled'} or type(body['enabled']) is not bool:
+                        raise ValueError('Choose On or Off for the usage monitor.')
+                    value = set_monitor_enabled(body['enabled'])
+                elif self.path == '/api/open':
                     value = self._open_service(body)
                 elif self.path == '/api/interact':
                     value = self.server.store.interact(body)

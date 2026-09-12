@@ -24,6 +24,12 @@ PAGE = r'''<!doctype html>
     <div class="row"><span id="connection" class="smalltext muted"><span class="status-dot"></span>Connecting</span><button id="refresh" type="button" class="small" hidden>Retry now</button></div>
   </header>
   <div id="error" class="banner error" role="alert" hidden></div>
+  <section class="panel session" aria-label="Usage monitor">
+    <div class="session-grid">
+      <div><h2>Usage monitor</h2><p id="monitor-help" class="muted smalltext spaced">Turn on account allowance checks while coding; turn them off when finished.</p><p id="monitor-note" class="muted smalltext spaced" role="status">Checking monitor status...</p></div>
+      <button id="monitor-toggle" type="button" role="switch" aria-checked="false" aria-label="Usage monitor" aria-describedby="monitor-help monitor-note" disabled>Checking...</button>
+    </div>
+  </section>
   <section class="panel session" aria-label="Selected orchestrator">
     <div class="session-grid">
       <div><label class="label" for="run">Project run</label><select id="run"><option value="">Loading runs…</option></select><p id="run-id" class="muted smalltext spaced"></p></div>
@@ -104,6 +110,35 @@ PAGE = r'''<!doctype html>
   }
   function showError(error) { lastFailure = error.message || 'The local viewer is unavailable.'; $('error').textContent = lastFailure; $('error').hidden = false; connection(); }
   function clearError() { lastFailure = ''; $('error').hidden = true; }
+  let monitorState = null, monitorBusy = false, monitorReading = false, monitorEpoch = 0;
+  function renderMonitor() {
+    const state = monitorState?.status;
+    const on = state === 'on', stopping = state === 'stopping';
+    $('monitor-toggle').setAttribute('aria-checked', String(on));
+    $('monitor-toggle').disabled = monitorBusy || stopping || !['on', 'off'].includes(state);
+    $('monitor-toggle').textContent = monitorBusy ? 'Updating...' : stopping ? 'Stopping...' : on ? 'On - turn off' : state === 'off' ? 'Off - turn on' : 'Unavailable';
+    $('monitor-toggle').classList.toggle('primary', on);
+    if (monitorState) $('monitor-note').textContent = (stopping ? 'The current check is ending. ' : on ? 'Account allowances refresh about every five minutes. ' : 'Background allowance checks are off. ') + (monitorState.startup_registered ? 'Windows sign-in startup is enabled.' : 'Windows sign-in startup is disabled.');
+  }
+  async function loadMonitor() {
+    if (monitorBusy || monitorReading) return;
+    monitorReading = true;
+    const revision = monitorEpoch;
+    try {
+      const state = await api('/api/usage-monitor');
+      if (revision === monitorEpoch) { monitorState = state; renderMonitor(); }
+    } catch (error) {
+      if (revision === monitorEpoch) { monitorState = null; renderMonitor(); $('monitor-note').textContent = 'Monitor status unavailable. ' + error.message; }
+    } finally { monitorReading = false; }
+  }
+  $('monitor-toggle').addEventListener('click', async () => {
+    if (monitorBusy || !['on', 'off'].includes(monitorState?.status)) return;
+    const enabled = monitorState.status === 'off';
+    monitorEpoch++; monitorBusy = true; renderMonitor();
+    try { monitorState = await api('/api/usage-monitor', {enabled}); }
+    catch (error) { monitorState = null; $('monitor-note').textContent = error.message; }
+    finally { monitorBusy = false; renderMonitor(); }
+  });
   let services = [];
   function crumbTarget() { const brain = services.find(s => s.id === 'brain'); if (!brain || !brain.origin) return ''; const scope = new URLSearchParams(); if (memoryProject) scope.set('project', memoryProject); if (selected) scope.set('run', selected); return brain.origin + '/' + (scope.size ? '#' + scope : ''); }
   function renderCrumb() { const scope = new URLSearchParams(); if (memoryProject) scope.set('project', memoryProject); if (selected) scope.set('run', selected); for (const page of ['usage', 'contributions']) $('crumb-' + page).href = '/' + page + (scope.size ? '?' + scope : ''); const target = crumbTarget(); $('crumb-brain').href = target || '#'; $('crumb-brain').title = target ? 'Open the Memory dashboard' + (selected ? ' for this run' : '') : 'Start the Memory dashboard'; }
@@ -335,7 +370,7 @@ PAGE = r'''<!doctype html>
     refresh();
   });
   $('memory-project').addEventListener('change', () => { memoryProject = $('memory-project').value; const address = new URL(location.href); address.searchParams.set('project', memoryProject); if (selected) address.searchParams.set('run', selected); history.replaceState(null, '', address); renderCrumb(); });
-  $('refresh').addEventListener('click', () => { loadServices(); refresh(); });
+  $('refresh').addEventListener('click', () => { loadServices(); loadMonitor(); refresh(); });
   $('older').addEventListener('click', async () => {
     if (olderBusy || !hasMore || !selected) return;
     olderBusy = true; $('older').disabled = true; $('older').textContent = 'Loading older messages…';
@@ -362,9 +397,9 @@ PAGE = r'''<!doctype html>
     } catch (error) { if (capturedEpoch === epoch) { $('attach-status').textContent = error.message; showError(error); } }
     finally { attaching = false; attachEnabled(); }
   });
-  document.addEventListener('visibilitychange', () => { connection(); if (!document.hidden) refresh(); });
-  setInterval(() => { connection(); if (!document.hidden) refresh(); }, 5000);
-  renderCrumb(); loadServices(); refresh();
+  document.addEventListener('visibilitychange', () => { connection(); if (!document.hidden) { loadMonitor(); refresh(); } });
+  setInterval(() => { connection(); if (!document.hidden) { loadMonitor(); refresh(); } }, 5000);
+  renderCrumb(); loadServices(); loadMonitor(); refresh();
 })();
 </script>
 </body>
