@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2317232e'/%3E%3Cpath d='M8 8L16 16L24 8M16 16L8 24M16 16L24 24' stroke='%239be1cd' stroke-width='2'/%3E%3C/svg%3E">
+  <title>System map</title>
+  <style>
+    :root { --bg:#101821; --panel:#17232e; --panel-raised:#1d2b38; --line:#324353; --text:#edf3f6; --muted:#acbdca; --accent:#9be1cd; --shadow:0 16px 42px #0003; font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color-scheme:dark }
+    * { box-sizing:border-box }
+    body { margin:0; background:var(--bg); color:var(--text); font-size:14px; line-height:1.55 }
+    button,input { font:inherit }
+    button { color:inherit; cursor:pointer }
+    button:disabled { cursor:default; opacity:.45 }
+    button:focus-visible,input:focus-visible,[tabindex]:focus-visible { outline:3px solid var(--accent); outline-offset:4px }
+    button { -webkit-tap-highlight-color:transparent }
+    h1,h2,h3,p { margin:0 }
+    .top { padding:24px 30px 20px; border-bottom:1px solid var(--line); background:linear-gradient(105deg,#1d303b 0%,#17232e 60%,#17262b 100%) }
+    .topline { display:flex; justify-content:space-between; gap:16px; align-items:center; margin-bottom:10px }
+    .eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:.18em; color:var(--accent); font-weight:750 }
+    .verified { display:inline-flex; align-items:center; gap:7px; color:#c8d8df; border:1px solid #446257; border-radius:99px; padding:4px 10px; font-size:11px; white-space:nowrap }
+    .verified::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--accent) }
+    h1 { font-size:clamp(23px,2.7vw,35px); line-height:1.15; letter-spacing:-.035em; font-weight:720 }
+    .subtitle { color:var(--muted); max-width:900px; font-size:14px; margin-top:10px }
+    .workspace { display:grid; grid-template-columns:minmax(0,1fr) 340px; min-height:550px; height:calc(100dvh - 154px) }
+    .explorer { min-width:0; position:relative; display:flex; flex-direction:column; overflow:hidden }
+    .toolbar { padding:16px 22px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; border-bottom:1px solid var(--line); background:#141f29; z-index:5 }
+    .search-wrap { position:relative; flex:1 1 230px; max-width:420px }
+    .search-wrap::before { content:"⌕"; position:absolute; left:12px; top:3px; font-size:26px; line-height:32px; color:var(--muted); pointer-events:none }
+    #search { width:100%; border:1px solid var(--line); border-radius:8px; height:40px; padding:8px 44px 8px 37px; background:var(--bg); color:var(--text) }
+    #search::placeholder { color:#9bafbd }
+    .search-shortcut { position:absolute; right:12px; top:10px; color:#9bafbd; font:12px ui-monospace,monospace; border:1px solid var(--line); padding:0 5px; border-radius:3px; pointer-events:none }
+    .search-results { position:absolute; z-index:20; left:0; right:0; top:47px; background:#20303e; border:1px solid #496373; border-radius:10px; padding:6px; box-shadow:var(--shadow); max-height:360px; overflow:auto }
+    .search-result { display:block; text-align:left; width:100%; padding:9px 10px; border:0; background:none; border-radius:5px }
+    .search-result:hover,.search-result:focus { background:#2e4252 }
+    .search-result small { display:block; color:var(--muted); font-size:11px }
+    .no-results { padding:12px; color:var(--muted) }
+    .control { border:1px solid var(--line); background:var(--panel); border-radius:8px; min-height:39px; padding:7px 12px; font-size:12px; font-weight:650; white-space:nowrap }
+    .control:hover { background:#263a49; border-color:#5b788a }
+    .control[aria-pressed="true"] { border-color:#6d9f90; color:var(--accent); background:#223a38 }
+    .view-switch { display:flex; gap:3px; padding:3px; border:1px solid var(--line); border-radius:9px }
+    .view-switch button { min-height:31px; border:0; padding:4px 11px; border-radius:6px }
+    .view-switch button[aria-pressed="false"] { background:transparent; color:var(--muted) }
+    .journeybar { display:flex; align-items:center; gap:8px; padding:13px 22px; border-bottom:1px solid #2b3b49; overflow-x:auto; scrollbar-width:thin; flex-shrink:0; background:#142029 }
+    .journey-label { font-size:11px; color:var(--muted); flex-shrink:0; margin-right:3px }
+    .journey { border:1px solid #3d5360; background:transparent; border-radius:99px; padding:5px 11px; font-size:11px; white-space:nowrap }
+    .journey:hover,.journey[aria-pressed="true"] { background:#294139; border-color:#6baf97; color:#d0f1e5 }
+    .canvas-wrap { flex:1; min-height:340px; position:relative; overflow:hidden; background-color:#111d27; background-image:radial-gradient(#52657555 .7px,transparent .7px); background-size:24px 24px }
+    #canvas { position:absolute; inset:0; overflow:hidden; cursor:grab; touch-action:none; user-select:none }
+    #canvas.dragging { cursor:grabbing }
+    #stage { position:absolute; left:0; top:0; width:0; height:0; transform-origin:0 0; will-change:transform }
+    #edges { position:absolute; left:0; top:0; width:1px; height:1px; overflow:visible; pointer-events:none }
+    .tree-edge { fill:none; stroke:#426172; stroke-width:1.8 }
+    .tree-edge.incident { stroke:#b7e4d7; stroke-width:2.4 }
+    .relation-edge { fill:none; stroke:#a4d9e5; stroke-width:2; stroke-dasharray:6 5; opacity:.85 }
+    .edge-text { fill:#e1edf3; font-size:11px; font-family:inherit; paint-order:stroke; stroke:#13212d; stroke-width:6px; stroke-linejoin:round; text-anchor:middle }
+    .map-node { position:absolute; width:226px; height:76px; border:1px solid #526775; border-left:3px solid var(--node-color,#9be1cd); border-radius:11px; background:#1c2c38; box-shadow:0 5px 18px #0002; transition:border-color .15s,background .15s }
+    .map-node.root { width:240px; height:88px; background:linear-gradient(125deg,#21423e,#223647); border-color:#6f9c8e; border-left-width:1px; border-top:3px solid #a9e7d3 }
+    .map-node.selected { border-color:#e1f6f0; box-shadow:0 0 0 3px #a2d6c72b,0 8px 25px #0004; background:#2a414b }
+    .map-node.in-journey { border-color:var(--accent); background:#203c39 }
+    .map-node.related { border-color:#9bcddd }
+    .node-main { background:none; border:0; text-align:left; width:100%; height:100%; padding:11px 39px 11px 14px; border-radius:8px; line-height:1.25 }
+    .root .node-main { padding:14px 16px }
+    .node-caption { display:block; color:var(--node-color,#a7c6d7); font-size:9px; text-transform:uppercase; letter-spacing:.075em; margin-bottom:5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+    .node-title { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:15px; font-weight:680; letter-spacing:-.01em }
+    .root .node-title { font-size:16px; font-weight:700 }
+    .node-toggle { position:absolute; right:9px; top:24px; width:27px; height:27px; padding:0; line-height:24px; background:#12212b; border:1px solid #526a79; border-radius:7px; color:#d1e2e8; font-size:17px }
+    .node-toggle:hover { background:#3b5869; color:#fff }
+    .canvas-hint { position:absolute; left:22px; top:18px; font-size:11px; color:#b0c3cf; pointer-events:none; background:#111d27db; padding:5px 8px; border-radius:5px; max-width:calc(100% - 44px) }
+    .canvas-hint strong { font-weight:650; color:#d5e3e9 }
+    .canvas-tools { display:flex; gap:5px; position:absolute; bottom:20px; right:20px; background:#17232ef2; padding:5px; border:1px solid var(--line); border-radius:10px; box-shadow:var(--shadow) }
+    .canvas-tools .control { width:34px; height:34px; min-height:0; padding:3px; font-size:18px; border-color:transparent }
+    .canvas-tools #fit { width:auto; font-size:11px; padding:4px 10px }
+    #zoom-value { color:var(--muted); font-size:11px; align-self:center; min-width:37px; text-align:center }
+    .legend { position:absolute; left:22px; bottom:22px; display:flex; gap:13px; color:#bacbd6; font-size:10px; background:#111d27eb; padding:5px 8px; border-radius:5px }
+    .legend span { display:flex; align-items:center; gap:6px }
+    .legend i { display:inline-block; width:17px; border-top:2px solid #7295a8 }
+    .legend i.relationship { border-top-style:dashed; border-color:#a4d9e5 }
+    .map-footer { display:flex; justify-content:space-between; gap:12px; padding:10px 22px; border-top:1px solid var(--line); color:var(--muted); font-size:10px; background:#141f29 }
+    .detail { border-left:1px solid var(--line); padding:25px 25px 30px; background:var(--panel); overflow-y:auto; scrollbar-width:thin }
+    .detail-group { display:flex; gap:7px; align-items:center; text-transform:uppercase; letter-spacing:.1em; font-size:10px; color:var(--muted); margin-bottom:14px }
+    .group-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0 }
+    #detail-title { font-size:24px; letter-spacing:-.035em; line-height:1.18; margin-bottom:13px }
+    .detail-status { display:inline-flex; align-items:center; gap:5px; background:#223b34; border:1px solid #466e5d; border-radius:5px; color:#b5e3cb; font-size:10px; padding:3px 7px; margin-bottom:19px }
+    #detail-summary { font-size:14px; color:#dae4e9; line-height:1.65 }
+    .detail h3 { margin:25px 0 11px; color:#a9c0ce; font-size:10px; letter-spacing:.1em; text-transform:uppercase; font-weight:650 }
+    .detail-list { margin:0; padding-left:17px; color:#c3d2dc; font-size:12px; line-height:1.7 }
+    .detail-list li { margin-bottom:8px; padding-left:3px }
+    .connection { display:block; width:100%; margin:7px 0; border:1px solid #3c5361; background:#1c2b37; border-radius:8px; text-align:left; padding:9px 11px }
+    .connection:hover { background:#294150; border-color:#6b92a6 }
+    .connection small { display:block; color:#9fb5c3; font-size:10px; margin-bottom:2px }
+    .connection strong { font-size:12px; font-weight:620 }
+    .evidence { font-size:10px; color:#9eb4c3; overflow-wrap:anywhere; margin-bottom:8px; padding:7px 9px; background:#12202a; border:1px solid #2d4251; border-radius:5px }
+    .evidence code { font:10px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace }
+    .details-note { margin-top:23px; padding-top:17px; border-top:1px solid var(--line); font-size:10px; color:#9cb2bf; line-height:1.7 }
+    .scope-counts { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:21px }
+    .scope-count { border:1px solid #3c5361; border-radius:8px; padding:10px }
+    .scope-count strong { display:block; font-size:20px; font-weight:650; color:#d4eee4; line-height:1.2 }
+    .scope-count span { display:block; color:#adc2ce; font-size:10px; margin-top:4px }
+    .list-view { flex:1; min-height:450px; overflow:auto; padding:20px 25px 28px }
+    .list-view ul { list-style:none; padding-left:18px; margin:0; border-left:1px solid #375364 }
+    .list-view > ul { padding-left:0; border:0 }
+    .list-view li { margin:8px 0 }
+    .list-node { width:100%; text-align:left; border:1px solid #3d5768; border-left:3px solid var(--node-color,#9be1cd); background:#1b2c39; padding:11px 14px; border-radius:7px }
+    .list-node[aria-current="true"] { background:#2a4748; border-color:#b1dccd }
+    .list-node strong { font-size:13px; display:block }
+    .list-node small { display:block; margin-top:3px; font-size:11px; color:#b2c5d1; line-height:1.6 }
+    [hidden] { display:none!important }
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0 }
+    .load-error { margin:30px; padding:25px; border:1px solid #ab735e; border-radius:10px; color:#f6d6ca; background:#372722 }
+    @media(min-width:1700px) { .workspace { grid-template-columns:minmax(0,1fr) 390px } .detail { padding:30px } }
+    @media(max-width:1100px) { .workspace { grid-template-columns:minmax(0,1fr) 295px } .toolbar { padding:12px 16px; gap:8px } .detail { padding:22px 20px } .journeybar { padding:12px 16px } .canvas-hint { font-size:10px; left:14px } .legend { left:14px; bottom:19px; gap:8px } .canvas-tools { right:12px; bottom:14px } }
+    @media(max-width:760px) { .top { padding:20px 18px } .topline { align-items:flex-start } .verified { font-size:9px; padding:4px 7px } .eyebrow { font-size:9px; padding-top:4px } .subtitle { font-size:12px } .workspace { display:flex; flex-direction:column; height:auto; min-height:0 } .explorer { overflow:visible } .toolbar { gap:9px; padding:13px 16px } .search-wrap { flex-basis:100%; max-width:none } .canvas-wrap { flex:none; height:530px; min-height:0 } .journeybar { flex-wrap:nowrap } .detail { border-left:0; border-top:1px solid var(--line); overflow:visible; padding:25px 22px } .list-view { max-height:65dvh; min-height:340px; padding:15px 16px 25px } .map-footer { padding:10px 16px } .legend { font-size:9px; bottom:62px } .canvas-hint { right:14px; left:14px; max-width:none } .scope-counts { grid-template-columns:repeat(4,1fr) } .scope-count { padding:9px 6px } .scope-count strong { font-size:17px } }
+    @media(prefers-reduced-motion:reduce) { * { transition:none!important; scroll-behavior:auto!important } }
+    @media print { body { background:#fff; color:#111 } .top { background:#fff; border-color:#ccc } .top .eyebrow,.subtitle { color:#333 } .verified { color:#333 } .workspace { display:block; height:auto } .toolbar,.journeybar,.canvas-wrap,.detail,.map-footer { display:none!important } .list-view { display:block!important; max-height:none; overflow:visible; padding:20px } .list-view ul { border-color:#ddd } .list-node { break-inside:avoid; color:#111; background:#fff!important; border-color:#bbb } .list-node small { color:#333 } }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="topline"><div class="eyebrow">A system you can explore</div><div class="verified">Implemented components</div></div>
+    <h1 id="title">System map</h1>
+    <p class="subtitle" id="subtitle">Explore a branch to see what it does and how the parts connect.</p>
+  </header>
+  <main class="workspace" id="workspace">
+    <section class="explorer" aria-label="Interactive system map">
+      <div class="toolbar">
+        <div class="search-wrap">
+          <label class="sr-only" for="search">Search components and connections</label>
+          <input id="search" type="search" placeholder="Find a component or connection…" autocomplete="off" aria-controls="search-results" aria-expanded="false">
+          <span class="search-shortcut" aria-hidden="true">/</span>
+          <div class="search-results" id="search-results" hidden></div>
+        </div>
+        <button class="control" id="overview" type="button" title="Collapse branches and fit the overview">Overview</button>
+        <div class="view-switch" role="group" aria-label="Display mode">
+          <button class="control" id="map-mode" type="button" aria-pressed="true">Map</button>
+          <button class="control" id="list-mode" type="button" aria-pressed="false">List</button>
+        </div>
+      </div>
+      <nav class="journeybar" id="journeys" aria-label="Guided journeys"><span class="journey-label">Follow a journey</span></nav>
+      <div class="canvas-wrap" id="canvas-wrap">
+        <div id="canvas" tabindex="0" aria-label="System mind map. Drag to pan. Use plus and minus to zoom, zero to fit, and arrow keys to pan.">
+          <div id="stage"><svg id="edges" aria-hidden="true"></svg><div id="nodes"></div></div>
+        </div>
+        <p class="canvas-hint" id="canvas-hint"><strong>Start anywhere.</strong> Select a branch to explore. Drag to move; scroll to zoom.</p>
+        <div class="legend" aria-label="Connection legend"><span><i></i> Part of</span><span><i class="relationship"></i> Selected connection</span></div>
+        <div class="canvas-tools" role="group" aria-label="Map controls">
+          <button class="control" id="zoom-out" type="button" aria-label="Zoom out">−</button>
+          <output id="zoom-value" aria-label="Zoom level">100%</output>
+          <button class="control" id="zoom-in" type="button" aria-label="Zoom in">+</button>
+          <button class="control" id="fit" type="button">Fit map</button>
+        </div>
+      </div>
+      <div class="list-view" id="list-view" aria-label="All implemented components" hidden></div>
+      <footer class="map-footer"><span id="node-count"></span><span id="verified-date"></span></footer>
+    </section>
+    <aside class="detail" id="detail" aria-labelledby="detail-title">
+      <div class="detail-group"><span class="group-dot" id="detail-dot"></span><span id="detail-group"></span></div>
+      <h2 id="detail-title" tabindex="-1">Select a component</h2>
+      <div class="detail-status">✓ Implemented</div>
+      <p id="detail-summary"></p>
+      <div id="detail-body"></div>
+      <div id="detail-connections"></div>
+      <div id="scope-counts" class="scope-counts"></div>
+      <div id="detail-evidence"></div>
+      <p class="details-note">This is a verified snapshot, not a live activity monitor. Select a connection to follow it. Evidence names identify the maintained source behind each component.</p>
+    </aside>
+  </main>
+  <div id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+  <noscript><p class="load-error">JavaScript is needed to explore this map. The companion source document contains the same verified system description.</p></noscript>
+  <script id="system-map-data" type="application/json">__SYSTEM_MAP_DATA__</script>
+  <script>
+  (() => {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const NS = 'http://www.w3.org/2000/svg';
+    const PALETTE = ['#99deca','#a2c9f6','#cfb4ed','#e6c48d','#94d7df','#d9aaa5','#afcfa1','#babef2'];
+    const make = (tag, className, text) => { const el=document.createElement(tag); if(className) el.className=className; if(text!==undefined) el.textContent=String(text); return el; };
+    const svg = (tag,attrs) => { const el=document.createElementNS(NS,tag); Object.entries(attrs).forEach(([k,v])=>el.setAttribute(k,String(v))); return el; };
+    let data;
+    try {
+      data=JSON.parse($('system-map-data').textContent);
+      if(!data || !Array.isArray(data.nodes) || !data.nodes.length) throw new Error('No component data was provided.');
+    } catch(error) {
+      const note=make('p','load-error','The map data could not be loaded. Open a generated system map, rather than its template.');
+      $('workspace').replaceWith(note); return;
+    }
+    const nodes=new Map();
+    data.nodes.forEach(n=>{
+      if(n && typeof n.id==='string' && n.id && !nodes.has(n.id) && n.status==='implemented') {
+        nodes.set(n.id,{...n,label:String(n.label||n.id),summary:String(n.summary||''),details:Array.isArray(n.details)?n.details.filter(x=>typeof x==='string'):[],evidence:Array.isArray(n.evidence)?n.evidence.filter(x=>typeof x==='string'):[]});
+      }
+    });
+    if(!nodes.size) { $('workspace').replaceWith(make('p','load-error','No verified, implemented components were included in this map.')); return; }
+    // Normalize invalid parents and cycles without ever interpreting data as markup or code.
+    nodes.forEach(n=>{ if(!nodes.has(n.parent) || n.parent===n.id) n.parent=null; });
+    nodes.forEach(n=>{ const seen=new Set([n.id]); let p=n.parent; while(p) { if(seen.has(p)) { n.parent=null; break; } seen.add(p); p=nodes.get(p).parent; } });
+    const roots=[...nodes.values()].filter(n=>!n.parent);
+    const root=roots[0];
+    roots.slice(1).forEach(n=>{ n.parent=root.id; });
+    const children=new Map([...nodes.keys()].map(id=>[id,[]]));
+    nodes.forEach(n=>{ if(n.parent) children.get(n.parent).push(n.id); });
+    const groups=new Map((Array.isArray(data.groups)?data.groups:[]).filter(g=>g && typeof g.id==='string').map((g,i)=>[g.id,{label:String(g.label||g.id),color:typeof g.color==='string' && /^#[0-9a-f]{6}$/i.test(g.color)?g.color:PALETTE[i%PALETTE.length]}]));
+    const nodeGroup=n=>groups.get(n.group)||{label:n.id===root.id?'System overview':'Component',color:PALETTE[0]};
+    const edges=(Array.isArray(data.edges)?data.edges:[]).filter(e=>e && nodes.has(e.from) && nodes.has(e.to) && e.from!==e.to).map(e=>({from:e.from,to:e.to,label:String(e.label||'Connects to'),kind:e.kind==='flow'?'flow':'relationship'}));
+    const journeys=(Array.isArray(data.journeys)?data.journeys:[]).filter(j=>j && typeof j.id==='string' && Array.isArray(j.node_ids)).map(j=>({...j,label:String(j.label||j.id),summary:String(j.summary||''),node_ids:[...new Set(j.node_ids.filter(id=>nodes.has(id)))]})).filter(j=>j.node_ids.length);
+    const state={selected:root.id,expanded:new Set([root.id]),positions:new Map(),visible:[],journey:null,scale:1,panX:0,panY:0,view:'map',drag:null};
+    $('title').textContent=String(data.title||root.label);
+    document.title=String(data.title||root.label)+' · System map';
+    $('subtitle').textContent=String(data.subtitle||'Explore the implemented system, one connection at a time.');
+    const verified = data.verified_at ? new Date(data.verified_at) : null;
+    $('verified-date').textContent=verified && !Number.isNaN(verified.getTime()) ? 'Verified '+verified.toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}) : 'Verified snapshot';
+    const announce=text=>{ $('announcement').textContent=text; };
+    function ancestors(id) { const path=[]; let p=nodes.get(id)?.parent; while(p) { path.push(p); p=nodes.get(p)?.parent; } return path; }
+    function reveal(id) { ancestors(id).forEach(p=>state.expanded.add(p)); }
+    function layout() {
+      // A guided journey follows its ordered components directly. Keeping the
+      // entire ancestry beside that path would shrink otherwise readable cards.
+      if(state.journey) {
+        const ids=state.journey.node_ids, columns=ids.length>4?3:Math.min(2,ids.length), rows=Math.ceil(ids.length/columns), positions=new Map();
+        ids.forEach((id,index)=>{ const row=Math.floor(index/columns), column=row%2?columns-1-index%columns:index%columns; const x=(column-(columns-1)/2)*330, y=(row-(rows-1)/2)*132; positions.set(id,{x,y,side:x<0?-1:1}); });
+        state.positions=positions; state.visible=[...ids]; return;
+      }
+      const positions=new Map([[root.id,{x:0,y:0,side:0}]]), visible=[root.id];
+      const visibleChildren=id=>children.get(id);
+      const branches=visibleChildren(root.id), split=Math.ceil(branches.length/2);
+      const height=id=>state.expanded.has(id) && visibleChildren(id).length ? visibleChildren(id).reduce((sum,c)=>sum+height(c),0) : 92;
+      const place=(id,depth,side,top)=>{
+        const span=height(id); positions.set(id,{x:side*depth*330,y:top+span/2,side}); visible.push(id);
+        if(state.expanded.has(id)) { let cursor=top; visibleChildren(id).forEach(c=>{ place(c,depth+1,side,cursor); cursor+=height(c); }); }
+      };
+      [[branches.slice(0,split),-1],[branches.slice(split),1]].forEach(([list,side])=>{
+        let cursor=-list.reduce((sum,id)=>sum+height(id),0)/2;
+        list.forEach(id=>{ place(id,1,side,cursor); cursor+=height(id); });
+      });
+      state.positions=positions; state.visible=visible;
+    }
+    function treePath(a,b) { const direction=b.side; const start={x:a.x+direction*(a.side===0?120:113),y:a.y}; const end={x:b.x-direction*113,y:b.y}; const mid=(start.x+end.x)/2; return `M${start.x},${start.y} C${mid},${start.y} ${mid},${end.y} ${end.x},${end.y}`; }
+    function renderEdges() {
+      const target=$('edges'); target.replaceChildren();
+      const defs=svg('defs',{}), marker=svg('marker',{id:'flow-arrow',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:5,markerHeight:5,orient:'auto-start-reverse'});
+      marker.append(svg('path',{d:'M0 0 L10 5 L0 10 Z',fill:'#a4d9e5'})); defs.append(marker); target.append(defs);
+      const selected=state.selected, journeyIds=new Set(state.journey?state.journey.node_ids:[]);
+      state.visible.forEach(id=>{
+        const n=nodes.get(id); if(!n.parent || !state.positions.has(n.parent)) return;
+        const incident=id===selected || n.parent===selected || (journeyIds.has(id)&&journeyIds.has(n.parent));
+        target.append(svg('path',{d:treePath(state.positions.get(n.parent),state.positions.get(id)),class:'tree-edge'+(incident?' incident':'')}));
+      });
+      const steps=state.journey?state.journey.node_ids:[];
+      const relations=edges.filter(e=>state.positions.has(e.from)&&state.positions.has(e.to)&&
+        (state.journey ? steps.indexOf(e.to)===steps.indexOf(e.from)+1 : e.from===selected||e.to===selected));
+      relations.forEach((e,i)=>{
+        const a=state.positions.get(e.from), b=state.positions.get(e.to);
+        let x1=a.x,y1=a.y,x2=b.x,y2=b.y,mx,my,d,anchor='middle';
+        if(Math.abs(a.x-b.x)<180) {
+          const side=a.side||b.side||1; x1+=side*113; x2+=side*113;
+          const bend=side*(72+(i%3)*27); mx=(x1+x2)/2+bend*.75; my=(y1+y2)/2;
+          anchor=side>0?'end':'start';
+          d=`M${x1},${y1} C${x1+bend},${y1} ${x2+bend},${y2} ${x2},${y2}`;
+        } else {
+          const sign=b.x>a.x?1:-1; x1+=sign*(e.from===root.id?120:113); x2-=sign*(e.to===root.id?120:113);
+          const bend=(i%2?1:-1)*(58+(i%3)*17); mx=(x1+x2)/2; my=(y1+y2)/2+bend*.75;
+          d=`M${x1},${y1} C${x1+(x2-x1)*.3},${y1+bend} ${x1+(x2-x1)*.7},${y2+bend} ${x2},${y2}`;
+        }
+        const p=svg('path',{d,class:'relation-edge'}); if(e.kind==='flow') p.setAttribute('marker-end','url(#flow-arrow)'); target.append(p);
+        const label=svg('text',{x:mx,y:my-8,class:'edge-text'}); label.style.textAnchor=anchor; label.textContent=e.label.length>48?e.label.slice(0,45)+'…':e.label; target.append(label);
+      });
+    }
+    function renderNodes() {
+      const target=$('nodes'); const active=document.activeElement; const focused=active?.dataset?.focusKey; target.replaceChildren();
+      const related=new Set(edges.filter(e=>e.from===state.selected||e.to===state.selected).flatMap(e=>[e.from,e.to]));
+      const journeyIds=new Set(state.journey?state.journey.node_ids:[]);
+      state.visible.forEach(id=>{
+        const n=nodes.get(id), p=state.positions.get(id), isRoot=id===root.id, branch=children.get(id), group=nodeGroup(n);
+        const card=make('article','map-node'+(isRoot?' root':'')+(id===state.selected?' selected':'')+(journeyIds.has(id)?' in-journey':'')+(related.has(id)?' related':''));
+        card.dataset.nodeId=id; card.style.left=(p.x-(isRoot?120:113))+'px'; card.style.top=(p.y-(isRoot?44:38))+'px'; card.style.setProperty('--node-color',group.color);
+        const main=make('button','node-main'); main.type='button'; main.dataset.focusKey=id+':main'; main.setAttribute('aria-current',String(id===state.selected)); main.setAttribute('aria-label',n.label+(branch.length?', '+branch.length+' components':''));
+        main.append(make('span','node-caption',isRoot?'Verified implementation':group.label),make('span','node-title',n.label));
+        main.addEventListener('click',()=>select(id,{expand:branch.length>0})); card.append(main);
+        if(branch.length && !isRoot) {
+          const expanded=state.expanded.has(id), toggle=make('button','node-toggle',expanded?'−':'+'); toggle.type='button'; toggle.dataset.focusKey=id+':toggle'; toggle.setAttribute('aria-expanded',String(expanded)); toggle.setAttribute('aria-label',(expanded?'Collapse ':'Expand ')+n.label); toggle.title=(expanded?'Collapse ':'Expand ')+branch.length+' components';
+          toggle.addEventListener('click',()=>{ if(state.expanded.has(id)) { state.expanded.delete(id); if(ancestors(state.selected).includes(id)) state.selected=id; } else state.expanded.add(id); state.journey=null; render(); fit(); announce((state.expanded.has(id)?'Expanded ':'Collapsed ')+n.label); }); card.append(toggle);
+        }
+        target.append(card);
+      });
+      if(focused) { const match=[...target.querySelectorAll('[data-focus-key]')].find(el=>el.dataset.focusKey===focused); match?.focus({preventScroll:true}); }
+    }
+    function renderDetails() {
+      const n=nodes.get(state.selected), group=nodeGroup(n);
+      $('detail-group').textContent=group.label; $('detail-dot').style.background=group.color; $('detail-title').textContent=n.label; $('detail-summary').textContent=n.summary;
+      const body=$('detail-body'); body.replaceChildren();
+      if(n.details.length) { body.append(make('h3','', 'What it does')); const list=make('ul','detail-list'); n.details.forEach(text=>list.append(make('li','',text))); body.append(list); }
+      const connections=$('detail-connections'); connections.replaceChildren();
+      const related=edges.filter(e=>e.from===n.id||e.to===n.id);
+      const targets=[];
+      related.forEach(e=>{ const other=e.from===n.id?e.to:e.from; targets.push({id:other,label:e.label,direction:e.kind==='flow'?(e.from===n.id?'Sends to':'Receives from'):'Connected with'}); });
+      const connected=new Set(targets.map(t=>t.id));
+      children.get(n.id).filter(id=>!connected.has(id)).forEach(id=>targets.push({id,label:'Explore this component',direction:'Includes'}));
+      if(n.parent && !connected.has(n.parent)) targets.push({id:n.parent,label:'Back to the containing branch',direction:'Part of'});
+      if(targets.length) {
+        connections.append(make('h3','','Follow the connections'));
+        targets.forEach(t=>{ const button=make('button','connection'); button.type='button'; button.append(make('small','',t.direction+' · '+t.label),make('strong','',nodes.get(t.id).label)); button.addEventListener('click',()=>select(t.id,{expand:false,center:true})); connections.append(button); });
+      }
+      const evidence=$('detail-evidence'); evidence.replaceChildren();
+      if(n.evidence.length) { evidence.append(make('h3','','Implementation evidence')); n.evidence.forEach(text=>{ const p=make('p','evidence'); p.append(make('code','',text)); evidence.append(p); }); }
+      const counts=$('scope-counts'); counts.replaceChildren();
+      if(n.id===root.id && data.counts && typeof data.counts==='object') Object.entries(data.counts).filter(([,v])=>typeof v==='string'||typeof v==='number').slice(0,4).forEach(([key,value])=>{ const box=make('div','scope-count'); box.append(make('strong','',value),make('span','',key.replace(/_/g,' '))); counts.append(box); });
+      document.querySelectorAll('.list-node').forEach(el=>el.setAttribute('aria-current',String(el.dataset.nodeId===n.id)));
+    }
+    function renderList() {
+      const add=id=>{
+        const n=nodes.get(id), li=make('li'), b=make('button','list-node'); b.type='button'; b.dataset.nodeId=id; b.style.setProperty('--node-color',nodeGroup(n).color); b.setAttribute('aria-current',String(id===state.selected)); b.append(make('strong','',n.label),make('small','',n.summary));
+        b.addEventListener('click',()=>{ select(id); if(window.innerWidth<=760) $('detail-title').focus({preventScroll:false}); }); li.append(b);
+        if(children.get(id).length) { const list=make('ul'); children.get(id).forEach(c=>list.append(add(c))); li.append(list); } return li;
+      };
+      const ul=make('ul'); ul.append(add(root.id)); $('list-view').replaceChildren(ul);
+    }
+    function render() {
+      layout(); renderEdges(); renderNodes(); renderDetails();
+      $('node-count').textContent=state.view==='map'?state.visible.length+' of '+nodes.size+' components visible':nodes.size+' implemented components';
+      $('canvas-hint').textContent=state.journey?state.journey.summary||state.journey.label:'Select a branch to explore. Drag to move; scroll to zoom.';
+      document.querySelectorAll('.journey').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.journeyId===state.journey?.id)));
+    }
+    function transform() { $('stage').style.transform=`translate(${state.panX}px,${state.panY}px) scale(${state.scale})`; $('zoom-value').textContent=Math.round(state.scale*100)+'%'; }
+    function bounds() {
+      const values=[...state.positions.values()]; return {left:Math.min(...values.map(p=>p.x))-160,right:Math.max(...values.map(p=>p.x))+160,top:Math.min(...values.map(p=>p.y))-55,bottom:Math.max(...values.map(p=>p.y))+55};
+    }
+    function fit() {
+      if(state.view!=='map') return;
+      const rect=$('canvas').getBoundingClientRect(); if(!rect.width||!rect.height) return;
+      const b=bounds(), usableWidth=Math.max(120,rect.width-55), usableHeight=Math.max(120,rect.height-94);
+      state.scale=Math.min(1.15,Math.max(.15,Math.min(usableWidth/(b.right-b.left),usableHeight/(b.bottom-b.top)))); state.panX=rect.width/2-(b.left+b.right)/2*state.scale; state.panY=(rect.height-8)/2-(b.top+b.bottom)/2*state.scale; transform();
+    }
+    function center(id) { if(state.view!=='map') return; const p=state.positions.get(id), rect=$('canvas').getBoundingClientRect(); if(!p) return; state.scale=Math.max(.6,Math.min(1,state.scale)); state.panX=rect.width/2-p.x*state.scale; state.panY=rect.height/2-p.y*state.scale; transform(); }
+    function select(id,options={}) {
+      if(!nodes.has(id)) return;
+      state.selected=id; reveal(id);
+      if(options.expand) state.expanded.add(id);
+      if(!options.keepJourney) state.journey=null;
+      closeSearch(); render();
+      if(options.center) center(id); else if(options.expand) fit();
+      announce(nodes.get(id).label+' selected. Details and connections updated.');
+    }
+    function setView(view) {
+      state.view=view; $('canvas-wrap').hidden=view!=='map'; $('list-view').hidden=view!=='list'; $('map-mode').setAttribute('aria-pressed',String(view==='map')); $('list-mode').setAttribute('aria-pressed',String(view==='list')); render(); if(view==='map') requestAnimationFrame(fit);
+    }
+    function overview() { state.expanded=new Set([root.id]); state.selected=root.id; state.journey=null; $('search').value=''; closeSearch(); render(); fit(); announce('System overview. Select a branch to explore.'); }
+    function zoom(factor,x,y) { const rect=$('canvas').getBoundingClientRect(); x=x??rect.width/2; y=y??rect.height/2; const next=Math.max(.15,Math.min(2,state.scale*factor)), ratio=next/state.scale; state.panX=x-(x-state.panX)*ratio; state.panY=y-(y-state.panY)*ratio; state.scale=next; transform(); }
+    function closeSearch() { $('search-results').hidden=true; $('search').setAttribute('aria-expanded','false'); }
+    function search() {
+      const query=$('search').value.trim().toLocaleLowerCase(), target=$('search-results'); target.replaceChildren();
+      if(!query) { closeSearch(); return; }
+      const matches=[...nodes.values()].filter(n=>[n.label,n.summary,...n.details,...edges.filter(e=>e.from===n.id||e.to===n.id).map(e=>e.label)].join(' ').toLocaleLowerCase().includes(query)).slice(0,30);
+      if(!matches.length) target.append(make('p','no-results','No matching component. Try a tool, provider, or part of the workflow.'));
+      matches.forEach(n=>{ const b=make('button','search-result'); b.type='button'; b.append(make('span','',n.label),make('small','',nodeGroup(n).label)); b.addEventListener('click',()=>{ select(n.id,{center:true}); $('search').value=''; if(state.view==='list') $('detail-title').focus(); }); target.append(b); });
+      target.hidden=false; $('search').setAttribute('aria-expanded','true');
+    }
+    journeys.forEach(j=>{ const b=make('button','journey',j.label); b.type='button'; b.dataset.journeyId=j.id; b.setAttribute('aria-pressed','false'); b.addEventListener('click',()=>{ $('search').value=''; closeSearch(); state.expanded=new Set([root.id]); j.node_ids.forEach(reveal); state.journey=j; state.selected=j.node_ids[0]; render(); fit(); announce('Journey: '+j.label+'. '+j.summary); }); $('journeys').append(b); });
+    if(!journeys.length) $('journeys').hidden=true;
+    $('overview').addEventListener('click',overview); $('fit').addEventListener('click',fit);
+    $('map-mode').addEventListener('click',()=>setView('map')); $('list-mode').addEventListener('click',()=>setView('list'));
+    $('zoom-in').addEventListener('click',()=>zoom(1.2)); $('zoom-out').addEventListener('click',()=>zoom(1/1.2));
+    $('search').addEventListener('input',search); $('search').addEventListener('focus',()=>{ if($('search').value.trim()) search(); });
+    $('search').addEventListener('keydown',e=>{ if(e.key==='Escape') { closeSearch(); $('search').blur(); } if(e.key==='ArrowDown') { const first=$('search-results').querySelector('button'); if(first) { e.preventDefault(); first.focus(); } } if(e.key==='Enter'&&!$('search-results').hidden) { const first=$('search-results').querySelector('button'); if(first) { e.preventDefault(); first.click(); } } });
+    $('search-results').addEventListener('keydown',e=>{ const list=[...$('search-results').querySelectorAll('button')], index=list.indexOf(document.activeElement); if(e.key==='ArrowDown'||e.key==='ArrowUp') { e.preventDefault(); list[(index+(e.key==='ArrowDown'?1:-1)+list.length)%list.length]?.focus(); } if(e.key==='Escape') { closeSearch(); $('search').focus(); } });
+    document.addEventListener('pointerdown',e=>{ if(!e.target.closest('.search-wrap')) closeSearch(); });
+    document.addEventListener('keydown',e=>{ if(e.key==='/' && !['INPUT','TEXTAREA'].includes(e.target.tagName) && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); $('search').focus(); } });
+    const canvas=$('canvas');
+    canvas.addEventListener('wheel',e=>{ e.preventDefault(); const rect=canvas.getBoundingClientRect(); zoom(Math.exp(-e.deltaY*.0014),e.clientX-rect.left,e.clientY-rect.top); },{passive:false});
+    canvas.addEventListener('pointerdown',e=>{ if(e.target.closest('button')||e.button!==0) return; state.drag={pointer:e.pointerId,x:e.clientX,y:e.clientY,panX:state.panX,panY:state.panY}; canvas.setPointerCapture(e.pointerId); canvas.classList.add('dragging'); });
+    canvas.addEventListener('pointermove',e=>{ if(!state.drag||state.drag.pointer!==e.pointerId) return; state.panX=state.drag.panX+e.clientX-state.drag.x; state.panY=state.drag.panY+e.clientY-state.drag.y; transform(); });
+    const endDrag=e=>{ if(state.drag && state.drag.pointer===e.pointerId) { state.drag=null; canvas.classList.remove('dragging'); if(canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId); } };
+    canvas.addEventListener('pointerup',endDrag); canvas.addEventListener('pointercancel',endDrag); canvas.addEventListener('lostpointercapture',()=>{ state.drag=null; canvas.classList.remove('dragging'); });
+    canvas.addEventListener('keydown',e=>{
+      if(e.target!==canvas) return;
+      if(e.key==='+'||e.key==='=') { e.preventDefault(); zoom(1.2); } else if(e.key==='-') { e.preventDefault(); zoom(1/1.2); } else if(e.key==='0') { e.preventDefault(); fit(); } else if(e.key.startsWith('Arrow')) { e.preventDefault(); const step=e.shiftKey?120:45; if(e.key==='ArrowLeft') state.panX+=step; if(e.key==='ArrowRight') state.panX-=step; if(e.key==='ArrowUp') state.panY+=step; if(e.key==='ArrowDown') state.panY-=step; transform(); }
+    });
+    renderList(); setView(window.matchMedia('(max-width:760px)').matches?'list':'map');
+    let resizeFrame=0; new ResizeObserver(()=>{ cancelAnimationFrame(resizeFrame); resizeFrame=requestAnimationFrame(fit); }).observe($('canvas-wrap'));
+  })();
+  </script>
+</body>
+</html>

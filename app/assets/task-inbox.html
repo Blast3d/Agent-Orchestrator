@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<link rel="icon" href="data:,">
+<title>Task Inbox · Your agent team</title>
+<style>
+:root{--ink:#192d37;--muted:#627078;--paper:#f6f4ee;--card:#fffefa;--line:#dce1da;--mint:#dceede;--green:#245f49;--amber:#875827;--red:#9b4740;--blue:#426c88;--shadow:0 12px 38px #1832350a}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select{font:inherit}button,a,input,select{touch-action:manipulation}button{cursor:pointer}a{color:inherit}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #28766a;outline-offset:4px}button:disabled{cursor:default}h1,h2,h3,p{margin:0}button{color:inherit}.skip{position:absolute;left:16px;top:-80px;z-index:50;background:white;padding:12px}.skip:focus{top:12px}.topbar{background:var(--ink);color:#eef4ef;padding:17px max(24px,calc((100vw - 1480px)/2));display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{display:flex;align-items:center;gap:11px;font-weight:650;letter-spacing:.025em}.brand-mark{width:29px;height:29px;display:grid;place-content:center;background:#c9e5cd;color:var(--ink);border-radius:8px;font-size:18px}.topbar nav{display:flex;gap:25px;flex-wrap:wrap}.topbar a{font-size:13px;text-decoration:none;color:#d1ddd8}.topbar a[aria-current]{color:white;border-bottom:2px solid #b4d7be;padding-bottom:4px}.shell{max-width:1480px;margin:auto;padding:34px 28px 40px}.intro{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:26px}.eyebrow{color:var(--green);font-size:11px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;margin-bottom:8px}h1{font:normal clamp(34px,4.1vw,52px)/1.12 Georgia,serif;letter-spacing:-.035em;margin-bottom:10px}.subtitle{color:var(--muted);font-size:15px;max-width:640px}.snapshot{max-width:315px;padding:11px 14px;border:1px solid var(--line);border-radius:12px;font-size:12px;color:var(--muted);background:#ffffff70}.snapshot strong{display:block;color:var(--ink);font-weight:650;margin-bottom:3px}.snapshot time{font-variant-numeric:tabular-nums}.snapshot span{display:block;margin-top:3px}.groups{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:22px}.group-button{text-align:left;border:1px solid var(--line);border-radius:13px;background:var(--card);padding:15px 17px;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 3px 8px #17302d02}.group-button .group-name{font-size:13px;font-weight:600}.group-button .group-count{font-size:25px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.2}.group-button[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:white}.group-button.attention:not([aria-pressed=true]){background:#fff6e8;border-color:#ead5b5}.filters{display:flex;align-items:end;gap:12px;margin-bottom:19px}.field{display:flex;flex-direction:column;gap:5px}.field label{font-size:11px;font-weight:700;color:var(--muted)}.search-field{flex:1;max-width:520px}.worker-field{min-width:185px}.field input,.field select{height:43px;border:1px solid #cbd3cc;border-radius:9px;background:var(--card);padding:8px 12px;color:var(--ink);width:100%;min-width:0}.count-label{margin-left:auto;font-size:12px;color:var(--muted);padding-bottom:11px;text-align:right}.workspace{display:grid;grid-template-columns:minmax(280px,350px) minmax(0,1fr);gap:22px;align-items:start}.task-list{display:flex;flex-direction:column;gap:9px;max-height:calc(100vh - 350px);min-height:400px;overflow:auto;padding:2px 6px 8px 2px;scrollbar-width:thin}.task-card{display:block;width:100%;text-align:left;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:15px 16px;position:relative}.task-card:hover{border-color:#a8bdb1;background:white}.task-card[aria-pressed=true]{background:#edf3e9;border-color:#88ad91;box-shadow:inset 3px 0 #3b7053}.card-meta{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}.worker-name{font-size:11px;font-weight:750;color:var(--green);letter-spacing:.04em;overflow-wrap:anywhere}.task-title{font-size:14px;font-weight:650;line-height:1.4;overflow-wrap:anywhere;margin-bottom:9px}.card-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--muted);font-size:10px}.chip{font-size:10px;line-height:1.4;padding:4px 7px;border-radius:5px;background:#e8edf0;color:#455b69;display:inline-block;max-width:100%;font-weight:650}.chip.ready,.chip.accepted{background:#dfecdf;color:#2c5e42}.chip.uncertain,.chip.held,.chip.unknown{background:#f5e7cc;color:#755223}.chip.failed,.chip.rejected{background:#f7e3df;color:#8c4239}.attention-dot{height:7px;width:7px;background:#ad692e;border-radius:50%;display:inline-block;flex-shrink:0}.detail{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);min-width:0;overflow:hidden}.detail-top{padding:26px 28px 21px;border-bottom:1px solid var(--line)}.detail-meta{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.detail h2{font:normal 29px/1.24 Georgia,serif;letter-spacing:-.025em;overflow-wrap:anywhere}.detail-worker{font-size:12px;font-weight:700;color:var(--green)}.detail-dates{display:flex;gap:8px 24px;flex-wrap:wrap;margin-top:14px;font-size:11px;color:var(--muted)}.detail-body{padding:23px 28px 26px}.next-step{padding:15px 17px;border-radius:10px;background:#edf2e9;border:1px solid #dde7d7;margin-bottom:23px}.next-step h3{font-size:12px;font-weight:750;margin-bottom:5px}.next-step p{font-size:13px;line-height:1.6;color:#41594a}.notices{margin-bottom:20px}.notice{background:#fff5e6;border-left:3px solid #c49a5d;padding:11px 13px;border-radius:0 7px 7px 0;color:#74572f;font-size:12px;margin-bottom:7px}.section-label{font-size:12px;letter-spacing:.045em;font-weight:750;margin-bottom:12px;display:flex;align-items:center;gap:10px}.section-label:after{content:"";height:1px;background:var(--line);flex:1}.answer{white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;font:14px/1.8 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0 0 26px;color:#2b3c43;tab-size:4}.answer.empty{color:var(--muted);font-style:italic;font-size:13px}.review{border:1px solid var(--line);border-radius:10px;background:#fafaf5;padding:16px 18px;margin-bottom:22px}.review-note{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.7}.review-by{color:var(--muted);font-size:11px;margin-top:9px}.progress-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;margin:0 0 8px;font-size:12px}.progress-grid dt{color:var(--muted);font-weight:650}.progress-grid dd{margin:0;overflow-wrap:anywhere}.lineage{list-style:none;margin:0 0 22px;padding:0}.lineage li{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}.lineage .muted{color:var(--muted);font-size:11px}.preview-flag{font-size:11px;color:var(--amber);margin-bottom:8px}.task-details{border-top:1px solid var(--line);padding-top:14px;font-size:11px;color:var(--muted)}.task-details summary{cursor:pointer;list-style-position:outside;margin-left:14px;padding:3px 0}.task-details dl{display:grid;grid-template-columns:100px minmax(0,1fr);gap:5px 12px;margin:12px 0 0}.task-details dt{font-weight:650}.task-details dd{margin:0;overflow-wrap:anywhere}.task-details code{user-select:all;font-size:11px}.blank{padding:60px 28px;text-align:center;color:var(--muted)}.blank-symbol{width:52px;height:52px;border-radius:15px;background:#e7eee3;color:var(--green);display:grid;place-content:center;font-size:25px;margin:0 auto 17px}.blank h2{color:var(--ink);font:26px Georgia,serif;margin-bottom:11px}.blank p{font-size:13px;max-width:410px;margin:auto}.blank-list{background:var(--card);border:1px dashed #b6c3b7;border-radius:12px;padding:30px 18px;text-align:center;color:var(--muted);font-size:13px}.detail-back{display:none;margin-bottom:15px;padding:8px 12px;border:1px solid var(--line);border-radius:7px;background:transparent;font-size:12px}.footer{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:19px;margin-top:26px;font-size:11px;color:var(--muted)}.footer strong{color:#485b50;font-weight:650}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}.visually-muted{color:var(--muted)}[hidden]{display:none!important}
+@media(min-width:1100px){.detail{position:sticky;top:20px}.detail-body{max-height:calc(100vh - 215px);overflow:auto;scrollbar-width:thin}}
+@media(max-width:1000px){.intro{align-items:start}.snapshot{max-width:250px}.group-button{padding:12px}.group-button .group-name{font-size:11px}.group-button .group-count{font-size:22px}.workspace{grid-template-columns:285px minmax(0,1fr);gap:14px}.detail-top,.detail-body{padding:21px}.shell{padding:28px 22px}.detail h2{font-size:25px}}
+@media(max-width:720px){.topbar{padding:15px 20px;align-items:start}.topbar nav{gap:14px}.brand{font-size:12px;max-width:120px;line-height:1.25}.brand-mark{flex-shrink:0}.topbar a{font-size:11px}.shell{padding:26px 17px}.intro{display:block;margin-bottom:21px}.snapshot{max-width:none;margin-top:18px;padding:9px 12px}.snapshot strong{display:inline;margin-right:8px}.snapshot span{margin-top:2px}.groups{display:flex;overflow:auto;gap:8px;padding:2px 2px 8px;margin:0 -2px 14px;scrollbar-width:thin}.group-button{flex:0 0 126px;display:block;padding:11px 13px}.group-button .group-count{display:block;margin-top:4px}.filters{flex-wrap:wrap;gap:10px}.search-field{max-width:none;flex:1 1 100%}.worker-field{flex:1;min-width:130px}.count-label{font-size:11px;margin-left:0;max-width:45%}.workspace{display:block}.task-list{max-height:440px;min-height:0;margin-bottom:18px;padding-right:2px}.detail{scroll-margin-top:12px}.detail-top,.detail-body{padding:20px}.detail-back{display:inline-block}.detail h2{font-size:27px}.detail-dates{gap:5px 13px}.answer{font-size:13px}.footer{gap:8px}.task-details dl{grid-template-columns:84px minmax(0,1fr)}.progress-grid{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+@media print{body{background:white}.topbar,.groups,.filters,.task-list,.footer,.detail-back,.snapshot span{display:none!important}.shell{padding:0}.workspace{display:block}.detail{border:0;box-shadow:none}.detail-body{max-height:none!important;overflow:visible!important}.intro{margin-bottom:16px}.detail-top,.detail-body{padding:12px 0}.task-details{display:none}.next-step,.review{break-inside:avoid}.answer{font-size:11px}}
+</style>
+</head>
+<body>
+<a class="skip" href="#tasks-heading">Skip to tasks</a>
+<header class="topbar"><div class="brand"><span class="brand-mark" aria-hidden="true">✦</span>Your agent team</div><nav aria-label="Your team"><a href="task-inbox.html" aria-current="page">Task Inbox</a><a href="project-map.html">Project Maps</a><a href="usage-dashboard.html">Allowances</a></nav></header>
+<main class="shell">
+  <div class="intro"><div><p class="eyebrow">A place for the work</p><h1>Your task inbox.</h1><p class="subtitle">See what came back, what needs a check, and where to pick up next.</p></div><div class="snapshot"><strong>Saved view · <time id="generated-time">Time unavailable</time></strong><span>Reopen Open Task Inbox.cmd for the latest saved results. This page is not a live connection.</span></div></div>
+  <div class="groups" id="groups" role="group" aria-label="Filter tasks by progress"></div>
+  <div class="filters"><div class="field search-field"><label for="search">Find a task or something in its answer</label><input id="search" type="search" placeholder="Search your saved work…" autocomplete="off"></div><div class="field worker-field"><label for="worker">Who worked on it</label><select id="worker"><option value="">Every worker</option></select></div><p id="count-label" class="count-label" aria-live="polite"></p></div>
+  <div class="workspace"><section aria-labelledby="tasks-heading"><h2 id="tasks-heading" class="sr-only" tabindex="-1">Saved tasks, newest first</h2><div class="task-list" id="task-list"></div></section><section id="detail" class="detail" aria-label="Selected task"></section></div>
+  <footer class="footer"><span><strong>Your saved work, in one place.</strong> Reading this inbox makes no changes to tasks or allowances.</span><span id="warning-summary"></span></footer>
+</main>
+<script id="inbox-data" type="application/json">__TASK_INBOX_DATA__</script>
+<script>
+'use strict';
+const data = JSON.parse(document.getElementById('inbox-data').textContent);
+const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+const groupNames = ['All tasks','Needs attention','Ready to check','Working','Finished'];
+let activeGroup = 'All tasks', selectedId = null, filtered = [];
+const byId = id => document.getElementById(id);
+const make = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
+const workerLabel = name => ({claude:'Claude',grok:'Grok Build','grok-bot':'Grok Bot · Atlas',codex:'Codex',gemini:'Antigravity','local-chat':'Local Qwen'}[name] || name);
+const dateLabel = (value, brief=false) => { if (!value) return 'Time not recorded'; const date = new Date(value); if (!Number.isFinite(date.getTime())) return 'Time not recorded'; return new Intl.DateTimeFormat(undefined, brief ? {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'} : {year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(date); };
+const progressStateLabel = state => ({starting:'Starting',waiting:'Waiting',thinking:'Thinking',answering:'Writing an answer',retrying:'Retrying',finished:'Progress recorded as finished',failed:'Progress recorded as failed'}[state] || 'Saved progress');
+const sizeLabel = size => ({tiny:'Tiny',small:'Small',medium:'Medium',large:'Large'}[size] || '');
+const searchBlob = task => {
+  const preview = task.preview && task.preview.text ? task.preview.text : '';
+  const lineage = Array.isArray(task.handoff && task.handoff.lineage) ? task.handoff.lineage.map(item => [item.title, workerLabel(item.worker), item.id].join(' ')).join('\n') : '';
+  const progress = task.progress ? [task.progress.state, task.progress.process_status, task.progress.model, task.progress.size].join(' ') : '';
+  return [task.title,workerLabel(task.worker),task.answer,task.explanation,task.review_note,task.reviewer,task.label,task.id,preview,lineage,progress].join('\n');
+};
+byId('generated-time').textContent = dateLabel(data.generated_at);
+byId('generated-time').dateTime = data.generated_at || '';
+const workers = [...new Set(tasks.map(task => task.worker))].sort((a,b) => workerLabel(a).localeCompare(workerLabel(b)));
+workers.forEach(worker => { const option = make('option', '', workerLabel(worker)); option.value = worker; byId('worker').append(option); });
+byId('warning-summary').textContent = data.warnings ? `${data.warnings} ${data.warnings === 1 ? 'task needs its' : 'tasks need their'} saved files or follow-up steps checked.` : 'Answers stay separate from their review decisions.';
+function renderGroups(){
+  byId('groups').replaceChildren();
+  groupNames.forEach(group => {
+    const button = make('button','group-button' + (group === 'Needs attention' ? ' attention' : ''));
+    button.type = 'button'; button.setAttribute('aria-pressed', String(group === activeGroup));
+    const count = group === 'All tasks' ? tasks.length : tasks.filter(task => task.group === group).length;
+    button.append(make('span','group-name',group),make('span','group-count',String(count)));
+    button.addEventListener('click',()=>{activeGroup=group;renderGroups();renderList();const current=[...byId('groups').children].find(node=>node.getAttribute('aria-pressed')==='true');if(current)current.focus();});
+    byId('groups').append(button);
+  });
+}
+function renderList(){
+  const query = byId('search').value.trim().toLocaleLowerCase(), worker = byId('worker').value;
+  filtered = tasks.filter(task => (activeGroup === 'All tasks' || task.group === activeGroup) && (!worker || task.worker === worker) && (!query || searchBlob(task).toLocaleLowerCase().includes(query)));
+  byId('count-label').textContent = `${filtered.length} of ${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'} · newest first`;
+  if (!filtered.some(task=>task.id===selectedId)) selectedId = filtered.length ? filtered[0].id : null;
+  byId('task-list').replaceChildren();
+  if (!filtered.length) byId('task-list').append(make('p','blank-list', tasks.length ? 'No tasks match these choices. Try another group, worker, or search.' : 'Your first saved task will appear here.'));
+  filtered.forEach(task => {
+    const button = make('button','task-card'); button.type='button';button.dataset.taskId=task.id;
+    button.setAttribute('aria-pressed',String(selectedId === task.id));button.setAttribute('aria-controls','detail');
+    const meta = make('div','card-meta');meta.append(make('span','worker-name',workerLabel(task.worker)));
+    if(task.notices && task.notices.length){const dot=make('span','attention-dot');dot.title='Saved evidence needs attention';meta.append(dot);}
+    const footer = make('div','card-footer');footer.append(make('span','chip '+task.state,task.label));
+    const time = make('time','',dateLabel(task.updated_at,true));if(task.updated_at)time.dateTime=task.updated_at;footer.append(time);
+    button.append(meta,make('div','task-title',task.title),footer);
+    button.addEventListener('click',()=>{selectedId=task.id;document.querySelectorAll('.task-card').forEach(node=>node.setAttribute('aria-pressed',String(node.dataset.taskId===selectedId)));renderDetail();if(matchMedia('(max-width:720px)').matches){byId('detail-heading').focus({preventScroll:true});byId('detail').scrollIntoView({behavior:'auto',block:'start'});}});
+    byId('task-list').append(button);
+  });
+  renderDetail();
+}
+function appendMetric(list, label, value){
+  if (value === undefined || value === null || value === '') return;
+  list.append(make('dt','',label));
+  list.append(make('dd','',String(value)));
+}
+function renderDetail(){
+  const detail = byId('detail');detail.replaceChildren();
+  const task = tasks.find(item=>item.id===selectedId);
+  if(!task){const blank=make('div','blank');blank.append(make('div','blank-symbol','✦'),make('h2','',tasks.length?'A little room to look.':'Ready when you are.'),make('p','',tasks.length?'Choose another filter to find a saved task and read its answer.':'Once an agent task is saved, reopen Task Inbox to see its progress, answer, and review here.'));detail.append(blank);return;}
+  const top=make('div','detail-top'),back=make('button','detail-back','↑ Back to the task list');back.type='button';back.addEventListener('click',()=>{const card=[...byId('task-list').children].find(node=>node.dataset.taskId===selectedId);if(card){card.focus({preventScroll:true});card.scrollIntoView({block:'center',behavior:'auto'});}});top.append(back);
+  const meta=make('div','detail-meta');meta.append(make('span','detail-worker',workerLabel(task.worker)),make('span','chip '+task.state,task.label));top.append(meta);
+  const heading=make('h2','',task.title);heading.id='detail-heading';heading.tabIndex=-1;top.append(heading);
+  const dates=make('div','detail-dates');dates.append(make('span','','Created '+dateLabel(task.created_at)),make('span','','Saved '+dateLabel(task.updated_at)));top.append(dates);detail.append(top);
+  const body=make('div','detail-body'),next=make('div','next-step');next.append(make('h3','','What happens next'),make('p','',task.next_step));body.append(next);
+  if(task.notices && task.notices.length){const notices=make('div','notices');notices.setAttribute('aria-label','Saved evidence notices');task.notices.forEach(notice=>notices.append(make('p','notice',notice)));body.append(notices);}
+  const progress = task.progress || {};
+  body.append(make('h3','section-label','Saved worker progress'));
+  const progressBox = make('div','review');
+  const grid = make('dl','progress-grid');
+  appendMetric(grid, 'Recorded task size', progress.size ? sizeLabel(progress.size) : 'Size not recorded');
+  appendMetric(grid, 'Recorded deadline', progress.timeout_known ? (progress.timeout_seconds + ' seconds') : 'Deadline not recorded');
+  if (progress.present) {
+    appendMetric(grid, 'Recorded activity', progressStateLabel(progress.state));
+    appendMetric(grid, 'Recorded process status', progress.process_status || 'Not recorded');
+    appendMetric(grid, 'Elapsed in this snapshot', progress.elapsed_s !== undefined ? progress.elapsed_s + ' seconds' : 'Not recorded');
+    const truncatedAnswer = progress.preview_truncated === true || progress.output_truncated === true;
+    if (truncatedAnswer || progress.observed_answer_chars !== undefined || progress.retained_answer_chars !== undefined) {
+      appendMetric(grid, 'Answer characters observed', progress.observed_answer_chars !== undefined ? progress.observed_answer_chars : 'Not recorded');
+      appendMetric(grid, 'Answer characters retained in this snapshot', progress.retained_answer_chars !== undefined ? progress.retained_answer_chars : 'Not recorded');
+    } else {
+      appendMetric(grid, 'Answer characters reported (legacy counter)', progress.answer_chars);
+    }
+    appendMetric(grid, 'Events counted', progress.event_count);
+    appendMetric(grid, 'Retries counted', progress.retry_count);
+    appendMetric(grid, 'Model name saved', progress.model);
+    appendMetric(grid, 'Progress saved', dateLabel(progress.saved_at));
+    if (progress.output_truncated === true) appendMetric(grid, 'Output truncated in snapshot', 'Yes');
+    if (progress.stderr_truncated === true) appendMetric(grid, 'Standard error truncated in snapshot', 'Yes');
+    progressBox.append(grid);
+    progressBox.append(make('p','review-by', 'This snapshot is incomplete. It is the last saved view, not a live connection, and it does not prove whether the worker is still running.'));
+  } else {
+    progressBox.append(grid);
+    progressBox.append(make('p','review-note','No saved worker progress snapshot was found for this task. Recorded size and deadline still come from the saved task when they exist; otherwise they stay unknown.'));
+  }
+  body.append(progressBox);
+  const preview = task.preview || {};
+  body.append(make('h3','section-label','Draft saved with progress'));
+  const flag = make('p','preview-flag');
+  const hasDraft = Boolean(preview.saved_at || preview.text || preview.source_truncated);
+  const bits = hasDraft ? ['This draft is incomplete and is not the reviewed final answer.'] : [];
+  if (preview.source_truncated || progress.preview_truncated === true) bits.push('The saved draft was already truncated before this view; some observed text was not retained.');
+  else if (preview.truncated) bits.push('The text below is truncated to fit this view.');
+  if (preview.saved_at) bits.push('Draft saved ' + dateLabel(preview.saved_at) + '.');
+  flag.textContent = bits.join(' ');
+  if (bits.length) body.append(flag);
+  body.append(make('pre','answer'+(preview.text?'':' empty'), preview.text || 'No draft answer was saved with the progress snapshot.'));
+  if(task.explanation){body.append(make('h3','section-label','The saved explanation'));const explanation=make('div','review');explanation.append(make('p','review-note',task.explanation));body.append(explanation);}
+  body.append(make('h3','section-label','The saved answer'));
+  body.append(make('pre','answer'+(task.answer?'':' empty'),task.answer || ((task.state==='working'||task.state==='pending')?'No answer was saved at the time of this view.':'There is no readable saved answer for this task.')));
+  body.append(make('h3','section-label','The review'));
+  const review=make('div','review');review.append(make('p','review-note',task.review_note || (task.state==='ready'?'Waiting for a review. Receiving an answer does not mean it has been accepted.':'No review explanation was recorded.')));
+  if(task.reviewer || task.reviewed_at) review.append(make('p','review-by',[task.reviewer ? 'Reviewed by '+task.reviewer : 'Reviewer not recorded',task.reviewed_at?dateLabel(task.reviewed_at):''].filter(Boolean).join(' · ')));
+  body.append(review);
+  const lineage = task.handoff && Array.isArray(task.handoff.lineage) ? task.handoff.lineage : [];
+  body.append(make('h3','section-label','Who handed this on'));
+  if (!lineage.length) {
+    const emptyLine = make('div','review');
+    emptyLine.append(make('p','review-note','No saved handoff from an earlier task was recorded.'));
+    body.append(emptyLine);
+  } else {
+    const list = make('ol','lineage');
+    lineage.forEach(item => {
+      const li = make('li');
+      li.append(make('div','task-title', item.title || 'Earlier task'));
+      const verified = item.verified === true && item.known;
+      const who = item.known ? workerLabel(item.worker) + (verified ? '' : '; handoff link unverified') : 'Unverified earlier task';
+      const limit = item.index_only ? ' · shown from the saved index only' : '';
+      li.append(make('p','muted', who + ' · ' + (item.status || 'unknown') + (item.finished_at ? ' · ' + dateLabel(item.finished_at) : '') + limit));
+      const ref = make('p','muted');
+      const code = make('code','', item.id || '');
+      ref.append(code);
+      li.append(ref);
+      list.append(li);
+    });
+    body.append(list);
+  }
+  const disclosure=make('details','task-details');disclosure.append(make('summary','','Task details for following up'));
+  const list=make('dl');[['Task reference',task.id],['Started',dateLabel(task.started_at)],['Answer saved',dateLabel(task.finished_at)]].forEach(([label,value])=>{list.append(make('dt','',label));const dd=make('dd');dd.append(make(label==='Task reference'?'code':'span','',value));list.append(dd);});disclosure.append(list);body.append(disclosure);detail.append(body);
+}
+byId('search').addEventListener('input',renderList);byId('worker').addEventListener('change',renderList);
+renderGroups();renderList();
+</script>
+</body>
+</html>

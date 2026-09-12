@@ -1,0 +1,6 @@
+interface:
+  display_name: "Multi-Model Orchestrator"
+  short_description: "Coordinate models into reviewed project deliverables"
+  default_prompt: "Use $multi-model-orchestrator to coordinate available models on this project and deliver a tested, reviewable result."
+policy:
+  allow_implicit_invocation: true

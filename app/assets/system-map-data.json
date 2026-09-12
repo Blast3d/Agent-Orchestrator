@@ -1,0 +1,1312 @@
+{
+  "title": "Voice to coordinated work",
+  "subtitle": "The implemented OpenWhispr, Orchestrator, and Brain system",
+  "verified_at": "2026-09-10",
+  "nodes": [
+    {
+      "id": "system",
+      "label": "Voice to coordinated work",
+      "group": "orchestration",
+      "parent": null,
+      "summary": "The OpenWhispr fork, agent team, and shared project memory form one inspectable workflow.",
+      "details": [
+        "Click a branch to expand it, or follow a guided workflow. Select a component for evidence and cross-connections.",
+        "This is an implementation snapshot, not a live health monitor. Readiness limitations appear in component details.",
+        "The system uses local audio utilities and hosted reasoning providers. No local model was launched to build this map."
+      ],
+      "evidence": [],
+      "status": "implemented"
+    },
+    {
+      "id": "voice",
+      "label": "Speak and hear",
+      "group": "voice",
+      "parent": "system",
+      "summary": "OpenWhispr turns speech into deliberate commands and dictation, then reads completed replies aloud.",
+      "details": [],
+      "evidence": [],
+      "status": "implemented"
+    },
+    {
+      "id": "remote",
+      "label": "Away access",
+      "group": "remote",
+      "parent": "system",
+      "summary": "Phone voice and remote desktop use separate connections to the same Windows workstation.",
+      "details": [],
+      "evidence": [],
+      "status": "implemented"
+    },
+    {
+      "id": "orchestration",
+      "label": "Coordinate work",
+      "group": "orchestration",
+      "parent": "system",
+      "summary": "One recorded lead coordinates bounded assignments, reviews outputs, and can transfer command.",
+      "details": [],
+      "evidence": [],
+      "status": "implemented"
+    },
+    {
+      "id": "providers",
+      "label": "Model providers",
+      "group": "providers",
+      "parent": "system",
+      "summary": "Product names and model providers are shown together; the transport is separate from the role.",
+      "details": [],
+      "evidence": [],
+      "status": "implemented"
+    },
+    {
+      "id": "workers",
+      "label": "Create a team",
+      "group": "workers",
+      "parent": "system",
+      "summary": "The lead chooses independent tasks, reserves capacity, starts workers, and integrates reviewed results.",
+      "details": [],
+      "evidence": [],
+      "status": "implemented"
+    },
+    {
+      "id": "memory",
+      "label": "Remember and recall",
+      "group": "memory",
+      "parent": "system",
+      "summary": "A small SQLite knowledge graph stores reviewed facts, preferences, procedures, and useful episodes.",
+      "details": [],
+      "evidence": [],
+      "status": "implemented"
+    },
+    {
+      "id": "measurement",
+      "label": "See what happened",
+      "group": "measurement",
+      "parent": "system",
+      "summary": "Dashboards expose activity, quota, memory receipts, evidence, and interactive conversations.",
+      "details": [],
+      "evidence": [],
+      "status": "implemented"
+    },
+    {
+      "id": "safeguards",
+      "label": "Keep control",
+      "group": "safeguards",
+      "parent": "system",
+      "summary": "Explicit ownership, scope, review, resource limits, and deliberate controls keep the workflow bounded.",
+      "details": [],
+      "evidence": [],
+      "status": "implemented"
+    },
+    {
+      "id": "home_mic",
+      "label": "Home headset microphone",
+      "group": "voice",
+      "parent": "voice",
+      "summary": "Home uses the headset microphone.",
+      "details": [
+        "Home uses the headset microphone. The latest saved microphone event used this input; that is not a direct reading of the saved profile selector."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/audioProfiles.js:2"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "stt",
+      "label": "Speech recognition",
+      "group": "voice",
+      "parent": "voice",
+      "summary": "Converts audio into recognized text, including deliberate command words.",
+      "details": [
+        "Converts audio into recognized text, including deliberate command words. The current configured route is Nemotron streaming. Existing local speech components were inspected, not started by this audit."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/audioManager.js:1260",
+        "OpenWhispr / docs/USER_MANUAL.md:103"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "commands",
+      "label": "Deliberate spoken commands",
+      "group": "voice",
+      "parent": "voice",
+      "summary": "Select the target, switch Home/Away, ask where text is going, pause/resume, finish dictation, or control readback.",
+      "details": [
+        "Select the target, switch Home/Away, ask where text is going, pause/resume, finish dictation, or control readback. Command recognition starts from recognized speech, before cleanup."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/spokenCommands.js:37",
+        "OpenWhispr / src/hooks/useAudioRecording.js:339"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "cleanup",
+      "label": "Dictation cleanup",
+      "group": "voice",
+      "parent": "voice",
+      "summary": "Optional selected cleanup model improves grammar and readability.",
+      "details": [
+        "Optional selected cleanup model improves grammar and readability. The saved local selection is Gemma. Cleanup is a different stage from speech recognition and Piper."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/audioManager.js:159",
+        "OpenWhispr / docs/USER_MANUAL.md:103"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "safe_send",
+      "label": "Guarded composer targeting",
+      "group": "voice",
+      "parent": "voice",
+      "summary": "Finds the selected editor's matching agent composer, confirms focus, and pastes/submits according to the selected target.",
+      "details": [
+        "Finds the selected editor's matching agent composer, confirms focus, and pastes/submits according to the selected target. Target selection is independent from readback conversation selection."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/clipboard.js:1248",
+        "OpenWhispr / src/components/HandsFreeDashboard.tsx:332"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "voice_codex",
+      "label": "Codex / ASTRA conversation",
+      "group": "voice",
+      "parent": "voice",
+      "summary": "A supported selected destination for voice input.",
+      "details": [
+        "A supported selected destination for voice input. Final replies are observed from local Codex completion events. Opening a conversation alone does not change OpenWhispr's target."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/ipcHandlers.js:60",
+        "OpenWhispr / src/helpers/codexReadbackWatcher.js:91"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "voice_claude",
+      "label": "Claude Code / Fable conversation",
+      "group": "voice",
+      "parent": "voice",
+      "summary": "A supported selected destination for voice input.",
+      "details": [
+        "A supported selected destination for voice input. An installed Stop hook forwards a completed reply to the authenticated local readback bridge."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/ipcHandlers.js:66",
+        "OpenWhispr / scripts/claude-code-stop-hook.js:94"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "final_events",
+      "label": "Completed-reply events",
+      "group": "voice",
+      "parent": "voice",
+      "summary": "Codex completion watcher and Claude Stop hook feed the readback path.",
+      "details": [
+        "Codex completion watcher and Claude Stop hook feed the readback path. Worker/tool progress is not the intended spoken channel. Google/Grok results can be summarized by the lead first."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/codexReadbackWatcher.js:91",
+        "OpenWhispr / src/helpers/cliBridge.js:320"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "readback_inbox",
+      "label": "Reply inbox and playback queue",
+      "group": "voice",
+      "parent": "voice",
+      "summary": "Stores pending replies, selects a readback conversation, and offers Replay/Skip.",
+      "details": [
+        "Stores pending replies, selects a readback conversation, and offers Replay/Skip. Playback waits for microphone-safe conditions; pauses and disabled readback preserve unread work."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/handsFreeSession.js:19",
+        "OpenWhispr / src/hooks/useAudioRecording.js:704",
+        "OpenWhispr / src/components/HandsFreeDashboard.tsx:393"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "piper",
+      "label": "Piper spoken answers",
+      "group": "voice",
+      "parent": "voice",
+      "summary": "Prepares and length-bounds final reply text, synthesizes speech, and sends it to the configured output.",
+      "details": [
+        "Prepares and length-bounds final reply text, synthesizes speech, and sends it to the configured output. Piper-only assets are installed; automatic SAPI fallback is disabled."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/speechFeedback.js:191",
+        "OpenWhispr / src/helpers/speechFeedback.js:374"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "voicemeeter",
+      "label": "Voicemeeter audio routing",
+      "group": "remote",
+      "parent": "remote",
+      "summary": "Receives Piper audio and routes it to the local headset and/or a separate return bus for the phone call.",
+      "details": [
+        "Receives Piper audio and routes it to the local headset and/or a separate return bus for the phone call. Running process and a healthy virtual audio device were observed; bus routing was not live-tested."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/audioProfiles.js:7",
+        "OpenWhispr / docs/USER_MANUAL.md:267"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "home_output",
+      "label": "Home headset playback",
+      "group": "voice",
+      "parent": "voice",
+      "summary": "The hardware output bus delivers spoken replies to the local headset when configured.",
+      "details": [
+        "The hardware output bus delivers spoken replies to the local headset when configured."
+      ],
+      "evidence": [
+        "OpenWhispr / docs/USER_MANUAL.md:243"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "voice_measurement",
+      "label": "Hands Free dashboard",
+      "group": "measurement",
+      "parent": "measurement",
+      "summary": "Shows the selected target, processing state, transcription/cleanup/paste-send durations, and readback inbox.",
+      "details": [
+        "Shows the selected target, processing state, transcription/cleanup/paste-send durations, and readback inbox. Paste/send timing is not remote-delivery confirmation."
+      ],
+      "evidence": [
+        "OpenWhispr / src/components/HandsFreeDashboard.tsx:48",
+        "OpenWhispr / src/components/HandsFreeDashboard.tsx:332"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "phone_voice",
+      "label": "Phone microphone and headphones",
+      "group": "remote",
+      "parent": "remote",
+      "summary": "A private Discord call carries speech from the phone and spoken answers back to its headphones.",
+      "details": [
+        "A private Discord call carries speech from the phone and spoken answers back to its headphones. A call must already be connected; OpenWhispr does not create or maintain it."
+      ],
+      "evidence": [
+        "OpenWhispr / docs/USER_MANUAL.md:251"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "discord_call",
+      "label": "Private Discord voice call",
+      "group": "remote",
+      "parent": "remote",
+      "summary": "Transports phone audio to PC playback and takes the independent Voicemeeter return as PC microphone audio.",
+      "details": [
+        "Transports phone audio to PC playback and takes the independent Voicemeeter return as PC microphone audio. This route is separate from approved text DM controls and from RustDesk remote desktop."
+      ],
+      "evidence": [
+        "OpenWhispr / docs/USER_MANUAL.md:251",
+        "OpenWhispr / docs/USER_MANUAL.md:275"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "incoming_cable",
+      "label": "Virtual cable / Away microphone",
+      "group": "remote",
+      "parent": "remote",
+      "summary": "Discord plays incoming speech into CABLE Input; CABLE Output becomes the OpenWhispr Away microphone.",
+      "details": [
+        "Discord plays incoming speech into CABLE Input; CABLE Output becomes the OpenWhispr Away microphone. The return path must not feed this same incoming cable."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/audioProfiles.js:9",
+        "OpenWhispr / docs/USER_MANUAL.md:267"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "private_network",
+      "label": "Tailscale private network",
+      "group": "remote",
+      "parent": "remote",
+      "summary": "The installed private-network service is running and supports the configured remote-desktop path.",
+      "details": [
+        "The installed private-network service is running and supports the configured remote-desktop path. Current phone reachability was not tested.",
+        "Read-only host service check; no identifiers collected into the map."
+      ],
+      "evidence": [],
+      "status": "implemented"
+    },
+    {
+      "id": "remote_desktop",
+      "label": "RustDesk desktop control",
+      "group": "remote",
+      "parent": "remote",
+      "summary": "Installed remote desktop route; the host was not running during this audit.",
+      "details": [
+        "Installed host component for seeing and controlling the Windows desktop over the private network. It is not the voice transport. Current RustDesk process/service was not running or not observed; the Docker engine for the configured self-hosted server was unavailable.",
+        "Installed, current remote session unavailable/unverified",
+        "Read-only installation/process check; current live connection not claimed."
+      ],
+      "evidence": [],
+      "status": "implemented"
+    },
+    {
+      "id": "lead",
+      "label": "One active orchestrator",
+      "group": "orchestration",
+      "parent": "orchestration",
+      "summary": "ASTRA is the default lead; an explicit claim can make Fable the lead.",
+      "details": [
+        "The coordinator record binds owner, session, and generation. Worker messages do not transfer leadership."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/coordinator_handoff.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "checkpoint",
+      "label": "Durable project checkpoint",
+      "group": "orchestration",
+      "parent": "orchestration",
+      "summary": "Objective, decisions, completed work, next steps, jobs, and approvals survive a handoff.",
+      "details": [
+        "A stable workspace project ID keeps new runs in the same memory project."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/init_run.py",
+        "Agent-Orchestrator / app/coordinator_handoff.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "handoff",
+      "label": "5% command-driven handoff",
+      "group": "orchestration",
+      "parent": "orchestration",
+      "summary": "At work milestones the current lead can prepare and launch the low-usage transfer.",
+      "details": [
+        "The configured threshold is 5% remaining. This check is run by the lead at milestones.",
+        "Fable claims command explicitly. The outgoing lead remains available as a bounded worker while its allowance permits."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / docs/coordinator-handoff.md:3"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "integration",
+      "label": "Review and integration",
+      "group": "orchestration",
+      "parent": "orchestration",
+      "summary": "The lead checks returned work against files, tests, and acceptance criteria.",
+      "details": [
+        "Execution success and review acceptance are separate states. Acceptance can trigger memory capture."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/task_store.py",
+        "Agent-Orchestrator / app/automatic_memory.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "astra",
+      "label": "ASTRA / Codex / OpenAI",
+      "group": "providers",
+      "parent": "providers",
+      "summary": "The Codex session can lead and create native worker sessions.",
+      "details": [
+        "This run used the native collaboration tools. ASTRA is the configured role name, not a separate provider."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / skills/multi-model-orchestrator/SKILL.md"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "fable",
+      "label": "Fable / Claude / Anthropic",
+      "group": "providers",
+      "parent": "providers",
+      "summary": "Claude Code supplies the Fable coordinator and the hosted Claude worker route.",
+      "details": [
+        "An interactive coordinator session supports attachment. Supplied-text worker tasks use separate canonical task records.",
+        "Fable and Claude refer to the same provider family here."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/coordinator_transfer.py",
+        "Agent-Orchestrator / app/dispatch_worker.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "gemini",
+      "label": "Gemini / Google / Antigravity",
+      "group": "providers",
+      "parent": "providers",
+      "summary": "The guarded Antigravity CLI route returns supplied-text work for review.",
+      "details": [
+        "The dispatcher verifies the pinned executable and deny-hook boundary, reserves allowance, and validates the returned stream.",
+        "The retired Gemini consumer CLI route is excluded."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/antigravity_boundary.py",
+        "Agent-Orchestrator / app/antigravity_progress.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "grok",
+      "label": "Grok / xAI / Grok Build",
+      "group": "providers",
+      "parent": "providers",
+      "summary": "The installed Grok worker transport accepts a bounded supplied-text assignment.",
+      "details": [
+        "Availability and remaining allowance are checked separately from a route being implemented."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/dispatch_worker.py:77"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "team_plan",
+      "label": "Task-based team sizing",
+      "group": "workers",
+      "parent": "workers",
+      "summary": "Plan independent workstreams and reserve review capacity before creating workers.",
+      "details": [
+        "The team command uses task type, independent workstreams, quota, and retained timing evidence.",
+        "Its proposed team is advisory; it is not a universal scheduler or experimentally proven optimum."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/team_planner.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "native_workers",
+      "label": "Native worker sessions",
+      "group": "workers",
+      "parent": "workers",
+      "summary": "The lead creates bounded native Codex assignments through the collaboration tools.",
+      "details": [
+        "Each worker receives a scoped prompt and explicit file ownership. The lead includes relevant recalled memory explicitly.",
+        "Workers report back for review; native creation does not pass through the supplied-text dispatcher."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / skills/multi-model-orchestrator/SKILL.md"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "slots",
+      "label": "Concurrency and waves",
+      "group": "workers",
+      "parent": "workers",
+      "summary": "This native host supports 4 active agents total: 1 lead plus 3 workers.",
+      "details": [
+        "A 6-10-assignment team must use waves under this host limit.",
+        "The application planner defaults to a cap of 4 workers excluding the lead; use cap 3 for this native session.",
+        "External provider tasks have separate quota, admission, and transport constraints; there is no verified universal 10-bot concurrency guarantee."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / docs/team-sizing.md",
+        "Current session / native concurrency limit"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "dispatch",
+      "label": "Bounded worker assignment",
+      "group": "workers",
+      "parent": "workers",
+      "summary": "An explicit task, project scope, input, size, and output contract define each dispatch.",
+      "details": [
+        "Default memory recall uses the scoped task label. An explicit query can refine it; --no-memory disables it.",
+        "Native worker prompts are composed by the lead; the supplied-text dispatcher is a different route."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/dispatch_worker.py",
+        "Agent-Orchestrator / app/memory_usage.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "reservation",
+      "label": "Usage reservation",
+      "group": "workers",
+      "parent": "workers",
+      "summary": "Read quota and reserve task capacity before asking a provider to execute.",
+      "details": [
+        "Uncertain usage is not treated as free. Unresolved executions retain reconciliation state."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/usage_guard.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "execution",
+      "label": "Execution and deadlines",
+      "group": "workers",
+      "parent": "workers",
+      "summary": "Worker execution records phases, deadlines, output, and failures.",
+      "details": [
+        "Hosted deadlines use task-size defaults with an explicit bounded override. Native session pauses have no dispatcher-enforced deadline."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/execution_limits.py",
+        "Agent-Orchestrator / app/task_activity.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "task_record",
+      "label": "Canonical task and review",
+      "group": "workers",
+      "parent": "workers",
+      "summary": "A durable task result separates execution, review acceptance, and memory capture.",
+      "details": [
+        "A reviewed closeout may be imported without running a provider. Such artifacts are marked and excluded from worker timing comparisons."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/task_store.py",
+        "Agent-Orchestrator / app/memory_bundle.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "brain_store",
+      "label": "Local knowledge store",
+      "group": "memory",
+      "parent": "memory",
+      "summary": "SQLite and full-text search keep reviewed knowledge small and searchable.",
+      "details": [
+        "Facts, preferences, procedures, and problem/solution episodes are separate memory types.",
+        "This is an explicit knowledge graph with retrieval, not a trained neural network. Graphiti is not installed."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/brain_store.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "capture",
+      "label": "Reviewed atomic capture",
+      "group": "memory",
+      "parent": "memory",
+      "summary": "One accepted closeout can save 1-24 concise memories and up to 64 justified links.",
+      "details": [
+        "The reviewer supplies the lasting insights and relationship reasons. Capture does not run a model to guess them.",
+        "The transaction rolls back on invalid scope or capacity. A durable receipt prevents retry duplicates and resurrection after Forget."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/memory_bundle.py",
+        "Agent-Orchestrator / tests/test_memory_bundle.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "auto_episode",
+      "label": "Automatic accepted-task episode",
+      "group": "memory",
+      "parent": "memory",
+      "summary": "Accepting a scoped canonical task saves compact review evidence automatically.",
+      "details": [
+        "Without a curated bundle, the default stores one compact episode. It does not attempt a semantic summary of every conversation.",
+        "A checkpoint alone is not a reviewed canonical task. Native work can use the explicit reviewed-closeout capture command."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/automatic_memory.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "graph_links",
+      "label": "Evidence-backed connections",
+      "group": "memory",
+      "parent": "memory",
+      "summary": "Directed typed links connect related knowledge within the same project and user.",
+      "details": [
+        "Curated links include a short explanation visible in memory details. Each bundle link includes at least one newly captured node.",
+        "The graph is not forced to be fully connected. Unrelated memories can stand alone."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/brain_store.py",
+        "Agent-Orchestrator / app/memory_bundle.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "recall",
+      "label": "Bounded project recall",
+      "group": "memory",
+      "parent": "memory",
+      "summary": "Search ranks current approved knowledge and follows a small number of graph hops.",
+      "details": [
+        "Keyword/alias relevance, importance, and age influence ordering. Source validity is rechecked.",
+        "The default returns at most 6 memories within 8,000 characters and one graph hop; the supported hop ceiling is two."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/brain_store.py:542"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "memory_input",
+      "label": "Memory in worker input",
+      "group": "memory",
+      "parent": "memory",
+      "summary": "Scoped supplied-text dispatch automatically retrieves context before execution.",
+      "details": [
+        "The task retains memory IDs, scope, a context fingerprint, lookup timing, and whether execution was requested with that context.",
+        "Fallback preparation checks sources again. A receipt proves requested input, not that a provider read or relied on it."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/memory_usage.py",
+        "Agent-Orchestrator / app/task_handoff.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "lifecycle",
+      "label": "Review, replace, forget",
+      "group": "memory",
+      "parent": "memory",
+      "summary": "Approval and validity determine recall; supersession and Forget retire knowledge.",
+      "details": [
+        "Proposals stay out of recall. Forget removes memory content and derived search/graph data while retaining bounded change tombstones.",
+        "Review evidence remains attached to task-sourced knowledge."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/brain_store.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "viewer",
+      "label": "Orchestrator viewer",
+      "group": "measurement",
+      "parent": "measurement",
+      "summary": "See the selected run, recorded lead conversation, worker phases, and activity timestamps.",
+      "details": [
+        "Native activity uses saved session evidence where linked; historical records can lack timings."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/coordinator_viewer.py",
+        "Agent-Orchestrator / app/task_activity.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "console",
+      "label": "Open interactive console",
+      "group": "measurement",
+      "parent": "measurement",
+      "summary": "Open the exact existing Codex conversation or attach to the live Fable console.",
+      "details": [
+        "The button depends on a valid matching session binding and available attachment route.",
+        "ASTRA opens the saved Codex conversation in VS Code. Fable attaches the matching Claude daemon console.",
+        "The viewer is observational; the opened conversation or console is interactive."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/coordinator_viewer.py",
+        "Agent-Orchestrator / app/coordinator_interaction.py",
+        "Agent-Orchestrator / app/coordinator_transfer.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "brain_dashboard",
+      "label": "Brain dashboard",
+      "group": "measurement",
+      "parent": "measurement",
+      "summary": "Browse memories, links, review history, storage, recall, and task memory-use receipts.",
+      "details": [
+        "Stable project/run links connect it to the Orchestrator viewer.",
+        "Normal polling is quiet: Brain checks every 10 seconds and the viewer every 5 seconds. Retry or Apply pending updates appears only when needed."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/brain_dashboard.py",
+        "Agent-Orchestrator / app/coordinator_viewer_page.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "usefulness",
+      "label": "Explicit usefulness review",
+      "group": "measurement",
+      "parent": "measurement",
+      "summary": "A reviewer can rate supplied memory as helped, neutral, or harmful after accepting the answer.",
+      "details": [
+        "Feedback is bound to the accepted answer and exact requested memory context. Changed evidence makes old feedback stale.",
+        "Dashboard counts describe a bounded retained sample, not lifetime performance or causal improvement."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/memory_usage.py",
+        "Agent-Orchestrator / app/project_memory_usage.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "quota_view",
+      "label": "Provider usage view",
+      "group": "measurement",
+      "parent": "measurement",
+      "summary": "Provider observations show remaining allowance and collection status.",
+      "details": [
+        "An unknown or stale reading remains visible as such. An observation is not a promise of future capacity."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/usage_guard.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "source_scope",
+      "label": "Source and scope checks",
+      "group": "safeguards",
+      "parent": "safeguards",
+      "summary": "Project/user boundaries, source fingerprints, named reviews, and owner identity are checked.",
+      "details": [
+        "Memory is evidence; it does not grant permission, authorize exports, or change leadership."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/brain_store.py",
+        "Agent-Orchestrator / app/coordinator_handoff.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "storage_limits",
+      "label": "Storage and retention limits",
+      "group": "safeguards",
+      "parent": "safeguards",
+      "summary": "10,000 memories, 30,000 relationships, a 256 MiB database, and bounded task/trace storage.",
+      "details": [
+        "Brain admission budget is 1 GiB; total managed application admission budget is 2 GiB. These do not limit unrelated programs or the entire SSD.",
+        "The recall trace ring retains 200 records and the change feed 1,000 entries. The graph view displays a bounded recent snapshot."
+      ],
+      "evidence": [
+        "Agent-Orchestrator / app/brain_store.py:25",
+        "Agent-Orchestrator / app/storage_budget.py"
+      ],
+      "status": "implemented"
+    },
+    {
+      "id": "deliberate_controls",
+      "label": "Deliberate user control",
+      "group": "safeguards",
+      "parent": "safeguards",
+      "summary": "Voice commands choose destinations; saved approvals and the interactive console expose control points.",
+      "details": [
+        "External nonpublic exports require their authorized scope. Existing authorization is retained in the run checkpoint."
+      ],
+      "evidence": [
+        "OpenWhispr / src/helpers/spokenCommands.js",
+        "Agent-Orchestrator / app/coordinator_viewer.py"
+      ],
+      "status": "implemented"
+    }
+  ],
+  "edges": [
+    {
+      "from": "home_mic",
+      "to": "stt",
+      "label": "Home audio input",
+      "kind": "flow"
+    },
+    {
+      "from": "incoming_cable",
+      "to": "stt",
+      "label": "Away audio input",
+      "kind": "flow"
+    },
+    {
+      "from": "stt",
+      "to": "commands",
+      "label": "Recognized command words",
+      "kind": "flow"
+    },
+    {
+      "from": "stt",
+      "to": "cleanup",
+      "label": "Recognized dictation",
+      "kind": "flow"
+    },
+    {
+      "from": "commands",
+      "to": "safe_send",
+      "label": "Selects destination and send controls",
+      "kind": "flow"
+    },
+    {
+      "from": "cleanup",
+      "to": "safe_send",
+      "label": "Prepared dictation",
+      "kind": "flow"
+    },
+    {
+      "from": "safe_send",
+      "to": "voice_codex",
+      "label": "Selected Codex composer",
+      "kind": "flow"
+    },
+    {
+      "from": "safe_send",
+      "to": "voice_claude",
+      "label": "Selected Claude composer",
+      "kind": "flow"
+    },
+    {
+      "from": "voice_codex",
+      "to": "final_events",
+      "label": "Local completed-turn event",
+      "kind": "flow"
+    },
+    {
+      "from": "voice_claude",
+      "to": "final_events",
+      "label": "Stop hook to authenticated local bridge",
+      "kind": "flow"
+    },
+    {
+      "from": "final_events",
+      "to": "readback_inbox",
+      "label": "Completed reply",
+      "kind": "flow"
+    },
+    {
+      "from": "readback_inbox",
+      "to": "piper",
+      "label": "Allowed queued reply",
+      "kind": "flow"
+    },
+    {
+      "from": "piper",
+      "to": "voicemeeter",
+      "label": "Spoken output",
+      "kind": "flow"
+    },
+    {
+      "from": "voicemeeter",
+      "to": "home_output",
+      "label": "Hardware output bus",
+      "kind": "flow"
+    },
+    {
+      "from": "phone_voice",
+      "to": "discord_call",
+      "label": "Phone speech",
+      "kind": "flow"
+    },
+    {
+      "from": "discord_call",
+      "to": "incoming_cable",
+      "label": "PC call playback",
+      "kind": "flow"
+    },
+    {
+      "from": "voicemeeter",
+      "to": "discord_call",
+      "label": "Separate virtual return bus",
+      "kind": "flow"
+    },
+    {
+      "from": "discord_call",
+      "to": "phone_voice",
+      "label": "Spoken reply return",
+      "kind": "flow"
+    },
+    {
+      "from": "private_network",
+      "to": "remote_desktop",
+      "label": "Private remote-desktop connection when services are ready",
+      "kind": "flow"
+    },
+    {
+      "from": "voice",
+      "to": "voice_measurement",
+      "label": "Stage timing and reply state",
+      "kind": "flow"
+    },
+    {
+      "from": "voice_codex",
+      "to": "lead",
+      "label": "Can host the lead",
+      "kind": "flow"
+    },
+    {
+      "from": "voice_claude",
+      "to": "lead",
+      "label": "Can host the lead",
+      "kind": "flow"
+    },
+    {
+      "from": "astra",
+      "to": "lead",
+      "label": "Default owner",
+      "kind": "flow"
+    },
+    {
+      "from": "lead",
+      "to": "checkpoint",
+      "label": "Saves continuity",
+      "kind": "flow"
+    },
+    {
+      "from": "checkpoint",
+      "to": "handoff",
+      "label": "Transfers state",
+      "kind": "flow"
+    },
+    {
+      "from": "handoff",
+      "to": "fable",
+      "label": "Starts the configured Fable route",
+      "kind": "flow"
+    },
+    {
+      "from": "lead",
+      "to": "team_plan",
+      "label": "Chooses independent work",
+      "kind": "flow"
+    },
+    {
+      "from": "lead",
+      "to": "native_workers",
+      "label": "Creates native assignments",
+      "kind": "flow"
+    },
+    {
+      "from": "native_workers",
+      "to": "integration",
+      "label": "Returns native work for review",
+      "kind": "flow"
+    },
+    {
+      "from": "team_plan",
+      "to": "slots",
+      "label": "Uses the selected planning cap",
+      "kind": "flow"
+    },
+    {
+      "from": "slots",
+      "to": "dispatch",
+      "label": "Creates bounded waves",
+      "kind": "flow"
+    },
+    {
+      "from": "dispatch",
+      "to": "recall",
+      "label": "Uses exact project and task query",
+      "kind": "flow"
+    },
+    {
+      "from": "recall",
+      "to": "memory_input",
+      "label": "Selects approved context",
+      "kind": "flow"
+    },
+    {
+      "from": "memory_input",
+      "to": "reservation",
+      "label": "Prepares a quota-gated request",
+      "kind": "flow"
+    },
+    {
+      "from": "reservation",
+      "to": "execution",
+      "label": "Admits execution",
+      "kind": "flow"
+    },
+    {
+      "from": "execution",
+      "to": "grok",
+      "label": "Can dispatch to Grok",
+      "kind": "flow"
+    },
+    {
+      "from": "execution",
+      "to": "gemini",
+      "label": "Can dispatch to Gemini",
+      "kind": "flow"
+    },
+    {
+      "from": "execution",
+      "to": "fable",
+      "label": "Can dispatch to Claude",
+      "kind": "flow"
+    },
+    {
+      "from": "execution",
+      "to": "task_record",
+      "label": "Saves canonical result",
+      "kind": "flow"
+    },
+    {
+      "from": "task_record",
+      "to": "integration",
+      "label": "Submits for review",
+      "kind": "flow"
+    },
+    {
+      "from": "integration",
+      "to": "auto_episode",
+      "label": "Acceptance triggers compact capture",
+      "kind": "flow"
+    },
+    {
+      "from": "integration",
+      "to": "capture",
+      "label": "Can provide reviewed atomic knowledge",
+      "kind": "flow"
+    },
+    {
+      "from": "brain_store",
+      "to": "graph_links",
+      "label": "Stores typed connections",
+      "kind": "flow"
+    },
+    {
+      "from": "capture",
+      "to": "brain_store",
+      "label": "Commits reviewed nodes",
+      "kind": "flow"
+    },
+    {
+      "from": "auto_episode",
+      "to": "brain_store",
+      "label": "Saves compact review episode",
+      "kind": "flow"
+    },
+    {
+      "from": "capture",
+      "to": "graph_links",
+      "label": "Saves justified connections",
+      "kind": "flow"
+    },
+    {
+      "from": "graph_links",
+      "to": "recall",
+      "label": "Expands relevant context",
+      "kind": "flow"
+    },
+    {
+      "from": "brain_store",
+      "to": "recall",
+      "label": "Provides current knowledge",
+      "kind": "flow"
+    },
+    {
+      "from": "lifecycle",
+      "to": "brain_store",
+      "label": "Maintains validity",
+      "kind": "flow"
+    },
+    {
+      "from": "memory_input",
+      "to": "usefulness",
+      "label": "Retains context proof for evaluation",
+      "kind": "flow"
+    },
+    {
+      "from": "usefulness",
+      "to": "brain_dashboard",
+      "label": "Shows reviewer judgments",
+      "kind": "flow"
+    },
+    {
+      "from": "task_record",
+      "to": "viewer",
+      "label": "Exposes phase and review state",
+      "kind": "flow"
+    },
+    {
+      "from": "checkpoint",
+      "to": "viewer",
+      "label": "Shows selected lead and run",
+      "kind": "flow"
+    },
+    {
+      "from": "viewer",
+      "to": "console",
+      "label": "Opens exact session attachment",
+      "kind": "flow"
+    },
+    {
+      "from": "viewer",
+      "to": "brain_dashboard",
+      "label": "Carries project and run selection",
+      "kind": "flow"
+    },
+    {
+      "from": "brain_store",
+      "to": "brain_dashboard",
+      "label": "Displays nodes and links",
+      "kind": "flow"
+    },
+    {
+      "from": "reservation",
+      "to": "quota_view",
+      "label": "Records quota observations",
+      "kind": "flow"
+    },
+    {
+      "from": "integration",
+      "to": "final_events",
+      "label": "Lead publishes completed reply",
+      "kind": "flow"
+    },
+    {
+      "from": "remote_desktop",
+      "to": "viewer",
+      "label": "Desktop access when host is ready",
+      "kind": "flow"
+    },
+    {
+      "from": "storage_limits",
+      "to": "brain_store",
+      "label": "Bounds retained application data",
+      "kind": "flow"
+    },
+    {
+      "from": "source_scope",
+      "to": "recall",
+      "label": "Validates recalled evidence",
+      "kind": "flow"
+    },
+    {
+      "from": "deliberate_controls",
+      "to": "safe_send",
+      "label": "Selects intended destination",
+      "kind": "flow"
+    }
+  ],
+  "groups": [
+    {
+      "id": "voice",
+      "label": "Speak and hear",
+      "color": "#79dfc5"
+    },
+    {
+      "id": "remote",
+      "label": "Away access",
+      "color": "#80d7ed"
+    },
+    {
+      "id": "orchestration",
+      "label": "Coordinate work",
+      "color": "#a3bdff"
+    },
+    {
+      "id": "providers",
+      "label": "Model providers",
+      "color": "#d3abff"
+    },
+    {
+      "id": "workers",
+      "label": "Create a team",
+      "color": "#efc67e"
+    },
+    {
+      "id": "memory",
+      "label": "Remember and recall",
+      "color": "#98df9f"
+    },
+    {
+      "id": "measurement",
+      "label": "See what happened",
+      "color": "#f4a6bf"
+    },
+    {
+      "id": "safeguards",
+      "label": "Keep control",
+      "color": "#eeb28c"
+    }
+  ],
+  "journeys": [
+    {
+      "id": "speak",
+      "label": "Speak and hear",
+      "summary": "A deliberate dictation reaches the chosen lead conversation; completed replies return through Piper.",
+      "node_ids": [
+        "home_mic",
+        "stt",
+        "cleanup",
+        "safe_send",
+        "voice_codex",
+        "final_events",
+        "readback_inbox",
+        "piper",
+        "voicemeeter",
+        "home_output"
+      ]
+    },
+    {
+      "id": "away",
+      "label": "Use it away from home",
+      "summary": "A connected Discord call carries speech in and an independent audio bus carries replies out. Remote desktop is a separate optional path.",
+      "node_ids": [
+        "phone_voice",
+        "discord_call",
+        "incoming_cable",
+        "stt",
+        "piper",
+        "voicemeeter",
+        "private_network",
+        "remote_desktop"
+      ]
+    },
+    {
+      "id": "delegate",
+      "label": "Dispatch hosted work",
+      "summary": "The lead plans work, respects capacity, supplies memory, reserves allowance, and reviews the result.",
+      "node_ids": [
+        "lead",
+        "team_plan",
+        "slots",
+        "dispatch",
+        "recall",
+        "memory_input",
+        "reservation",
+        "execution",
+        "task_record",
+        "integration"
+      ]
+    },
+    {
+      "id": "learn",
+      "label": "Learn from completed work",
+      "summary": "Reviewed knowledge becomes atomic memories and justified links; later work retrieves it and retains an inspectable use receipt.",
+      "node_ids": [
+        "integration",
+        "capture",
+        "brain_store",
+        "graph_links",
+        "recall",
+        "memory_input",
+        "usefulness",
+        "brain_dashboard"
+      ]
+    }
+  ],
+  "counts": {
+    "components": 57,
+    "connections": 62,
+    "native_slots": 4
+  }
+}
