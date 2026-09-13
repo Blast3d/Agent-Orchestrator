@@ -4,9 +4,11 @@ Double-click **Open Orchestrator Viewer.cmd**, or run `python orchestrator.py vi
 The launcher reuses one local server per workspace. It opens a browser page; it
 does not attach a console, resume a conversation or call a model.
 
-The **MEMORY** crumb in the header opens the memory dashboard on the selected
-run's project, starting that server if needed. Its **Orchestrator** crumb comes
-back to this viewer on the same run. Both links stay on `127.0.0.1`.
+The **Memory Brain** button beside the **Usage monitor** switch opens the memory
+dashboard on the selected project and run, starting that server if needed. It
+also works without a selected run. The **Memory** link in the header opens the
+same dashboard. Its **Orchestrator** link comes back to this viewer on the same
+run. Both pages stay on `127.0.0.1`.
 
 Choose a project run to see its recorded lead, saved objective, completed work,
 next steps and open jobs. The viewer refreshes every five seconds while visible.

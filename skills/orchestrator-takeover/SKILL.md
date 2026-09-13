@@ -47,6 +47,10 @@ The maintained app is `~/Documents/Agent-Orchestrator/orchestrator.py`.
    a background refresh. Collector timeout, stale or missing usage does not
    block admission; usable allowance at/below20% or confirmed rejection does.
    It calls no model and changes no task reservation. Continue only after success.
+   Load `python APP start --run RUN --owner fable --session UUID --generation N`
+   with the newly claimed generation before assigning any workers. Read the
+   returned operating guide and scoped memory; the previous lead's startup
+   receipt is stale after a transfer.
 6. Read `python APP lead prompt --run RUN` and the installed
    `multi-model-orchestrator` skill. Report the objective, completed work, uncertain
    jobs and next step briefly, then continue the authorized work as lead.

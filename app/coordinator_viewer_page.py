@@ -27,7 +27,10 @@ PAGE = r'''<!doctype html>
   <section class="panel session" aria-label="Usage monitor">
     <div class="session-grid">
       <div><h2>Usage monitor</h2><p id="monitor-help" class="muted smalltext spaced">Turn on account allowance checks while coding; turn them off when finished.</p><p id="monitor-note" class="muted smalltext spaced" role="status">Checking monitor status...</p></div>
-      <button id="monitor-toggle" type="button" role="switch" aria-checked="false" aria-label="Usage monitor" aria-describedby="monitor-help monitor-note" disabled>Checking...</button>
+      <div class="row">
+        <button id="monitor-toggle" type="button" role="switch" aria-checked="false" aria-label="Usage monitor" aria-describedby="monitor-help monitor-note" disabled>Checking...</button>
+        <button id="open-brain" type="button" title="Open the Memory Brain dashboard for the selected project">Memory Brain</button>
+      </div>
     </div>
   </section>
   <section class="panel session" aria-label="Selected orchestrator">
@@ -143,11 +146,26 @@ PAGE = r'''<!doctype html>
   function crumbTarget() { const brain = services.find(s => s.id === 'brain'); if (!brain || !brain.origin) return ''; const scope = new URLSearchParams(); if (memoryProject) scope.set('project', memoryProject); if (selected) scope.set('run', selected); return brain.origin + '/' + (scope.size ? '#' + scope : ''); }
   function renderCrumb() { const scope = new URLSearchParams(); if (memoryProject) scope.set('project', memoryProject); if (selected) scope.set('run', selected); for (const page of ['usage', 'contributions']) $('crumb-' + page).href = '/' + page + (scope.size ? '?' + scope : ''); const target = crumbTarget(); $('crumb-brain').href = target || '#'; $('crumb-brain').title = target ? 'Open the Memory dashboard' + (selected ? ' for this run' : '') : 'Start the Memory dashboard'; }
   async function loadServices() { try { services = (await api('/api/services')).services || []; } catch (_) { services = []; } renderCrumb(); }
-  $('crumb-brain').addEventListener('click', async event => {
-    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    event.preventDefault(); $('crumb-brain').textContent = 'MEMORY…';
+  let openingBrain = false;
+  async function openBrain() {
+    if (openingBrain) return;
+    openingBrain = true;
+    $('open-brain').disabled = true;
+    $('open-brain').textContent = 'Opening...';
+    $('crumb-brain').textContent = 'Memory…';
     try { const opened = await api('/api/open', {target: 'brain'}); services = [{id: 'brain', origin: opened.origin}]; window.location.href = crumbTarget(); }
-    catch (error) { $('crumb-brain').textContent = 'MEMORY'; showError(error); }
+    catch (error) { showError(error); }
+    finally {
+      openingBrain = false;
+      $('open-brain').disabled = false;
+      $('open-brain').textContent = 'Memory Brain';
+      $('crumb-brain').textContent = 'Memory';
+    }
+  }
+  $('open-brain').addEventListener('click', openBrain);
+  $('crumb-brain').addEventListener('click', event => {
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault(); return openBrain();
   });
   function connection() {
     const dot = document.createElement('span'); dot.className = 'status-dot' + (lastFailure ? ' offline' : document.hidden ? ' paused' : '');

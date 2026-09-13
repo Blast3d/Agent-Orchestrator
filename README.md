@@ -135,7 +135,13 @@ Provider authentication remains in each provider's normal account folders. Model
 
 ## Daily use
 
-Ask Codex to use the orchestrator for a project. You do not need to launch all providers yourself. Useful manual commands from this folder:
+After global registration, Codex and Claude receive startup instructions for
+substantial project work automatically. The lead uses **start** to load the
+operating guide and scoped Brain recall before assigning workers. The dispatcher
+includes the guide in every new worker request; project recall remains scoped to
+the assignment. **closeout** checks reviewed task captures and contribution maps
+before recording completion. See [startup and closeout](docs/startup-and-closeout.md).
+You do not need to launch all providers yourself. Useful manual commands:
 
 ```powershell
 python orchestrator.py doctor

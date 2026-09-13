@@ -50,6 +50,55 @@ class DispatchTests(unittest.TestCase):
     def canonical(self, result):
         return json.loads(Path(result['canonical_result']).read_text(encoding='utf-8'))
 
+    def test_no_memory_still_supplies_operating_guide_in_actual_request(self):
+        import hashlib
+        self.args.no_memory = True
+        result = self.run_task()
+        sent_prompt = dispatcher.cloud_command.call_args.args[1]
+        self.assertTrue(sent_prompt.startswith('# Orchestration Operating Guide (v1)'))
+        self.assertIn(self.prompt.read_text(), sent_prompt)
+        self.assertNotIn('memory_context', result)
+        context = self.canonical(result)['orchestration_context']
+        self.assertTrue(context['execution_requested'])
+        self.assertEqual(context['request_sha256'], hashlib.sha256((dispatcher.PREFIX + sent_prompt).encode()).hexdigest())
+        index = json.loads((self.store.root / result['job_id'] / 'record.json').read_text(encoding='utf-8'))
+        self.assertNotIn('context', index['orchestration_context'])
+        self.assertEqual(index['orchestration_context']['sha256'], context['sha256'])
+
+    def test_missing_operating_guide_holds_before_quota_or_provider(self):
+        with patch.object(dispatcher, 'load_operating_context', side_effect=dispatcher.OperatingContextError('Guide missing')):
+            result = self.run_task()
+        self.assertEqual(result['execution_status'], 'held')
+        self.factory.assert_not_called()
+        self.invoke.assert_not_called()
+        self.assertIn('Guide missing', result['reason'])
+
+    def test_guide_change_during_quota_preparation_prevents_execution(self):
+        import orchestration_context
+        original = orchestration_context.load_operating_context()
+        changed = dict(original, sha256='0' * 64)
+        with patch.object(orchestration_context, 'load_operating_context', return_value=changed):
+            result = self.run_task()
+        self.assertEqual(result['execution_status'], 'held')
+        self.assertFalse(result['orchestration_context']['execution_requested'])
+        self.invoke.assert_not_called()
+        self.guard.finish.assert_called_once()
+
+    def test_assignment_reuse_keeps_original_context_when_guide_is_unavailable(self):
+        self.args.project = 'context-test'
+        self.args.assignment_id = 'context-replay'
+        self.args.no_memory = True
+        first = self.run_task()
+        self.assertEqual(first['execution_status'], 'succeeded')
+        self.invoke.reset_mock()
+        self.factory.reset_mock()
+        with patch.object(dispatcher, 'load_operating_context', side_effect=dispatcher.OperatingContextError('Guide missing')):
+            repeated = self.run_task()
+        self.assertTrue(repeated['assignment_reused'])
+        self.assertEqual(repeated['orchestration_context'], first['orchestration_context'])
+        self.invoke.assert_not_called()
+        self.factory.assert_not_called()
+
     def test_existing_output_is_preserved_before_any_quota_work(self):
         self.args.output.write_text('existing user work', encoding='utf-8')
         result = self.run_task()

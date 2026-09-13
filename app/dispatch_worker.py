@@ -19,6 +19,8 @@ from storage_budget import StorageBudget, StorageLimitError
 from task_activity import PhaseTracker
 from memory_usage import recall_plan, contract_fields
 from claude_models import select_model
+from orchestration_context import (OperatingContextError, load_operating_context,
+                                   verify_run_startup, verify_request_context)
 
 PROVIDERS = {'gemini': 'antigravity', 'grok': 'grok', 'claude': 'claude', 'vscode-copilot': 'vscode-copilot'}
 PREFIX = ('You are a specialist worker reporting to Codex. Use only the supplied brief. '
@@ -106,7 +108,7 @@ def cloud_command(worker, prompt, work, claude_model=None, claude_effort='medium
         return command_for(PREFIX + prompt, work, worker_environment()), None
     if worker == 'grok':
         task_file = work / 'task.txt'
-        task_file.write_text(PREFIX + prompt, encoding='utf-8')
+        task_file.write_bytes((PREFIX + prompt).encode('utf-8'))
         command = [str(Path.home() / '.grok/bin/grok.exe'), '--no-auto-update',
                  '--prompt-file', str(task_file), '--model', 'grok-4.6',
                  '--reasoning-effort', 'low',
@@ -246,6 +248,12 @@ def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
         elif args.worker == 'local-chat' and len(prompt) > 10000:
             raise ValueError('Local brief exceeds the small chat profile; split the task')
         else:
+            operating = load_operating_context()
+            binding = verify_run_startup(args, operating)
+            result['orchestration_context'] = dict(operating, execution_requested=False)
+            if binding:
+                result.update(run_id=binding['run_id'], orchestration_startup=binding)
+            prompt = operating['context'] + '\n\n## Assigned task\n' + prompt
             if memory_query:
                 activity.set('memory_lookup')
                 from brain_store import BrainStore
@@ -260,6 +268,11 @@ def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                     'lookup_ms': recalled.get('lookup_ms'), 'elapsed_ms': recalled.get('elapsed_ms')}
                 if args.worker=='local-chat' and len(prompt)>10000:
                     raise ValueError('Local brief and recalled memory exceed the small chat profile')
+            if args.worker == 'local-chat' and len(prompt) > 10000:
+                raise ValueError('Local brief and operating guidance exceed the small chat profile')
+            supplied = (PREFIX if provider else '') + prompt
+            result['orchestration_context']['request_sha256'] = hashlib.sha256(supplied.encode('utf-8')).hexdigest()
+            result['orchestration_context']['request_chars'] = len(supplied)
             work = workspaces / 'tasks' / job_id
             work.mkdir(parents=True)
             command = stdin = None
@@ -290,6 +303,7 @@ def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                     result.update(status='held', execution_status='held', reason='Quota admission refused')
                 else:
                     result['reservation_id'] = decision['reservation_id']
+                    verify_request_context(args, operating, binding)
                     if args.worker == 'gemini':
                         from antigravity_boundary import verify_prepared
                         verify_prepared(work)
@@ -299,6 +313,7 @@ def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                         result.update(timeout_seconds=effective_timeout,
                                       execution_progress_path=str(work / 'execution-progress.json'),
                                       partial_response_path=str(work / 'partial-response.txt'))
+                    result['orchestration_context']['execution_requested'] = True
                     store.save(job_id, result)
                     activity.set('provider_execution')
                     execution_started = True
@@ -347,7 +362,7 @@ def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                         raise ValueError('Worker returned no answer')
                     result.update(status='awaiting_review', execution_status='succeeded',
                                   review_status='pending', response=response)
-    except (BoundaryHeld, StorageLimitError) as exc:
+    except (BoundaryHeld, StorageLimitError, OperatingContextError) as exc:
         result.update(status='held', execution_status='held', reason=str(exc))
     except WorkerInterrupted as exc:
         uncertain = True
@@ -478,6 +493,7 @@ def main(argv=None):
     parser.add_argument('--claude-effort', choices=['low', 'medium', 'high'], default='medium')
     parser.add_argument('--require-brief-check', action='store_true', help='Hold incomplete briefs before reserving allowance or calling a worker')
     parser.add_argument('--project', help='Stable project identifier, used with --assignment-id')
+    parser.add_argument('--run', type=Path, help='Exact orchestration run; requires current startup context (also inferred from an output inside a run)')
     parser.add_argument('--assignment-id', help='Stable assignment key; repeated requests reuse the original task')
     parser.add_argument('--revision-of', help='Previous job ID for a deliberate revision under a new assignment key')
     memory = parser.add_mutually_exclusive_group()

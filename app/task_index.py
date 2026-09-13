@@ -13,6 +13,9 @@ def project_task_index(result):
     brief = record.get('brief_check')
     if isinstance(brief, dict):
         record['brief_check'] = {key: value for key, value in brief.items() if key != 'sections'}
+    operating = record.get('orchestration_context')
+    if isinstance(operating, dict):
+        record['orchestration_context'] = {key: value for key, value in operating.items() if key != 'context'}
     return record
 
 

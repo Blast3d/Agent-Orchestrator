@@ -34,6 +34,8 @@ def diagnose():
                      'app/system_map.py','app/assets/system-map-template.html','app/assets/system-map-data.json','Open System Map.cmd',
                      'app/memory_bundle.py','app/memory_usage.py','app/project_memory_usage.py',
                      'app/task_activity.py', 'app/automatic_memory.py', 'app/team_planner.py', 'docs/team-sizing.md',
+                     'app/orchestration_context.py', 'app/orchestration_lifecycle.py',
+                     'app/assets/orchestration-context.md', 'docs/startup-and-closeout.md',
                      'app/antigravity_boundary.py', 'app/antigravity_deny_tools.py', 'app/antigravity_progress.py',
                      'app/brain_store.py','app/brain_cli.py','app/brain_dashboard.py','app/brain_interface.py',
                      'app/storage_budget.py','app/start_brain_dashboard.py','Open Brain Dashboard.cmd',
@@ -78,5 +80,15 @@ def diagnose():
                 add('claude-skill:' + skill_name + '/' + relative.as_posix(),
                     target.is_file() and target.read_bytes() == file.read_bytes(),
                     'Claude discovers the same lead rules and explicit takeover command')
+    for provider, path in (('codex', Path.home() / '.codex/AGENTS.md'),
+                           ('claude', Path.home() / '.claude/CLAUDE.md')):
+        try:
+            instructions = path.read_text(encoding='utf-8')
+            installed_hook = ('<!-- agent-orchestrator-startup -->' in instructions
+                              and str(ROOT / 'orchestrator.py') in instructions)
+        except (OSError, UnicodeError):
+            installed_hook = False
+        add(provider + '-startup-instructions', installed_hook,
+            'Global instructions load orchestration for substantial work; run scripts/install_global.py to synchronize')
     return {'ok': all(c['ok'] for c in checks), 'checks': checks,
             'limits': ['Offline installation checks do not prove current authentication, remaining quota or task quality.']}

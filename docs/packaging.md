@@ -1,6 +1,6 @@
 # Portable Windows release
 
-Download `Agent-Orchestrator-0.1.0-windows-x64.zip` and `SHA256SUMS.txt` from
+Download `Agent-Orchestrator-1.01-windows-x64.zip` and `SHA256SUMS.txt` from
 the repository release. Extract the entire ZIP to a writable folder, then
 double-click **Setup.cmd**. Python 3.13.15, the terminal-reader dependencies,
 dashboards, command launchers and the VS Code extension are included.
@@ -19,7 +19,8 @@ under the current user's AppData folder; Grok uses the current user's `.grok/bin
 Quota-reader compatibility is pinned in the application and must be revalidated
 when provider CLIs change. The release does not establish provider readiness.
 
-For Copilot, install `extensions/agent-orchestrator-bots-0.1.0.vsix` using
+For Copilot and the VS Code Usage monitor control, install
+`extensions/agent-orchestrator-bots-0.1.1.vsix` using
 **Extensions: Install from VSIX** in VS Code, then enable the Orchestrator bot,
 select a model and grant the editor's model access. See [VS Code bots](vscode-bots.md).
 
@@ -29,6 +30,12 @@ After choosing this installation as the maintained home, run:
 ```bat
 "Run Python.cmd" scripts\install_global.py
 ```
+
+This also installs startup instructions for Codex and Claude to load the
+Orchestrator workflow automatically for substantial work. The shared operating
+guide and `start` / `closeout` commands are included in the portable package.
+See [startup and closeout](startup-and-closeout.md). The viewer's **Memory Brain**
+button opens scoped memory beside the **Usage monitor** toggle.
 
 The general `doctor` command checks those global integrations too. `Setup.cmd`
 and `scripts/check_package.py` check portable components without installing global
@@ -70,7 +77,7 @@ Existing output archives are never overwritten; choose a fresh output directory.
 Use `python scripts/smoke_package.py PATH_TO_ZIP "dist/smoke with spaces"` to
 extract into a new folder, run the bundled checks and actual CMD launcher with
 system Python off PATH, probe two temporary local dashboards and stop both.
-See the [version 0.1.0 validation record](release-0.1.0.md) for observed results.
+See the [version 1.01 validation record](release-1.01.md) for observed results.
 
 For source-only packaging use `--source-only`. To run a source checkout, install
 `requirements.txt` with your Python environment, then run **Setup.cmd**.

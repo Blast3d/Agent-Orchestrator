@@ -4,6 +4,16 @@ The maintained app has a lightweight SQLite brain and an interactive dashboard.
 Open `Open Brain Dashboard.cmd`; it reuses one hidden loopback server. No local
 model, Graphiti installation, or model call is required for memory search.
 
+Load the workflow automatically with the maintained `orchestrator.py start`
+command at the start or resumption of substantial work. It returns deterministic
+operating guidance plus scoped Brain recall and records a startup receipt. The
+operating guide is delivered by the guarded dispatcher even when `--no-memory`
+disables project recall. Read the returned packet; native assignments must
+include the guide and approved relevant evidence explicitly. After final review,
+capture native outcomes and run `orchestrator.py closeout` to verify receipts and
+the standard contribution map before recording completion. See the maintained
+`docs/startup-and-closeout.md` for exact commands and the native-tool limitation.
+
 At the start of substantial related work, identify the exact project and use
 `python orchestrator.py brain search "relevant terms and aliases" --project ID`.
 Use results as evidence, check sources and current instructions, and retain the

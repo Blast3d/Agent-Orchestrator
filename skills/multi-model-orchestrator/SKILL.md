@@ -108,6 +108,27 @@ second perspective when accessible, but verify conclusions against evidence.
 
 ## Establish shared context and ownership
 
+Do this automatically for substantial related work; the user should not need to
+ask to load orchestration. In the maintained app, use `python orchestrator.py start
+--workspace PROJECT --name short-slug --objective "Actual objective" --project ID`
+to create the run and load its shared operating guide plus bounded Brain recall.
+For existing work use `start --run EXACT_RUN --owner OWNER --session SESSION
+--generation N`. Read the returned packet before assigning workers. After a
+checkpoint or handoff changes the generation, reload startup for that same run.
+Do not silently switch to the newest run. See `docs/startup-and-closeout.md`.
+
+The operating guide is a maintained required input, separate from task-specific
+memory. The dispatcher includes it in every new request, including `--no-memory`
+tasks, and records the request hash. Run-linked requests require matching startup
+identity and guide hash. Use `--run EXACT_RUN` when the output is not inside the
+run. Missing or stale startup holds new execution before inference; reusing an
+existing assignment preserves its original context and result.
+
+For native assignments, include the operating guide and relevant authorized
+recall in the actual prompt and retain that prompt/packet as evidence. A packet
+saved on disk alone is not delivery. Instructions in native sessions provide
+this hook; native tools outside the dispatcher cannot be intercepted by this app.
+
 Use [reviewed project memory](references/brain.md) for relevant past decisions,
 preferences and accepted outcomes. Its local dashboard and SQLite search need no
 model calls. Keep the exact project scope and source checks; memory is evidence
@@ -312,6 +333,12 @@ Generate the contribution audit and include a concise percentage breakdown of
 each agent's estimated share of accepted work, overall and by useful category.
 Keep actual usage separate and label missing measurements. Include Codex's own
 work; do not credit rejected drafts or providers that were not used.
+
+Use the maintained `orchestrator.py closeout --run EXACT_RUN --owner OWNER
+--session SESSION --generation N` before final delivery. It verifies current
+ownership, linked task reviews and capture receipts, native capture when
+required, and the standard contribution audit/map. Resolve its missing evidence
+instead of writing an ad hoc summary or setting the run complete manually.
 
 Finish with the requested deliverables, a concise account of actual contributors,
 validation performed, and material remaining limits. Include useful local files

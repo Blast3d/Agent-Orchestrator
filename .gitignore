@@ -21,3 +21,5 @@ docs/validation.json
 *.zip
 *.sqlite*
 .env.*
+output/
+.playwright-cli/

@@ -13,7 +13,7 @@ import zipfile
 from package_vscode_bots import package as package_vsix
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.1.0'
+VERSION = '1.01'
 PYTHON_VERSION = '3.13.15'
 PYTHON_URL = 'https://www.python.org/ftp/python/3.13.15/python-3.13.15-embed-amd64.zip'
 PYTHON_SHA256 = 'd1f04d990aee1253d8569e8e5104e30fa9f5fa830899f14843448872d936a2cf'
@@ -129,7 +129,8 @@ def build(output, cache, source_only=False):
                 raise ValueError('pyte corresponding source checksum mismatch')
             (tree / 'third-party/sources').mkdir(parents=True)
             shutil.copyfile(pyte_source, tree / 'third-party/sources/pyte-0.8.2.tar.gz')
-            package_vsix(tree / 'extensions/agent-orchestrator-bots-0.1.0.vsix')
+            extension_version = json.loads((tree / 'extensions/vscode-bots/package.json').read_text(encoding='utf-8'))['version']
+            package_vsix(tree / f'extensions/agent-orchestrator-bots-{extension_version}.vsix')
             manifest = {'version': VERSION, 'platform': 'windows-x64',
                         'python': {'version': PYTHON_VERSION, 'url': PYTHON_URL, 'sha256': PYTHON_SHA256},
                         'dependency_wheels_sha256': WHEEL_HASHES,

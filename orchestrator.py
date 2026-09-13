@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / 'app'))
 
 def main():
     actions = {'status': ('usage_guard.py', 'status'), 'refresh': ('usage_guard.py', 'refresh'),
+               'start': ('orchestration_lifecycle.py', 'start'), 'closeout': ('orchestration_lifecycle.py', 'closeout'),
                'run': ('dispatch_worker.py', None), 'review': ('dispatch_worker.py', 'review'),
                'monitor': ('start_usage_monitor.py', None), 'stop-monitor': ('start_usage_monitor.py', '--stop'),
                'local': ('manage_local.py', None), 'inventory': ('inventory_agents.py', None),
@@ -21,8 +22,8 @@ def main():
                'vscode-bots': ('vscode_bots.py', None),
                'viewer': ('start_coordinator_viewer.py', None), 'map': ('system_map.py', None)}
     if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
-        print('Agent Orchestrator: ASTRA leads by default; an explicitly claimed Fable handoff can continue orchestration.\n'
-              'Commands: brain, lead, viewer, watch, team, remember, map, doctor, status, refresh, dashboard, inbox, summary, visuals, brief-check, run, review, contributions, tasks, monitor, stop-monitor, local, inventory, vscode-bots\n'
+        print('Agent Orchestrator: ASTRA leads by default; configured Claude Opus can continue through an explicit handoff.\n'
+              'Commands: start, closeout, brain, lead, viewer, watch, team, remember, map, doctor, status, refresh, dashboard, inbox, summary, visuals, brief-check, run, review, contributions, tasks, monitor, stop-monitor, local, inventory, vscode-bots\n'
               'Examples:\n  python orchestrator.py doctor\n  python orchestrator.py refresh --provider claude\n'
               '  python orchestrator.py run claude --prompt-file brief.txt --output answer.json --task review --size small\n'
               '  python orchestrator.py review JOB_ID --decision accepted --reviewer Codex --note "Verified against source and tests."')
