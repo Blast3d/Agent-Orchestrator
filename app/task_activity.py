@@ -79,11 +79,32 @@ class PhaseTracker:
         return receipt
 
 
-def snapshot(root, run_id, project_ids=None, *, home=None):
-    """Read exact run/project tasks without prompt, answer, path or account data."""
+def _belongs_to_run(record, run, explicit):
+    if record.get('job_id') in explicit:
+        return True
+    # A shared memory project is not an execution run. Prefer an exact binding.
+    if record.get('run_id'):
+        return record['run_id'] == run.name
+    if record.get('assignment_project_id') == run.name:
+        return True  # Older tasks used the run ID as their project scope.
+    output = record.get('requested_output')
+    if not isinstance(output, str) or not output:
+        return False
+    try:
+        path = Path(output)
+        if not path.is_absolute():
+            path = run.parent.parent / path
+        return path.resolve().is_relative_to(run.resolve())
+    except (OSError, ValueError, RuntimeError):
+        return False
+
+
+def snapshot(root, run_id, *, home=None):
+    """Read this run's workers and local saves without prompt or answer content."""
     root = Path(root)
     checked = datetime.now(timezone.utc)
-    output = {'tasks': [], 'checked_at': checked.isoformat(), 'task_count': 0, 'truncated': False}
+    output = {'tasks': [], 'captures': [], 'capture_count': 0, 'captures_truncated': False,
+              'checked_at': checked.isoformat(), 'task_count': 0, 'truncated': False}
     if not isinstance(run_id, str) or not RUN.fullmatch(run_id):
         return output
     run = root / '.orchestration' / run_id
@@ -100,14 +121,7 @@ def snapshot(root, run_id, project_ids=None, *, home=None):
         identifier = job.get('job_id') if isinstance(job, dict) else job
         if isinstance(identifier, str) and JOB.fullmatch(identifier):
             explicit.add(identifier)
-    projects = {run_id}
-    for project in (project_ids or []):
-        if isinstance(project, str) and 0 < len(project) <= 200:
-            projects.add(project)
-    for key in ('memory_project_id', 'project_id'):
-        value = manifest.get(key)
-        if isinstance(value, str) and 0 < len(value) <= 200:
-            projects.add(value)
+    timing_records = []
     folders = root / 'runs' / 'tasks'
     try:
         candidates = list(itertools.islice(folders.iterdir(), 2001))
@@ -126,14 +140,29 @@ def snapshot(root, run_id, project_ids=None, *, home=None):
         # canonical source checked; never open every worker answer on each poll.
         record = _json(folder / 'record.json', root, 128 * 1024, budget)
         if folder.name not in explicit and (record.get('job_id') != folder.name or
-                record.get('assignment_project_id') not in projects):
+                not _belongs_to_run(record, run, explicit)):
             continue
         # The canonical source wins; an index cannot override an existing result.
         source, problem = _contained_file(folders, folder.name, 'result.json')
         data = _json(source, root, 512 * 1024, budget) if source else record if problem == 'missing' else {}
-        if data.get('job_id') != folder.name or (folder.name not in explicit and data.get('assignment_project_id') not in projects):
+        if data.get('job_id') != folder.name or not _belongs_to_run(data, run, explicit):
             continue
         status = data.get('status') if data.get('status') in STATUSES else 'unknown'
+        memory = _json(folder / 'memory-outcome.json', root, 16384, budget)
+        memory_status = memory.get('status') if memory.get('status') in ('remembered', 'skipped', 'error', 'writing') else None
+        if data.get('imported_completed_artifact') is True:
+            ids = memory.get('memory_ids', [memory.get('memory_id')])
+            verified_ids = (set(ids) if isinstance(ids, list) and len(ids) <= 24
+                            and all(isinstance(v, str) and JOB.fullmatch(v) for v in ids) else None)
+            identity_matches = memory.get('job_id') == folder.name
+            saved = _instant(memory.get('updated_at')) if identity_matches else None
+            saved = saved or _instant(data.get('finalized_at')) or _instant(data.get('created_at'))
+            output['captures'].append({'job_id': folder.name, 'status': status,
+                'memory_status': memory_status if identity_matches else None,
+                'memory_count': len(verified_ids) if identity_matches and verified_ids is not None else None,
+                'saved_at': saved.isoformat() if saved else None})
+            continue
+        timing_records.append({key: data.get(key) for key in ('started_at', 'ended_at', 'phase_durations_ms')})
         activity = _json(folder / 'activity.json', root, 16384, budget)
         if activity.get('job_id') != folder.name:
             activity = {}
@@ -152,9 +181,9 @@ def snapshot(root, run_id, project_ids=None, *, home=None):
         if started and _number(timeout) and 0 < timeout <= 86400:
             deadline = (started + timedelta(seconds=timeout)).isoformat()
         progress = _read_progress(folder.name, root / 'runtime/workspaces', [])
-        updates = [_instant(activity.get('updated_at')), _instant(progress.get('saved_at'))]
+        updates = [_instant(activity.get('updated_at')), _instant(progress.get('saved_at')),
+                   finalized, _instant(data.get('ended_at')), started, created]
         updated = max((value for value in updates if value), default=None)
-        memory = _json(folder / 'memory-outcome.json', root, 16384, budget)
         reason = {'held': 'Admission is held; inspect the task review for the recorded reason.',
             'recovery_required': 'Execution needs reconciliation; its reservation remains held.',
             'failed': 'Task failed; inspect its canonical task record.',
@@ -170,10 +199,14 @@ def snapshot(root, run_id, project_ids=None, *, home=None):
             'status': status, 'phase': phase,
             'phase_started_at': activity.get('phase_started_at') if _instant(activity.get('phase_started_at')) else None,
             'updated_at': updated.isoformat() if updated else None,
+            'updated_label': 'Saved task activity',
             'started_at': started.isoformat() if started else None,
             'deadline_at': deadline, 'elapsed_seconds': round(elapsed, 1) if elapsed is not None else None,
             'reason': reason, 'phase_durations_ms': durations, 'progress': progress,
-            'memory_status': memory.get('status') if memory.get('status') in ('remembered', 'skipped', 'error', 'writing') else None})
+            'memory_status': memory_status})
+    from run_timing import summarize
+    output['timing'] = summarize(timing_records)
+    output['timing']['scan_limited'] = output['scan_limited']
     native = {}
     for job in jobs:
         name = job.get('agent') if isinstance(job, dict) else None
@@ -225,8 +258,12 @@ def snapshot(root, run_id, project_ids=None, *, home=None):
             'reason': native_reason, 'activity_source': 'codex_local_metadata' if linked else 'coordinator_checkpoint',
             'activity_error': None if linked else native_reason,
             'phase_durations_ms': {}, 'progress': {}, 'memory_status': None})
-    output['tasks'].sort(key=lambda row: (row['status'] in TERMINAL or row['status'] == 'completed', row['started_at'] or '', row['job_id']))
+    output['tasks'].sort(key=lambda row: (row['status'] in ('accepted', 'completed'), row['started_at'] or '', row['job_id']))
     output['task_count'] = len(output['tasks'])
     output['truncated'] = len(output['tasks']) > 100 or output['scan_limited']
     output['tasks'] = output['tasks'][:100]
+    output['captures'].sort(key=lambda row: (row['saved_at'] or '', row['job_id']), reverse=True)
+    output['capture_count'] = len(output['captures'])
+    output['captures_truncated'] = len(output['captures']) > 100 or output['scan_limited']
+    output['captures'] = output['captures'][:100]
     return output

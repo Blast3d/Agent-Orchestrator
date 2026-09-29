@@ -49,10 +49,15 @@ class ClaudeModelTests(unittest.TestCase):
                     cloud_command('claude', 'Supplied text', self.root, model)
 
     def test_other_families_remain_explicitly_selectable(self):
-        for model in ('sonnet', 'opus', 'haiku', 'opus[1m]', 'claude-opus-4-6'):
+        for model in ('sonnet', 'opus', 'haiku', 'opus[1m]', 'claude-opus-4-6', 'claude-opus-5-5'):
             with self.subTest(model=model):
                 self.assertEqual(claude_models.select_model(requested=model), model)
                 self.assertEqual(claude_models.require_model_allowed(model), model)
+
+    def test_shipped_policy_pins_opus_5_5_as_backup_coordinator(self):
+        shipped = Path(__file__).resolve().parents[1] / 'config/workers.json'
+        self.config.write_bytes(shipped.read_bytes())
+        self.assertEqual(claude_models.select_model('coordinator'), 'claude-opus-5-5')
 
     def test_config_changes_are_fresh_and_pause_has_no_expiry(self):
         self.write({'policy': {'paused_claude_model_families': []}})

@@ -31,7 +31,8 @@ SUFFIXES = {'.py', '.js', '.cjs', '.json', '.html', '.md', '.cmd', '.ps1', '.yam
 EXCLUDED_PARTS = {'__pycache__', 'node_modules', '.git', '.claude', '.orchestration',
                   'runtime', 'runs', 'archive', 'vendor', '.venv'}
 EXCLUDED_FILES = {'settings.local.json', 'validation.json', 'credentials.json',
-                  'secrets.json', 'workers.json', 'ollama-profile.json', 'policy.json'}
+                  'secrets.json', 'workers.json', 'ollama-profile.json', 'policy.json',
+                  'open panel results.cmd'}  # Points to a local report excluded from packages.
 
 
 def source_files(root=ROOT):

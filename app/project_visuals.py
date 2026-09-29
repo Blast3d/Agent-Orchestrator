@@ -9,6 +9,7 @@ import webbrowser
 from contributions import build_report, _atomic_text
 from paths import ROOT, STATE
 from usage_guard import file_lock
+from project_memory_activity import memory_activity
 
 
 def stamp():
@@ -30,6 +31,9 @@ def project_from_report(report, date, title=None):
         people.append({'id': agent['id'], 'name': agent['name'], 'provider': agent['provider'],
             'share_pct': None if agent['accepted_work_pct'] == 0 and verified['unattributed_pct'] else agent['accepted_work_pct'], 'roles': sorted({x['category'] for x in kept}),
             'kept': kept, 'attempts': agent['delegations']})
+        recalls = memory_activity(event for event in verified['activity'] if event['agent_id'] == agent['id'])
+        if recalls is not None:
+            people[-1]['memory'] = recalls
     return {'id': verified['scope_id'], 'title': title or verified['title'],
         'state': 'ready' if verified['attribution_complete'] else 'incomplete' if verified['accepted_weight'] else 'waiting',
         'date': date, 'people': people,
@@ -103,7 +107,9 @@ class ProjectLibrary:
         dataset = self.collect()
         standard_template = template is None
         template = Path(template) if template else self.root / 'app/assets/project-map.html'
-        page = template.read_text(encoding='utf-8')
+        from workspace_navigation import THEME
+        # Shared tokens go in before the data, so report text never reaches the style placeholder.
+        page = template.read_text(encoding='utf-8').replace('/*__WORKSPACE_THEME__*/', THEME, 1)
         marker = '__PROJECT_MAP_DATA__'
         if page.count(marker) != 1:
             raise ValueError('Visual page must contain exactly one data placeholder')

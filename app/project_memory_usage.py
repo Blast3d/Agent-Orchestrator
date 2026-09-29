@@ -28,7 +28,7 @@ _CACHE = OrderedDict()
 _LOCK = threading.Lock()
 _JOB = re.compile(r'[a-f0-9]{32}')
 _SHA = re.compile(r'[a-f0-9]{64}')
-_WORKERS = ('codex', 'astra', 'claude', 'fable', 'grok', 'gemini', 'local-chat', 'native-review', 'vscode-copilot')
+_WORKERS = ('codex', 'astra', 'sol', 'claude', 'fable', 'grok', 'gemini', 'local-chat', 'native-review', 'vscode-copilot')
 
 
 def invalidate(root, project_id):
@@ -108,7 +108,17 @@ def _capture(receipt, problem, result):
     fields = ('job_id', 'assignment_project_id', 'response', 'review', 'finalized_at') if (
         receipt['mode'] == 'curated_bundle') else (
         'job_id', 'assignment_project_id', 'response', 'finalized_at', 'review', 'task', 'category', 'assignment_id')
-    source_matches = source_hash == digest({key: result.get(key) for key in fields}) if source_hash else None
+    expected_hash = digest({key: result.get(key) for key in fields})
+    if receipt['mode'] == 'automatic':
+        version = receipt.get('automatic_version',1)
+        if type(version) is not int or version not in (1,2):
+            return dict(base,status='invalid')
+        if version == 2:
+            from task_performance import snapshot, measured
+            performance = snapshot(result)
+            if measured(performance):
+                expected_hash = digest([expected_hash,digest(performance)])
+    source_matches = source_hash == expected_hash if source_hash else None
     # A receipt records a historical write. Even an unchanged task does not prove
     # a memory is currently active: it may have been forgotten or superseded.
     return dict(base, status=receipt['status'] if source_matches is not False else 'stale',

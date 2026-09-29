@@ -50,6 +50,14 @@ class IntegrationTests(unittest.TestCase):
             result=self.run_job()
         self.assertEqual(result['status'],'held');self.guard.check.assert_not_called();self.invoke.assert_not_called()
 
+    def test_empty_memory_scope_adds_no_memory_header_to_provider_prompt(self):
+        with patch.object(dispatch,'ensure_directories'),patch.object(dispatch,'cloud_command',return_value=([sys.executable],None)) as command,patch.object(dispatch,'invoke_cloud',self.invoke):
+            result=dispatch.dispatch(self.args,guard_factory=lambda:self.guard,store=self.store,workspaces=self.root/'runtime/workspaces')
+        self.assertNotIn('## Reviewed project memory',command.call_args.args[1])
+        self.assertEqual(result['memory_context']['context'],'')
+        self.assertEqual(result['memory_context']['retrieval']['route'],'empty')
+        self.assertEqual(result['memory_context']['trace_status'],'skipped_empty')
+
     def test_storage_initialization_failure_still_saves_canonical_hold(self):
         with patch.object(dispatch,'StorageBudget',side_effect=StorageLimitError('Unsafe storage')):
             result=self.run_job()

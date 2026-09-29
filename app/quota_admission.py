@@ -2,8 +2,16 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
+
+# A reservation estimates usage inside one account window. Once that window has
+# reset, the estimate no longer describes current allowance, even for a job
+# whose outcome is still uncertain. Unknown periods use the longest known one.
+_PERIODS = (('five-hour', timedelta(hours=5)), ('seven-day', timedelta(days=7)),
+            ('weekly', timedelta(days=7)), ('daily', timedelta(days=1)))
+_LONGEST_PERIOD = timedelta(days=7)
 
 
 def _require_aware_utc(moment: datetime, label: str) -> datetime:
@@ -103,22 +111,41 @@ def _pool_keys(policy: dict, data: dict, worker: str) -> list[str]:
     return configured
 
 
-def _reservation_hold(reservations: dict, key: str, observed: datetime | None) -> float:
-    held = 0.0
+def window_period_start(key: str, reset_at: datetime | None, now: datetime) -> datetime:
+    """Earliest reservation time that can still consume this window's allowance."""
+    period = next((length for name, length in _PERIODS if re.search(rf'(^|[-:]){name}($|-)', key)), None)
+    if reset_at is not None and reset_at <= now:
+        return reset_at
+    if reset_at is not None and period is not None:
+        return reset_at - period
+    return now - (period or _LONGEST_PERIOD)
+
+
+def _reservation_split(reservations: dict, key: str | None, observed: datetime | None,
+                       since: datetime | None = None) -> tuple[float, float]:
+    """Return (pending, finished-after-reading) estimates for one window.
+
+    Reservations without a creation time predate period tracking and still count.
+    """
+    pending = settling = 0.0
     for res_id, reservation in reservations.items():
         rec = _require_mapping(reservation, f'reservations[{res_id}]')
         pools = rec.get('pools')
         _keys(pools, f'reservations[{res_id}].pools')
         estimate = _percent(rec.get('estimate_pct'), f'reservations[{res_id}].estimate_pct')
+        created = rec.get('created_at')
+        created_at = None if created is None else _instant(created, f'reservations[{res_id}].created_at')
         finished = rec.get('finished_at')
-        if finished is not None:
-            finished_at = _instant(finished, f'reservations[{res_id}].finished_at')
-            if observed is not None and finished_at < observed:
-                continue
+        finished_at = None if finished is None else _instant(finished, f'reservations[{res_id}].finished_at')
         if key not in pools:
             continue
-        held += estimate
-    return held
+        if since is not None and created_at is not None and created_at < since:
+            continue
+        if finished_at is None:
+            pending += estimate
+        elif observed is None or finished_at >= observed:
+            settling += estimate
+    return pending, settling
 
 
 def _active_cooldown(cooldown: Any, label: str, now: datetime) -> bool:
@@ -177,7 +204,7 @@ def evaluate_advisory(policy, data, worker, size, current_time):
     owner = 'antigravity' if worker in ('gemini', 'antigravity-claude') else worker.split('-')[0]
     if not local_only:
         cooldown_targets.update(k for k in cooldowns if _provider_for(k) == owner)
-    _reservation_hold(reservations, None, None)  # Validate even when no window exists.
+    _reservation_split(reservations, None, None)  # Validate even when no window exists.
     for key, cooldown in cooldowns.items():
         if not isinstance(key, str) or not key:
             raise ValueError('invalid cooldown pool ID')
@@ -231,6 +258,7 @@ def evaluate_advisory(policy, data, worker, size, current_time):
 
         reset_at = rec.get('reset_at')
         reset_passed = False
+        reset_moment = None
         if reset_at is not None:
             reset_moment = _instant(reset_at, f'windows[{key}].reset_at')
             reset_passed = reset_moment <= now
@@ -248,13 +276,26 @@ def evaluate_advisory(policy, data, worker, size, current_time):
         if key in result['cooldown_active_pools']:
             result['reasons'].append(f'{key}: provider rejected work; cooldown active')
 
-        held = _reservation_hold(reservations, key, observed)
+        pending, settling = _reservation_split(reservations, key, observed,
+                                               window_period_start(key, reset_moment, now))
+        # Finished work is only subtracted until a newer reading includes it. A
+        # stale reading cannot confirm that estimate, so it is reported, not held.
+        counted_settling = settling if freshness == 'fresh' else 0.0
+        held = pending + counted_settling
+        if settling and not counted_settling:
+            result['warnings'].append(
+                f'{key}: {settling:g}% estimated for work finished after this stale reading is not counted; '
+                'a fresh reading will include it'
+            )
         available = max(0.0, remaining - held)
         seen_windows.append({
             'id': key,
             'remaining_pct': round(remaining, 2),
             'reserved_pct': round(held, 2),
+            'pending_pct': round(pending, 2),
+            'unsettled_finished_pct': round(settling - counted_settling, 2),
             'available_pct': round(available, 2),
+            'reading_age_seconds': max(0, round((now - observed).total_seconds())),
             'reset_at': rec.get('reset_at'),
             'reset_display': rec.get('reset_display'),
             'observed_at': rec['observed_at'],

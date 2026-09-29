@@ -74,7 +74,7 @@ class MemoryBundleTests(unittest.TestCase):
         self.assertTrue(all(row['source'] == {'type': 'task', 'job_id': job,
                             'review_sha256': digest(before['review'])} for row in rows))
         self.assertNotIn('PRIVATE_RAW_ANSWER_NOT_MEMORY', json.dumps(rows))
-        hits = brain.search('zebra', 'alpha')['results']
+        hits = brain.search('zebra', 'alpha', strategy='graph')['results']
         recovery = next(row for row in hits if row['id'] == receipt['memory_keys']['recovery'])
         self.assertIn('solves', recovery['reason'])
         self.assertEqual(brain.search('zebra', 'foreign')['results'], [])
@@ -293,6 +293,17 @@ class MemoryBundleTests(unittest.TestCase):
             record_accepted_bundle(self.store, job, bundle)
         self.assertEqual(self.receipt(job), before)
         self.assertEqual(len(brain.list_memories('alpha')), 2)
+
+    def test_brain_lock_timeout_before_writing_can_retry_the_identical_bundle(self):
+        job, bundle = self.task(), self.bundle()
+        # The Brain's own lock times out before any SQLite write begins.
+        with patch('brain_store.file_lock', side_effect=TimeoutError('Brain is busy')), \
+                self.assertRaises(TimeoutError):
+            record_accepted_bundle(self.store, job, bundle)
+        self.assertEqual(self.receipt(job)['status'], 'error')
+        self.assertTrue(self.receipt(job)['retryable'])
+        self.assertEqual(record_accepted_bundle(self.store, job, bundle)['status'], 'remembered')
+        self.assertEqual(len(BrainStore(self.root).list_memories('alpha')), 2)
 
     def test_memory_capacity_rollback_can_retry_the_identical_bundle(self):
         job, bundle = self.task(), self.bundle()

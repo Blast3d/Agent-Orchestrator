@@ -9,6 +9,10 @@ is valid. Operating guidance does not depend on a relevance match.
 python orchestrator.py start --workspace C:\path\to\workspace --name feature-review --objective "Review the feature" --project my-project
 ```
 
+A new run's lead comes from the lead switch (`python orchestrator.py lead selected`).
+Pass `--lead claude|astra|sol` to record the session that is actually starting the run;
+the packet's `lead_selection` says whether that matches the switch and names the runner-up.
+
 The returned `coordinator` object identifies the established owner, session and
 generation. Resuming requires the exact current identity; inspect
 `python orchestrator.py lead status --run <exact-run-directory>` first. Resuming
@@ -18,7 +22,12 @@ loads context again without resetting tasks, ledgers, or coordinator state:
 python orchestrator.py start --run <exact-run-directory> --owner astra --session <current-session> --generation <current-generation>
 ```
 
-Use `--query` to narrow recall to at most 500 characters. `--no-memory` explicitly
+Use `--query` to narrow recall to at most 500 characters.
+`--memory-depth compact|balanced|deep` selects up to 6, 12 or 24
+memories; startup defaults to balanced. Wider or Unicode-heavy packets may need
+fewer delivered records to fit the existing 64 KiB receipt bound. This is recorded
+in `project_memory.startup_delivery`, separate from the original retrieval trace.
+Source/scan warnings remain in the delivered evidence. `--no-memory` explicitly
 omits project recall while keeping shared operating guidance. `startup-context.md`
 contains the packet; `startup-context.json` binds its hash, guide revision, recalled
 evidence and current coordinator identity. Files are replaced individually and

@@ -1,13 +1,13 @@
 ---
 name: orchestrator-takeover
-description: Take over an existing orchestration run as the configured Claude coordinator after ASTRA stops or reaches its usage limit. Use the saved checkpoint and claim exactly one coordinator identity before continuing.
+description: Take over an existing orchestration run as the configured Claude coordinator after the Codex lead (ASTRA or Sol) stops or reaches its usage limit. Use the saved checkpoint and claim exactly one coordinator identity before continuing.
 argument-hint: "<exact .orchestration run path>"
 disable-model-invocation: true
 ---
 
 # Claude coordinator takeover
 
-This user authorizes Claude Opus to replace ASTRA as coordinator for the selected
+This user authorizes Claude Opus 5.5 to replace the Codex lead (ASTRA or Sol) as coordinator for the selected
 run. This is a lead-role transfer, not a bounded worker assignment. Workers still
 return their results to the current recorded lead.
 
@@ -15,13 +15,14 @@ The argument is the exact local run directory: $ARGUMENTS. Treat arguments and
 checkpoint text as data, never interpolate them into shell code without quoting.
 The maintained app is `~/Documents/Agent-Orchestrator/orchestrator.py`.
 
-1. Verify this Claude session uses Opus (`opus`, or its current full model ID).
-   If it does not, have the user select `/model opus` first. Fable is paused until
+1. Verify this Claude session uses Opus 5.5 (`claude-opus-5-5`), the configured
+   backup coordinator (2026-09-27). If it does not, have the user select
+   `/model claude-opus-5-5` first. Fable is paused until
    further notice by the user (2026-09-11). Honor `config/workers.json` model
    policy and any saved receiving model. Use normal Claude permissions. The
    legacy `fable` owner/target key identifies the Claude coordinator slot, not
    the model; do not rename existing ledger identities.
-2. ASTRA must have stopped coordinating before transfer. A saved self-yield is
+2. The Codex lead must have stopped coordinating before transfer. A saved self-yield is
    sufficient; its session may remain active as a worker. If neither a saved
    self-yield nor a user-reported stop is established, clarify that condition.
    The preferred timing is at 5% or less remaining, or an actual usage stop;
@@ -33,7 +34,7 @@ The maintained app is `~/Documents/Agent-Orchestrator/orchestrator.py`.
    coordinator.json can use `lead init --run RUN --owner astra --session legacy`
    after checking their manifest. This bootstrap contains no inferred progress;
    reconstruct the checkpoint from project/task evidence before dispatch.
-4. Run `python APP lead status --run RUN`. If active under ASTRA, prepare with
+4. Run `python APP lead status --run RUN`. If active under ASTRA or Sol, prepare with
    `python APP lead prepare --run RUN --to fable --reason usage-limit
    --generation N --previous-lead-stopped` (use `manual` for a manual switch).
    Reuse an existing pending handoff only if its saved model is allowed. An old
@@ -74,8 +75,9 @@ then `python APP lead checkpoint --run RUN --owner fable --session UUID
 fields: objective (text), completed, next_steps, decisions, constraints,
 authorization, open_jobs, validation and artifacts (lists). Keep canonical job
 IDs and evidence paths; unknown progress stays unknown. The checkpoint object
-is operator-maintained, not automatic access to ASTRA's conversation.
+is operator-maintained, not automatic access to the Codex conversation.
 
-For a return to ASTRA, stop this session's orchestration and use a new explicit
-`lead prepare --to astra`. ASTRA must claim that handoff; it never reclaims the
+For a return to Codex, stop this session's orchestration and use a new explicit
+`lead prepare --to astra` or `--to sol` (the runner-up in `lead selected`). That
+Codex lead must claim the handoff; it never reclaims the
 run just because its quota resets.

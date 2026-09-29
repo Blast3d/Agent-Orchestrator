@@ -144,6 +144,15 @@ class LifecycleTests(unittest.TestCase):
             start_run(run=self.run, root=self.root, context_loader=large_context, **self.identity)
         self.assertLessEqual((self.run / 'startup-context.json').stat().st_size, 64 * 1024)
 
+    def test_startup_reports_recall_provider_calls_without_inventing_zero(self):
+        for measured, expected in [(1, 1), (0, 0), (None, None)]:
+            with self.subTest(measured=measured), patch.object(BrainStore, 'search', return_value={
+                    'project_id': 'alpha', 'results': [], 'context': '',
+                    'retrieval': {'provider_calls': measured}}):
+                result = start_run(run=self.run, root=self.root, **self.identity)
+            self.assertEqual(result['provider_calls'], expected)
+            self.assertEqual(self.read(self.run / 'startup-context.json')['provider_calls'], expected)
+
     def test_resume_preserves_run_and_ledger_and_requires_identity(self):
         self.task()
         self.audit()
@@ -170,6 +179,7 @@ class LifecycleTests(unittest.TestCase):
                            brain_factory=forbidden, context_loader=operating, **self.identity)
         self.assertEqual(result['operating_context']['sha256'], operating()['sha256'])
         self.assertEqual(result['project_memory']['status'], 'not_requested')
+        self.assertEqual(result['provider_calls'], 0)
 
     def test_missing_operating_context_prevents_run_creation(self):
         before = set((self.root / '.orchestration').iterdir())

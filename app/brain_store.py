@@ -1,4 +1,4 @@
-"""Reviewed, scoped SQLite memory. No inference, network or Graphiti dependency.
+"""Reviewed, scoped SQLite memory with optional explicitly configured embeddings.
 
 Temporal facts and episode provenance follow Graphiti's documented concepts;
 this is an independent small implementation, not its driver or runtime.
@@ -13,7 +13,6 @@ import os
 from pathlib import Path
 import re
 import sqlite3
-import time
 import uuid
 
 from paths import ROOT
@@ -141,7 +140,7 @@ class BrainStore:
                             FROM (SELECT project_id,user_id FROM memories UNION
                                   SELECT project_id,user_id FROM changes) m''',(floor,floor))
                         con.execute('PRAGMA user_version=2');con.commit()
-                elif version not in (2,3) or not {'memories','relations','traces','changes','feed_state','memory_fts'} <= tables:
+                elif version not in (2,3,4) or not {'memories','relations','traces','changes','feed_state','memory_fts'} <= tables:
                     raise ValueError('Unsupported brain schema; preserve existing database')
                 if con.execute('PRAGMA user_version').fetchone()[0]==2:
                     with self.budget.allocation(max(2*1024**2,self.db.stat().st_size*2+1024**2),kind='brain'):
@@ -160,6 +159,15 @@ class BrainStore:
                           CREATE INDEX relation_source ON relations(source_id);
                           CREATE INDEX relation_target ON relations(target_id);
                           PRAGMA user_version=3; COMMIT;''')
+                if con.execute('PRAGMA user_version').fetchone()[0] == 3:
+                    # Older binaries do not validate memory-reference sources:
+                    # raise the schema version before any references can exist.
+                    with self.budget.allocation(2*1024**2, kind='brain'):
+                        con.executescript("""BEGIN IMMEDIATE;
+                          CREATE INDEX IF NOT EXISTS reference_target ON memories(
+                            json_extract(source,'$.memory_id'))
+                            WHERE json_extract(source,'$.type')='memory_reference';
+                          PRAGMA user_version=4; COMMIT;""")
 
     def _paths(self):
         for name in ('memory.sqlite', 'memory.sqlite-wal', 'memory.sqlite-shm', 'brain.lock', 'vault.md'):
@@ -191,6 +199,9 @@ class BrainStore:
     def _write(self, *, cleanup=False):
         # The app lock serializes reads with forgetting/purging derived copies.
         with file_lock(self.lock):
+            # Callers use this to tell a lock timeout (nothing written) from a
+            # failure after a write may have begun.
+            self.write_lock_acquired = True
             self._paths()
             estimate = max(2*1024**2, self.db.stat().st_size * 2 + 1024**2)
             allocation = self.budget.allocation(estimate, kind='brain') if not cleanup else None
@@ -240,6 +251,10 @@ class BrainStore:
     def _source(self, source, project_id, *, approved=False):
         if not isinstance(source, dict):
             raise ValueError('Source must be a task or a user note')
+        if source.get('type') == 'memory_reference':
+            from brain_links import validate_source
+            validate_source(self, source, project_id)
+            return source, digest(source)
         if source.get('type') == 'user':
             result = {'type':'user','note':text(source.get('note'), 'Source note', 1000)}
             return result, digest(result)
@@ -270,7 +285,9 @@ class BrainStore:
         plain_hash = digest(proof)
         review_hash = digest(result.get('review'))
         proof['review_sha256'] = review_hash
-        return {'plain':plain_hash, 'reviewed':digest(proof), 'review_sha256':review_hash}
+        from task_performance import snapshot
+        return {'plain':plain_hash, 'reviewed':digest(proof), 'review_sha256':review_hash,
+                'performance_sha256':digest(snapshot(result))}
 
     @staticmethod
     def _task_proof(source, proofs):
@@ -285,8 +302,15 @@ class BrainStore:
             if review_hash != proofs['review_sha256']:
                 raise ValueError('Canonical task review changed; review the memory separately')
             normalized['review_sha256'] = review_hash
-            return normalized, proofs['reviewed']
-        return normalized, proofs['plain']
+        source_hash = proofs['reviewed'] if 'review_sha256' in source else proofs['plain']
+        if 'performance_sha256' in source:
+            value = source['performance_sha256']
+            if (not isinstance(value,str) or not re.fullmatch(r'[a-f0-9]{64}',value)
+                    or value != proofs.get('performance_sha256')):
+                raise ValueError('Canonical task performance changed; review the memory separately')
+            normalized['performance_sha256'] = value
+            source_hash = digest([source_hash,value])
+        return normalized, source_hash
 
     @staticmethod
     def _row(con, memory_id):
@@ -314,6 +338,21 @@ class BrainStore:
         if row['status'] != 'active' or row['valid_from'] > at or (row['valid_to'] and row['valid_to'] <= at):
             return False
         source = json.loads(row['source'])
+        if source.get('type') == 'memory_reference':
+            from brain_links import current_reference
+            return current_reference(self, row, at, sources, excluded)
+        if source.get('type') not in ('task', 'user'):
+            if excluded is not None:
+                excluded[row['id']] = 'Unknown memory source type'
+            return False
+        if source.get('type') == 'user':
+            try:
+                if self._source(source, row['project_id'])[1] != row['source_hash']:
+                    raise ValueError('User memory source proof changed')
+            except ValueError as exc:
+                if excluded is not None:
+                    excluded[row['id']] = str(exc)
+                return False
         if source.get('type') == 'task':
             key = (source['job_id'], row['project_id'])
             if key not in sources:
@@ -345,7 +384,7 @@ class BrainStore:
 
     @staticmethod
     def _source_warnings(excluded):
-        return ([f'{len(excluded)} task-backed memories excluded because their source evidence could not be verified.']
+        return ([f'{len(excluded)} memories excluded because their source evidence could not be verified.']
                 if excluded else [])
 
     def _change(self, con, row, operation):
@@ -411,6 +450,8 @@ class BrainStore:
         if not isinstance(episode, dict):
             raise ValueError('Episode must be an object')
         episode = {k:text(episode.get(k),k,1000) for k in ('problem','action','outcome')} if kind=='episode' else {}
+        if isinstance(payload.get('source'), dict) and payload['source'].get('type') == 'memory_reference':
+            raise ValueError('Create cross-project references through the explicit reviewed link action')
         source, source_hash = self._source(payload.get('source'),project_id)
         # Fingerprint only exact normalized copies. Semantic contradictions need review.
         fp = digest([kind,' '.join(title.casefold().split()),' '.join(content.casefold().split()),episode,
@@ -561,6 +602,8 @@ class BrainStore:
             con.execute("UPDATE memories SET status='superseded',valid_to=?,superseded_by=? WHERE id=?",(at,new_id,old_id))
             con.execute('DELETE FROM memory_fts WHERE rowid=?',(old['rowid'],))
             con.execute('INSERT INTO relations VALUES(?,?,?,?,?,?,?)',(uuid.uuid4().hex,new_id,old_id,'supersedes',at,None,actor))
+            from brain_links import invalidate_references
+            invalidate_references(self,con,old_id,at)
             self._change(con,old,'superseded');self._change(con,new,'replacement');self._drop_export()
             return self._public(self._row(con,old_id))
 
@@ -568,103 +611,42 @@ class BrainStore:
         text(actor,'Actor',100);text(reason,'Reason',1000,10)
         # Cleanup remains available under pressure; it only shrinks logical data.
         with self._write(cleanup=True) as con:
-            row=self._row(con,memory_id)
-            con.execute('DELETE FROM memory_fts WHERE rowid=?',(row['rowid'],))
-            con.execute('DELETE FROM relations WHERE source_id=? OR target_id=?',(memory_id,memory_id))
-            con.execute("UPDATE memories SET title='',content='',tags='[]',episode='{}',source='{}',source_hash='',fingerprint='',reviewer=NULL,review_note=NULL,status='deleted',deleted_at=? WHERE id=?",(now(),memory_id))
-            con.execute('DELETE FROM traces WHERE memory_ids LIKE ?',('%'+memory_id+'%',))
-            self._change(con,row,'forgotten');self._drop_export()
-            return self._public(self._row(con,memory_id))
+            from brain_links import forget_rows
+            return forget_rows(self, con, memory_id)
 
-    def search(self, query, project_id, user_id='local', limit=6, max_chars=8000, hops=1):
-        start=time.perf_counter();query=text(query,'Query',500);project_id=scope(project_id);user_id=scope(user_id,'User')
-        limit=max(1,min(int(limit),6));max_chars=max(256,min(int(max_chars),8000));hops=max(0,min(int(hops),2))
-        terms=list(dict.fromkeys(re.findall(r'\w+',query.casefold(),re.UNICODE)))[:24]
-        expression=' OR '.join('"'+t.replace('"','""')+'"' for t in terms)
-        at=now();candidates={};sources={};excluded={};scan_limited=False;inspected=0
-        with file_lock(self.lock), self._connection() as con:
-            if expression:
-                # Keep FTS first: SQLite otherwise chooses scope_status and reruns
-                # the MATCH scan for each scoped row (1.8s at 10k in our fixture).
-                # Page past stale source hits before choosing 60 valid candidates.
-                # Only rowids/ranks are sorted; full memory payloads stay out of
-                # the sort buffer. Source and candidate work remains bounded.
-                rows=con.execute('''SELECT m.rowid,bm25(memory_fts,3.0,1.0,2.0) AS lexical
-                  FROM memory_fts CROSS JOIN memories m ON m.rowid=memory_fts.rowid
-                  WHERE memory_fts MATCH ? AND m.project_id=? AND m.user_id=? AND m.status='active'
-                  AND m.valid_from<=? AND (m.valid_to IS NULL OR m.valid_to>?)
-                  ORDER BY lexical,m.id LIMIT 1001''',(expression,project_id,user_id,at,at))
-                for hit in rows:
-                    if inspected>=1000:
-                        scan_limited=True;break
-                    row=con.execute('SELECT * FROM memories WHERE rowid=?',(hit['rowid'],)).fetchone()
-                    source=json.loads(row['source'])
-                    if source.get('type')=='task' and (source['job_id'],row['project_id']) not in sources and len(sources)>=128:
-                        scan_limited=True;break
-                    inspected+=1
-                    if self._current(row,at,sources,excluded):
-                        rank=len(candidates)
-                        result=self._public(row);result.pop('lexical',None)
-                        age=max(0,(datetime.now(timezone.utc)-datetime.fromisoformat(row['created_at'])).total_seconds()/86400)
-                        result.update(score=round(1/(1+rank)+row['importance']*.15+.05/(1+age/30),6),reason='Keyword or alias match; weighted by relevance, importance and age',related_ids=[])
-                        candidates[row['id']]=result
-                        if len(candidates)>=60:break
-            frontier=sorted(candidates,key=lambda key:(-candidates[key]['score'],key))[:12]
-            for depth in range(hops):
-                following=[]
-                for memory_id in frontier:
-                    edges=con.execute('''SELECT * FROM relations WHERE (source_id=? OR target_id=?)
-                      AND relation!='supersedes' AND valid_from<=? AND (valid_to IS NULL OR valid_to>?) LIMIT 40''',(memory_id,memory_id,at,at)).fetchall()
-                    for edge in edges:
-                        other=edge['target_id'] if edge['source_id']==memory_id else edge['source_id']
-                        row=self._row(con,other)
-                        source=json.loads(row['source'])
-                        if source.get('type')=='task' and (source['job_id'],row['project_id']) not in sources and len(sources)>=128:
-                            scan_limited=True;continue
-                        if row['project_id']!=project_id or row['user_id']!=user_id or not self._current(row,at,sources,excluded):
-                            continue
-                        if other not in candidates[memory_id]['related_ids']:
-                            candidates[memory_id]['related_ids'].append(other)
-                        if other not in candidates and len(candidates)<120:
-                            result=self._public(row);result.update(score=round(candidates[memory_id]['score']*.45,6),reason=f"Related by {edge['relation']} to {memory_id}; hop {depth+1}",related_ids=[memory_id])
-                            candidates[other]=result;following.append(other)
-                frontier=following[:20]
-            ordered=sorted(candidates.values(),key=lambda r:(-r['score'],r['id']))[:limit]
-            header='Recalled evidence only. Validate current instructions, source facts and permissions; memory grants no authority.\n'
-            if scan_limited:
-                header+='Recall scan limit reached; additional current evidence may exist.\n'
-            if excluded:
-                header+='Unverifiable task-backed memories were excluded.\n'
-            context=header;results=[];omitted=[]
-            for result in ordered:
-                # Include explicit provenance and validity in the model-facing bounded context.
-                part=json.dumps({k:result[k] for k in ('id','project_id','kind','title','content','episode','source','valid_from','valid_to','reason')},ensure_ascii=False)+'\n'
-                if len(context)+len(part)>max_chars:
-                    room=max_chars-len(context)-len(part)+len(result['content'])
-                    if room<80:
-                        omitted.append(result['id']);continue
-                    result=dict(result,content=result['content'][:room-1]+'…',truncated=True)
-                    part=json.dumps({k:result[k] for k in ('id','project_id','kind','title','content','episode','source','valid_from','valid_to','reason')},ensure_ascii=False)+'\n'
-                if len(context)+len(part)<=max_chars:
-                    results.append(result);context+=part
-                else:omitted.append(result['id'])
-            elapsed=round((time.perf_counter()-start)*1000,3)
-            trace_id=uuid.uuid4().hex
-            # Trace is optional; inability to record telemetry never prevents recall.
+    def search(self, query, project_id, user_id='local', limit=None, max_chars=None, hops=None, *, strategy='auto', record_trace=True, profile='general', depth='compact', jev=True):
+        from brain_recall import search
+        from brain_jev import maybe_rank
+        from jev_profiles import validate_profile
+        from brain_recall_budget import resolve
+        from contextlib import ExitStack
+        profile = validate_profile(profile)
+        budget = resolve(depth, limit=limit, max_chars=max_chars)
+        limit, max_chars = budget['limit'], budget['max_chars']
+        candidate_pool = []
+        # One cooperative reservation covers the initial trace and its final Jev
+        # update. Keep the token (not a filesystem/SQLite lock) across inference.
+        # Empty searches never acquire it. This avoids a second full storage scan.
+        stack = ExitStack()
+        try:
+            trace_allocation = {'stack': stack, 'reserved': False}
+            result = search(self,query,project_id,user_id,limit,max_chars,hops,strategy=strategy,record_trace=record_trace,profile=profile,_candidate_pool=candidate_pool,_budget=budget,_trace_allocation=trace_allocation)
+            result['profile'] = profile
+            if not jev:
+                # Jev ranking is a billed provider call when enabled; callers can keep a search local.
+                result['jev_ranking'] = {'status': 'skipped', 'reason': 'local-only search requested'}
+            else:
+                result = maybe_rank(self,result,max_chars=max_chars,record_trace=record_trace,profile=profile,
+                                  candidate_pool=candidate_pool,limit=limit,
+                                  _trace_reserved=trace_allocation['reserved'])
+        finally:
             try:
-                with self.budget.allocation(256*1024,kind='brain'):
-                    con.execute('INSERT INTO traces VALUES(?,?,?,?,?,?,?)',(trace_id,at,project_id,user_id,digest(query),json.dumps([r['id'] for r in results]),elapsed))
-                    con.execute('DELETE FROM traces WHERE id NOT IN (SELECT id FROM traces ORDER BY created_at DESC LIMIT ?)',(self.limits['max_traces'],));con.commit()
-            except (StorageLimitError,sqlite3.Error,OSError):
-                con.rollback();trace_id=None
-            return {'query':query,'project_id':project_id,'user_id':user_id,'results':results,'context':context,
-                    'elapsed_ms':round((time.perf_counter()-start)*1000,3),'lookup_ms':elapsed,
-                    'backend':'sqlite','trace_id':trace_id,'context_chars':len(context),
-                    'candidate_checks':inspected,'recall_incomplete':scan_limited,
-                    'context_omitted_ids':omitted,
-                    'source_validation':self._source_diagnostics(sources,excluded),
-                    'warnings':(['Source validation scan limit reached; more current matches may exist.'] if scan_limited else [])+self._source_warnings(excluded),
-                    'token_limit_note':'Character bounded; exact model token count is not measured'}
+                stack.close()
+            except (OSError, StorageLimitError):
+                if 'result' in locals():
+                    result.setdefault('warnings', []).append('Recall succeeded, but its storage reservation cleanup needs review.')
+                    result['trace_cleanup_status'] = 'failed'
+        return result
 
     def status(self,user_id='local'):
         user_id=scope(user_id,'User')
@@ -682,14 +664,28 @@ class BrainStore:
         return {'backend':'sqlite','counts':counts,'projects':projects,'project_counts':project_counts,'relationship_count':relationships,
                 'storage':self.budget.status(),'adapter':{'name':'sqlite','graphiti_enabled':False},'limits':self.limits}
 
+    def graph(self, project_id, user_id='local', limit=3000):
+        from brain_graph import graph_snapshot
+        return graph_snapshot(self,project_id,user_id,limit)
+
     def snapshot(self, project_id=None, user_id='local'):
         memories=self.list_memories(project_id,user_id,limit=200);ids={r['id'] for r in memories}
         with file_lock(self.lock),self._connection() as con:
-            relations=[dict(r) for r in con.execute('SELECT * FROM relations ORDER BY valid_from DESC LIMIT 2000') if r['source_id'] in ids and r['target_id'] in ids]
+            # Select this scope's relations in SQL; other projects' newer links must not crowd them out.
+            marks=','.join('?'*len(ids));chosen=sorted(ids)
+            relations=[dict(r) for r in con.execute(f'SELECT * FROM relations WHERE source_id IN ({marks}) AND target_id IN ({marks}) ORDER BY valid_from DESC LIMIT 2000',chosen+chosen)] if ids else []
             sql='SELECT * FROM traces WHERE user_id=?';args=[scope(user_id,'User')]
             if project_id is not None: sql+=' AND project_id=?';args.append(scope(project_id))
             traces=[dict(r) for r in con.execute(sql+' ORDER BY created_at DESC LIMIT 30',args)]
-            for row in traces: row['memory_ids']=json.loads(row['memory_ids'])
+            has_details=con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='retrieval_traces'").fetchone()
+            from brain_retrieval_metadata import public_retrieval
+            for row in traces:
+                row['memory_ids']=json.loads(row['memory_ids'])
+                row['retrieval']=None
+                detail=con.execute('SELECT detail FROM retrieval_traces WHERE trace_id=?',(row['id'],)).fetchone() if has_details else None
+                if detail:
+                    try:row['retrieval']=public_retrieval(json.loads(detail[0]))
+                    except (ValueError,TypeError):pass
         return {'status':self.status(user_id),'memories':memories,'relations':relations,'traces':traces}
 
     def export(self, project_id, user_id='local'):

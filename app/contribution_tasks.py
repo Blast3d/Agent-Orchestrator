@@ -17,7 +17,7 @@ def _tokens(result):
 
 def task_ledger(result):
     worker = result.get('worker', 'unknown')
-    provider = {'claude': 'Anthropic', 'grok': 'xAI', 'grok-bot': 'Grok Bot service', 'gemini': 'Google', 'local-chat': 'Local Ollama', 'vscode-copilot': 'GitHub Copilot'}.get(worker, 'unknown')
+    provider = {'claude': 'Anthropic', 'codex': 'OpenAI', 'grok': 'xAI', 'grok-bot': 'Grok Bot service', 'gemini': 'Google', 'local-chat': 'Local Ollama', 'vscode-copilot': 'GitHub Copilot'}.get(worker, 'unknown')
     models = list((result.get('modelUsage') or {}).keys())
     if result.get('model') and result['model'] not in models:
         models.append(result['model'])

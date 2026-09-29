@@ -63,6 +63,44 @@ class AssignmentReceiptTests(unittest.TestCase):
         self.assertFalse(reused)
         self.assertEqual(self.read_index()['assignments']['review-1']['job_id'], record['job_id'])
 
+    def imported_seed(self, **updates):
+        record = self.store.create(worker='native-review', task='Reviewed seed',
+            category='memory-curation', assignment_project_id='sample',
+            imported_completed_artifact=True)
+        self.finalize(record, artifact_origin='reviewed-run-closeout', provider_calls=0, **updates)
+        return record
+
+    def test_reviewed_seed_import_allows_first_provider_assignment(self):
+        seed = self.imported_seed()
+        original = (self.store.directory(seed['job_id']) / 'result.json').read_bytes()
+        record, reused = self.claim()
+        self.assertFalse(reused)
+        self.assertNotEqual(record['job_id'], seed['job_id'])
+        self.assertEqual(original, (self.store.directory(seed['job_id']) / 'result.json').read_bytes())
+
+    def test_seed_import_does_not_hide_a_deleted_real_assignment_index(self):
+        self.imported_seed()
+        self.claim()
+        self.index_path().unlink()
+        with self.assertRaises(receipts.AssignmentIncomplete):
+            self.claim(assignment='new-work')
+
+    def test_import_exemption_requires_matching_canonical_evidence(self):
+        seed = self.imported_seed()
+        path = self.store.directory(seed['job_id']) / 'result.json'
+        original = json.loads(path.read_text())
+        for change in ({'provider_calls': 1}, {'provider_calls': False},
+                       {'assignment_id': 'earlier-work'}, {'reservation_id': 'uncertain'},
+                       {'artifact_origin': 'unknown'}, {'worker': 'claude'},
+                       {'assignment_project_id': 'another-project'}):
+            with self.subTest(change=change):
+                write_json(path, dict(original, **change))
+                with self.assertRaises(receipts.AssignmentIncomplete):
+                    self.claim()
+        path.unlink()
+        with self.assertRaises(receipts.AssignmentIncomplete):
+            self.claim()
+
     def test_memory_policy_and_effective_query_are_frozen_together(self):
         contract = dict(self.contract, memory_policy='task_label', memory_query='Recovery')
         first, _ = self.claim(contract=contract)

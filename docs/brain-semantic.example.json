@@ -1,0 +1,9 @@
+{
+  "enabled": false,
+  "endpoint": "https://YOUR-APPROVED-ENDPOINT.example/v1/embeddings",
+  "model": "YOUR-EXPLICIT-EMBEDDING-MODEL",
+  "api_key_env": "BRAIN_EMBEDDING_API_KEY",
+  "authorized_projects": ["YOUR-EXACT-PROJECT-ID"],
+  "timeout_seconds": 2,
+  "similarity_threshold": 0.65
+}

@@ -14,6 +14,7 @@ import re
 import select
 import subprocess
 import sys
+import tempfile
 import time
 
 from paths import VENDOR, WORKSPACES
@@ -74,20 +75,27 @@ def parse_grok_screen(display: str, observed_at: str | None = None) -> dict:
     }
 
 
-def run_grok(timeout: float = 30.0) -> dict:
+def run_grok(timeout: float = 30.0, *, workspace: Path | None = None) -> dict:
     import pyte
     from winpty import Backend, PtyProcess
 
     executable = Path.home() / ".grok" / "bin" / "grok.exe"
     if not executable.is_file():
         raise RuntimeError("The official Grok CLI is not installed at the configured location.")
+    if workspace is None:
+        # Grok resolves trust to an enclosing Git root even when cwd is nested
+        # inside it. Keep quota-only sessions in a fresh empty directory outside
+        # the repository so the reader never asks to trust project contents.
+        with tempfile.TemporaryDirectory(prefix="agent-orchestrator-grok-quota-") as scratch:
+            return run_grok(timeout, workspace=Path(scratch))
+    workspace = Path(workspace)
     env = dict(os.environ)
     env.update(TERM="xterm-256color", COLORTERM="truecolor")
     proc = PtyProcess.spawn(
-        [str(executable), "--no-auto-update", "--no-alt-screen", "--minimal",
+        [str(executable), "--cwd", str(workspace), "--no-auto-update", "--no-alt-screen", "--minimal",
          "--no-subagents", "--disable-web-search", "--tools=",
          "--permission-mode", "dontAsk"],
-        cwd=str(WORKSPACES / "grok"), env=env,
+        cwd=str(workspace), env=env,
         dimensions=(60, 160), backend=Backend.ConPTY,
     )
 
@@ -140,7 +148,21 @@ def parse_claude_screen(display: str, *, cli_version: str,
     The collector owns freshness. Parser fixtures can exercise unknown UI
     versions, but run_claude will not accept a version until it is live-verified.
     """
-    if re.search(r"couldn't|could not|failed|cached|loading|refreshing|error fetching|unavailable", display, re.I):
+    # In 2.1.263 the optional local per-model analytics can be rate limited
+    # while both account allowance bars have freshly loaded. Ignore only that
+    # exact ancillary notice, after its known section heading. Keep rejecting
+    # quota errors, loading indicators and all other ambiguous failures.
+    analytics = False
+    checked_lines = []
+    for line in display.splitlines():
+        stripped = line.strip()
+        if stripped == "What's contributing to your limits usage?":
+            analytics = True
+        if analytics and re.fullmatch(r"Per-model breakdown unavailable \(rate limited [\u2014-] try again in a moment\)", stripped):
+            continue
+        checked_lines.append(line)
+    checked_display = '\n'.join(checked_lines)
+    if re.search(r"couldn't|could not|failed|cached|last[- ]known|partial usage|loading|refreshing|error fetching|unavailable", checked_display, re.I):
         raise ValueError("Claude usage is incomplete, unavailable, or cached.")
     # Terminal decoration is ignored; labels and explicit 'used' orientation are
     # required. Context bars and dollar amounts can never be parsed as quotas.
@@ -248,6 +270,7 @@ def capture_claude_usage(timeout: float = 30.0) -> tuple[str, str, bool]:
     start = time.monotonic()
     sent = False
     saw_loading = False
+    usage_updates = ''
     last_display = ""
     candidate_since: float | None = None
     try:
@@ -255,7 +278,13 @@ def capture_claude_usage(timeout: float = 30.0) -> tuple[str, str, bool]:
             ready, _, _ = select.select([proc.fileobj], [], [], 0.05)
             if ready:
                 try:
-                    stream.feed(proc.read(65536))
+                    update = proc.read(65536)
+                    if sent:
+                        usage_updates = (usage_updates + update)[-32768:]
+                        plain_updates = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', usage_updates)
+                        if re.search(r"loading(?: your)? (?:usage|limits|plan)|loading\.\.\.|refreshing[.\u2026]", plain_updates, re.I):
+                            saw_loading = True
+                    stream.feed(update)
                 except EOFError:
                     break
                 last_display = "\n".join(line.rstrip() for line in screen.display).strip()

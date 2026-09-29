@@ -223,9 +223,9 @@ class TransferTests(unittest.TestCase):
         command, workspace = self.started[0]
         self.assertEqual(workspace, self.root)
         self.assertIn('--bg', command)
-        self.assertEqual(command[command.index('--model') + 1], 'opus')
-        self.assertEqual(result['handoff']['launch']['model'], 'opus')
-        self.assertEqual(result['handoff']['receiving_model'], 'opus')
+        self.assertEqual(command[command.index('--model') + 1], 'claude-opus-5-5')
+        self.assertEqual(result['handoff']['launch']['model'], 'claude-opus-5-5')
+        self.assertEqual(result['handoff']['receiving_model'], 'claude-opus-5-5')
         self.assertEqual(command[command.index('--name') + 1], result['handoff']['launch']['name'])
         self.assertTrue(result['handoff']['launch']['name'].startswith('Claude Opus coordinator '))
         self.assertEqual(command[command.index('--session-id') + 1], result['handoff']['launch']['session'])

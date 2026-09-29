@@ -27,7 +27,8 @@ class NavigationParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
         if tag == 'a' and attrs.get('data-workspace-page'):
-            self.links[attrs['data-workspace-page']] = attrs
+            key = 'lead' if attrs.get('class') == 'workspace-lead' else attrs['data-workspace-page']
+            self.links[key] = attrs
         if tag == 'script' and attrs.get('src'):
             self.scripts.append(attrs['src'])
 
@@ -81,7 +82,11 @@ process.stdout.write(JSON.stringify(Object.fromEntries(links.map(link=>[link.dat
         with patch('local_services.links', return_value=self.service_rows()):
             page = decorate_report('<html><head><title>Report</title></head><body><h1>Report</h1></body></html>', self.root, 'usage')
         parsed = NavigationParser(page)
-        self.assertEqual(set(parsed.links), {'viewer', 'brain', 'usage', 'contributions'})
+        self.assertEqual(set(parsed.links), {'viewer', 'usage', 'tasks', 'brain', 'contributions', 'experiments',
+                                             'system-map', 'lead'})
+        self.assertEqual(parsed.links['lead']['href'], 'http://127.0.0.1:4242/#lead')
+        self.assertEqual(parsed.links['experiments']['href'], 'http://127.0.0.1:4242/experiments')
+        self.assertEqual(parsed.links['tasks']['href'], 'task-inbox.html')
         self.assertEqual(parsed.links['usage']['aria-current'], 'page')
         self.assertNotIn('aria-current', parsed.links['brain'])
         self.assertEqual(parsed.links['viewer']['href'], 'http://127.0.0.1:4242/')
@@ -94,7 +99,7 @@ process.stdout.write(JSON.stringify(Object.fromEntries(links.map(link=>[link.dat
             page = decorate_report('<html><h1>Report</h1></html>', self.root, 'usage')
             script = navigation_script(self.root)
         links = NavigationParser(page).links
-        for identifier in ('viewer', 'brain'):
+        for identifier in ('viewer', 'brain', 'experiments', 'lead'):
             self.assertNotIn('href', links[identifier])
             self.assertEqual(links[identifier]['aria-disabled'], 'true')
             self.assertIn('.cmd', links[identifier]['title'])

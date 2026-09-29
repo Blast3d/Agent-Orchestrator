@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "prepared_before_cold": true,
+  "source_scope": "Synthetic public Tern fixture only. Templates must be frozen before cold trials; controller inserts them into Brain only after both cold trials.",
+  "memories": [
+    {
+      "key": "tern-stage-locations",
+      "kind": "fact",
+      "title": "Tern stage locations",
+      "content": "aggregate_attempts is in tern/usage/ledger.py; allocate_slots is in tern/dispatch/allocator.py; render_report is in tern/reporting/summary.py. Their interfaces are in docs/contracts.md.",
+      "tags": [
+        "tern",
+        "memory-control",
+        "synthetic",
+        "aggregation",
+        "allocation",
+        "summary"
+      ],
+      "importance": 0.7,
+      "sources": [
+        {
+          "path": "docs/history.md",
+          "lines": [
+            3,
+            6
+          ]
+        }
+      ]
+    },
+    {
+      "key": "tern-public-test-command",
+      "kind": "procedure",
+      "title": "Tern public checks",
+      "content": "From the Tern fixture root, run python tests/test_public.py, optionally with --role aggregation, --role allocation, or --role summary. The standard-library runner reads tests/public_cases.json.",
+      "tags": [
+        "tern",
+        "memory-control",
+        "synthetic",
+        "aggregation",
+        "allocation",
+        "summary"
+      ],
+      "importance": 0.7,
+      "sources": [
+        {
+          "path": "docs/history.md",
+          "lines": [
+            8,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "key": "tern-canonical-conventions",
+      "kind": "fact",
+      "title": "Tern ID and integer conventions",
+      "content": "Ingestion IDs use strip().casefold() and canonical Unicode sort order. The report validates canonical IDs without changing them. Booleans are invalid numeric counts, weights, revisions, and capacities.",
+      "tags": [
+        "tern",
+        "memory-control",
+        "synthetic",
+        "aggregation",
+        "allocation",
+        "summary"
+      ],
+      "importance": 0.7,
+      "sources": [
+        {
+          "path": "docs/history.md",
+          "lines": [
+            17,
+            19
+          ]
+        }
+      ]
+    },
+    {
+      "key": "tern-zero-is-measured",
+      "kind": "fact",
+      "title": "Earlier missing-measurement bug",
+      "content": "An earlier Tern fix used value is None to detect unknown measurements. Zero is measured data. A measured zero combined with an unknown contribution has known sum zero and one unknown contribution; truthiness loses this distinction.",
+      "tags": [
+        "tern",
+        "memory-control",
+        "synthetic",
+        "aggregation",
+        "summary"
+      ],
+      "importance": 0.7,
+      "sources": [
+        {
+          "path": "docs/history.md",
+          "lines": [
+            12,
+            15
+          ]
+        }
+      ]
+    }
+  ]
+}

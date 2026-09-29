@@ -1,11 +1,10 @@
 """Read-only installation checks; no credentials or inference."""
-import importlib.util
 import json
 import sqlite3
 from pathlib import Path
 import sys
 
-from paths import ROOT, APP, CONFIG, STATE, VENDOR
+from paths import ROOT, CONFIG, STATE, VENDOR
 
 def diagnose():
     checks = []
@@ -37,6 +36,7 @@ def diagnose():
                      'app/orchestration_context.py', 'app/orchestration_lifecycle.py',
                      'app/assets/orchestration-context.md', 'docs/startup-and-closeout.md',
                      'app/antigravity_boundary.py', 'app/antigravity_deny_tools.py', 'app/antigravity_progress.py',
+                     'app/codex_worker.py', 'app/codex_progress.py',
                      'app/brain_store.py','app/brain_cli.py','app/brain_dashboard.py','app/brain_interface.py',
                      'app/storage_budget.py','app/start_brain_dashboard.py','Open Brain Dashboard.cmd',
                      'runtime/policy.json', 'skills/multi-model-orchestrator/SKILL.md'):
@@ -56,6 +56,9 @@ def diagnose():
             if worker.get('executable'):
                 add('worker:' + worker['id'], Path(worker['executable']).is_file(), 'Executable exists; login, quota and task capability are separate checks')
         add('no-billable-fallback', workers['policy']['automatic_billable_fallback'] is False, 'Included or local routes only')
+        # The Codex worker uses the VS Code extension's CLI, whose path changes with each update.
+        from codex_worker import executable as codex_executable
+        add('worker:codex', bool(codex_executable()), 'Codex CLI located; the ChatGPT plan sign-in is checked before each task')
     except (OSError, ValueError, KeyError):
         add('registry', False, 'Registry unavailable or invalid')
     try:

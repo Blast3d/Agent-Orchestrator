@@ -92,7 +92,7 @@ class BrainTests(unittest.TestCase):
         problem=self.active(title='Zebra incident',content='Zebra failure happened')
         fix=self.active(title='Recovery procedure',content='Use a bounded window.',tags=[])
         self.brain.relate(fix['id'],problem['id'],'solves','Tester')
-        result=self.brain.search('zebra','alpha')
+        result=self.brain.search('zebra','alpha',strategy='graph')
         hit=next(r for r in result['results'] if r['id']==fix['id'])
         self.assertIn('solves',hit['reason'])
         self.assertNotIn(fix['id'],[r['id'] for r in self.brain.search('zebra','alpha',hops=0)['results']])
@@ -100,7 +100,7 @@ class BrainTests(unittest.TestCase):
     def test_expired_relation_does_not_expand(self):
         a=self.active(title='Zebra incident');b=self.active(title='Unique repair',content='External material',tags=[])
         self.brain.relate(a['id'],b['id'],'supports','Tester','2020-01-01T00:00:00Z','2020-02-01T00:00:00Z')
-        self.assertEqual(len(self.brain.search('zebra','alpha')['results']),1)
+        self.assertEqual(len(self.brain.search('zebra','alpha',strategy='graph')['results']),1)
 
     def test_forget_removes_content_fts_edges_traces_and_vault(self):
         secret='uniquesecretcanaryabcdefghijklmnopqrstuvwxyz'

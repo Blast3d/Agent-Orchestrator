@@ -76,10 +76,14 @@ class WorkspaceNavigationHTTPTests(unittest.TestCase):
                 status, _, page = self.request(server)
                 self.assertEqual(status, 200, page)
                 self.assertIn('aria-label="Workspace pages"', page)
-                for label in ('Orchestrator', 'Memory', 'Provider usage', 'Contribution maps'):
-                    self.assertIn(label, page)
-                self.assertIn('href="/usage"', page)
-                self.assertIn('href="/contributions"', page)
+                for label in ('Orchestrator', 'Usage', 'Tasks', 'Memory', 'Contributions', 'Experiments', 'System map'):
+                    self.assertIn('>' + label + '</a>', page)
+                self.assertNotIn('Provider usage', page)
+                self.assertNotIn('Contribution maps', page)
+                for route in ('/usage', '/tasks', '/contributions', '/system-map'):
+                    self.assertIn('href="' + route + '"', page)
+                self.assertIn('Lead for new runs:', page)
+                self.assertNotIn('__WORKSPACE_', page)
 
     def test_fixed_reports_accept_scope_and_keep_the_snapshot_inert_to_query_text(self):
         for server in self.servers:

@@ -81,7 +81,7 @@ class BrainAuditTests(unittest.TestCase):
         new=self.b.relate(a['id'],b['id'],'supports','Tester')
         self.assertNotEqual(new['id'],old['id']);self.assertIsNone(new['valid_to'])
         self.assertEqual(len(self.b.get(a['id'])['relations']),2)
-        self.assertIn(b['id'],[r['id'] for r in self.b.search('zebra','audit')['results']])
+        self.assertIn(b['id'],[r['id'] for r in self.b.search('zebra','audit',strategy='graph')['results']])
         self.assertEqual(self.b.relate(a['id'],b['id'],'supports','Tester')['id'],new['id'])
 
     def test_relation_migration_preserves_rows_and_is_repeatable(self):

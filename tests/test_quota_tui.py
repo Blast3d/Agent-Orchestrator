@@ -52,6 +52,16 @@ def claude_screen():
 
 
 class ClaudeQuotaParserTests(unittest.TestCase):
+    def test_optional_analytics_failure_does_not_hide_loaded_account_bars(self):
+        notice = 'Per-model breakdown unavailable (rate limited \u2014 try again in a moment)\n'
+        display = claude_screen() + "What's contributing to your limits usage?\n" + notice
+        result = parse_claude_screen(display, cli_version='2.1.263')
+        self.assertEqual([w['remaining_pct'] for w in result['windows']], [2,20,89])
+        with self.assertRaises(ValueError):
+            parse_claude_screen(claude_screen() + notice, cli_version='2.1.263')
+        with self.assertRaises(ValueError):
+            parse_claude_screen(display + 'Failed to load current usage\n', cli_version='2.1.263')
+
     def test_live_screen_reader_labels_exclude_local_analytics_and_credits(self):
         display = ("Session\nUsage: 0 input, 0 output, 0 cache read, 0 cache write\n"
             "Current session\n29% 29% used\nResets 3:40pm (America/Denver)\n"
@@ -78,6 +88,8 @@ class ClaudeQuotaParserTests(unittest.TestCase):
                claude_screen() + "Loading usage...\n",
                claude_screen() + "Failed to load current usage\n",
                claude_screen() + "Cached usage\n",
+               claude_screen() + "Showing last-known usage (2 minutes ago)\n",
+               claude_screen() + "Partial usage data (rate limited)\n",
                claude_screen().replace("97% used", "101% used"),
                claude_screen().replace("97% used", "97.5% used"),
                claude_screen() + claude_screen(),

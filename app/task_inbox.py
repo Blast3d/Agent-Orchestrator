@@ -11,6 +11,7 @@ import webbrowser
 from paths import ROOT, STATE, TASKS, WORKSPACES
 from task_summary_repair import summary_notices
 from task_progress_view import enrich_task
+from usage_report import bot_summary
 
 
 def _text(value, default=''):
@@ -49,33 +50,79 @@ def _state(data):
     if (status == 'recovery_required' or execution == 'uncertain'
             or data.get('reservation_state') == 'held_for_reconciliation'):
         return ('uncertain', 'Needs attention', 'Check before retrying',
-                'The saved record cannot confirm that the worker stopped. Ask Codex to check the original task before retrying or releasing its allowance.')
+                'The saved record cannot confirm that the worker stopped. Ask your lead to check the original task before retrying or releasing its allowance.')
     if status in ('accepted', 'rejected'):
         if execution != 'succeeded' or review != status or not _time(data.get('finalized_at')):
             return ('unknown', 'Needs attention', 'Record needs checking',
-                    'The saved completion and review details do not agree. Ask Codex to inspect this task before treating the answer as finished.')
+                    'The saved completion and review details do not agree. Ask your lead to inspect this task before treating the answer as finished.')
         if status == 'accepted':
             return ('accepted', 'Finished', 'Accepted',
                     'The saved answer was accepted. Read the review explanation below for what was checked.')
         return ('rejected', 'Needs attention', 'Not accepted',
-                'The answer was reviewed and not accepted. Read the reason below; ask Codex to plan a deliberate revision if more work is needed.')
+                'The answer was reviewed and not accepted. Read the reason below; ask your lead to plan a deliberate revision if more work is needed.')
     if status == 'awaiting_review' and execution == 'succeeded' and _time(data.get('finalized_at')):
         return ('ready', 'Ready to check', 'Ready to check',
-                'An answer is saved, but it has not been accepted. Ask Codex to check it against the brief and record the review.')
+                'An answer is saved, but it has not been accepted. Ask your lead to check it against the brief and record the review.')
     if status == 'failed' or execution == 'failed':
         return ('failed', 'Needs attention', 'Did not finish',
-                'The task recorded a failure. Ask Codex to inspect the saved evidence and confirm the worker has stopped before deciding whether to try again.')
+                'The task recorded a failure. Ask your lead to inspect the saved evidence and confirm the worker has stopped before deciding whether to try again.')
     if status == 'held' or execution == 'held':
         return ('held', 'Needs attention', 'Held before starting',
-                'The task was held before worker execution. Ask Codex to check the route and current allowance before preparing another attempt.')
+                'The task was held before the worker started, so no answer was produced. Check why it was held, then ask your lead to prepare another attempt.')
     if status == 'running' or execution == 'running':
         return ('working', 'Working', 'Recorded as working',
-                'This was the last saved state, not a live connection. Reopen Task Inbox for a fresh view; ask Codex to check the original task before starting another copy.')
+                'This was the last saved state, not a live connection. Reopen Task Inbox for a fresh view; ask your lead to check the original task before starting another copy.')
     if status in ('preparing', 'pending'):
         return ('pending', 'Working', 'Preparing',
-                'The task was being prepared when this state was saved. Reopen Task Inbox for a fresh view before asking Codex about its next step.')
+                'The task was being prepared when this state was saved. Reopen Task Inbox for a fresh view before asking your lead about its next step.')
     return ('unknown', 'Needs attention', 'State not known',
-            'This saved state is not recognized. Ask Codex to inspect the original task before retrying or treating it as finished.')
+            'This saved state is not recognized. Ask your lead to inspect the original task before retrying or treating it as finished.')
+
+
+def _hold(data):
+    """Hold-time snapshot from saved admission evidence: numbers, times and plain reasons only.
+
+    The saved quota reading is summarized as it stood when the task was held
+    (reading age is measured at the hold time), so it cannot look current later.
+    Raw window identifiers are returned only as `technical` detail.
+    """
+    quota = data.get('quota_before')
+    quota = quota if isinstance(quota, dict) else None
+    held = data.get('status') == 'held' or data.get('execution_status') == 'held'
+    if not held and not (quota and quota.get('allowed') is False):
+        return None
+    at = _time(data.get('ended_at')) or _time(data.get('finalized_at')) or _time(data.get('created_at'))
+    hold = {'at': at, 'reason': _text(data.get('reason')), 'free_pct': None, 'reserved_pct': None,
+            'remaining_pct': None, 'reading_age_seconds': None, 'threshold_pct': None,
+            'explanation': '', 'next_step': '', 'technical': []}
+    if not quota or quota.get('allowed') is not False:
+        return hold
+    try:
+        moment = datetime.fromisoformat(at) if at else datetime.now(timezone.utc)
+        worker = {key: quota.get(key) for key in ('worker', 'status', 'allowed', 'reading_status',
+                                                   'cooldown_active_pools', 'provider_refresh_errors')}
+        worker['worker'] = _text(data.get('worker')) or _text(quota.get('worker'), 'unknown')
+        worker['windows'] = [w for w in quota.get('windows', []) if isinstance(w, dict)]             if isinstance(quota.get('windows'), list) else []
+        worker['reasons'] = [r for r in quota.get('reasons', []) if isinstance(r, str)]             if isinstance(quota.get('reasons'), list) else []
+        worker['warnings'] = [r for r in quota.get('warnings', []) if isinstance(r, str)]             if isinstance(quota.get('warnings'), list) else []
+        threshold = quota.get('threshold_pct', 20)
+        threshold = threshold if isinstance(threshold, (int, float)) and not isinstance(threshold, bool) else 20
+        summary = bot_summary(worker, threshold, _text(quota.get('admission_mode'), 'advisory'), moment)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        # A damaged snapshot keeps the saved reason; the numbers stay unknown.
+        return hold
+    hold.update(free_pct=summary['free_pct'], reserved_pct=summary['reserved_pct'],
+                remaining_pct=summary['remaining_pct'], reading_age_seconds=summary['age_seconds'],
+                threshold_pct=threshold, next_step=summary['next_step'], technical=summary['technical'])
+    # The summary speaks in the present tense; keep only the plain cause, in the past tense.
+    reasons = worker['reasons']
+    if any('cooldown active' in reason for reason in reasons):
+        hold['explanation'] = 'The provider had rejected recent work, so a cooldown was running.'
+    elif any('worker start threshold' in reason for reason in reasons):
+        hold['explanation'] = f'New work needs more than {threshold:g}% free.'
+    elif summary['sentence'].startswith('Held: '):
+        hold['explanation'] = 'Recorded reason: ' + summary['sentence'].removeprefix('Held: ')
+    return hold
 
 
 def collect(tasks=None, workspaces=None):
@@ -92,7 +139,7 @@ def collect(tasks=None, workspaces=None):
         modified = []
         if not re.fullmatch(r'[a-f0-9]{32}', folder.name) or folder.resolve().parent != root:
             # Do not follow a task directory redirected outside the task store.
-            notices.append('A task folder could not be read safely. Ask Codex to inspect the saved task list.')
+            notices.append('A task folder could not be read safely. Ask your lead to inspect the saved task list.')
         else:
             for filename in ('record.json', 'result.json'):
                 path = folder / filename
@@ -120,7 +167,7 @@ def collect(tasks=None, workspaces=None):
             notices.append('This record describes an answer, but its saved answer is unavailable in this view.')
         review = data.get('review') if isinstance(data.get('review'), dict) else {}
         if data.get('cleanup_errors') or data.get('reservation_state') == 'cleanup_failed':
-            notices.append('The task recorded an unfinished follow-up step. Ask Codex to check the saved evidence and allowance before another attempt.')
+            notices.append('The task recorded an unfinished follow-up step. Ask your lead to check the saved evidence and allowance before another attempt.')
         if data.get('export_status') == 'failed':
             notices.append('The extra saved copy could not be written. Any answer shown here comes from the original task record.')
         if notices:
@@ -137,6 +184,7 @@ def collect(tasks=None, workspaces=None):
             'finished_at': _time(data.get('finalized_at')),
             'updated_at': datetime.fromtimestamp(max(modified), timezone.utc).isoformat() if modified else None,
             'notices': notices,
+            'hold': _hold(data),
         }
         rows.append(enrich_task(row, data, tasks_root=directory,
                                 workspaces_root=workspaces_root,
@@ -146,14 +194,14 @@ def collect(tasks=None, workspaces=None):
             'tasks': rows, 'warnings': sum(bool(row['notices']) for row in rows)}
 
 
-def generate(output=None, tasks=None, workspaces=None):
-    """Write one standalone view; tasks is an optional task-store directory."""
-    source = Path(tasks) if tasks is not None else TASKS
-    target = Path(output) if output is not None else STATE / 'task-inbox.html'
-    if target.resolve().is_relative_to(source.resolve()):
-        raise ValueError('The inbox output must be outside the saved task folder')
-    dataset = collect(source, workspaces=workspaces)
-    page = (ROOT / 'app/assets/task-inbox.html').read_text(encoding='utf-8')
+def render_page(tasks=None, workspaces=None, *, live=False, dataset=None):
+    """Return the inbox HTML with its data embedded as inert, escaped JSON (no writes)."""
+    dataset = dataset if dataset is not None else collect(tasks, workspaces=workspaces)
+    if live:
+        dataset = dict(dataset, live=True)
+    from workspace_navigation import THEME
+    # Shared tokens go in before the data, so saved task text never reaches the style placeholder.
+    page = (ROOT / 'app/assets/task-inbox.html').read_text(encoding='utf-8').replace('/*__WORKSPACE_THEME__*/', THEME, 1)
     marker = '__TASK_INBOX_DATA__'
     if page.count(marker) != 1:
         raise ValueError('The inbox template needs exactly one data placeholder')
@@ -161,13 +209,29 @@ def generate(output=None, tasks=None, workspaces=None):
     for character, escaped in (('&', '\\u0026'), ('<', '\\u003c'), ('>', '\\u003e'),
                                ('\u2028', '\\u2028'), ('\u2029', '\\u2029')):
         payload = payload.replace(character, escaped)
+    return page.replace(marker, payload)
+
+
+def generate(output=None, tasks=None, workspaces=None):
+    """Write one standalone view; tasks is an optional task-store directory."""
+    source = Path(tasks) if tasks is not None else TASKS
+    target = Path(output) if output is not None else STATE / 'task-inbox.html'
+    if target.resolve().is_relative_to(source.resolve()):
+        raise ValueError('The inbox output must be outside the saved task folder')
+    dataset = collect(source, workspaces=workspaces)
+    page = render_page(dataset=dataset)
+    if output is None or target.parent.resolve() == STATE.resolve():
+        # The standard saved inbox joins the shared workspace navigation; exports stay standalone.
+        from workspace_navigation import decorate_report, write_navigation_script
+        page = decorate_report(page, ROOT, 'tasks')
+        write_navigation_script(ROOT, directory=target.parent)
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=target.parent,
                                          prefix=target.name + '.', suffix='.tmp', delete=False) as handle:
             temporary = Path(handle.name)
-            handle.write(page.replace(marker, payload))
+            handle.write(page)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, target)

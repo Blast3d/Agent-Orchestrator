@@ -22,6 +22,14 @@ Use native delegation for bounded local jobs when available and useful. Respect
 the parent host's concurrency and model-selection rules. Give workers disjoint
 writes. A second native worker may still be the same model as the coordinator.
 
+For supplied-text work from any lead, use the maintained dispatcher:
+`python orchestrator.py run codex --prompt-file BRIEF --output OUT --codex-model astra|sol`.
+It runs `codex exec --json` from the VS Code extension with a ChatGPT plan sign-in
+only, tools off (shell, code mode, MCP, apps, plugins, skills, memories, sub-agents,
+web search), a read-only sandbox and an empty job folder, and reserves the shared
+Codex allowance. Attempted tool use or an unexpected event stops the task. Codex
+returns text or code for the lead to review and apply; it does not edit files.
+
 When a separate CLI process is useful, inspect `codex exec --help` and use a
 specific working directory and sandbox. Do not start it from the whole home
 directory to work on a small project. Codex's local CLI also advertises

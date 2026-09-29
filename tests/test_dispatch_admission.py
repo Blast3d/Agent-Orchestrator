@@ -114,7 +114,7 @@ class AdmissionTests(unittest.TestCase):
         self.assertTrue(any('UTF-8' in error for error in result['brief_check']['errors']))
         self.factory.assert_not_called()
 
-    def test_identical_assignment_returns_current_review_without_export_or_quota(self):
+    def test_identical_assignment_returns_current_review_and_exports_without_quota(self):
         first = self.run_task()
         self.store.review(first['job_id'], 'accepted', 'Codex', 'Checked the answer against the supplied example and required output.')
         self.factory.reset_mock()
@@ -124,7 +124,10 @@ class AdmissionTests(unittest.TestCase):
         self.assertTrue(repeated['assignment_reused'])
         self.assertEqual((repeated['job_id'], repeated['status'], repeated['response']),
                          (first['job_id'], 'accepted', 'A useful answer.'))
-        self.assertFalse(self.args.output.exists())
+        # A new --output receives a copy of the saved task (audit D06); nothing runs again.
+        exported = json.loads(self.args.output.read_text(encoding='utf-8'))
+        self.assertEqual((exported['job_id'], exported['assignment_reused']), (first['job_id'], True))
+        self.assertEqual(repeated['export_status'], 'written')
         self.factory.assert_not_called()
         self.invoke.assert_not_called()
 

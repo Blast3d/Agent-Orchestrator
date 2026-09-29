@@ -1,0 +1,5 @@
+[project]
+name = "tern-dispatch"
+version = "0.3.0"
+requires-python = ">=3.10"
+description = "Tiny dispatch usage reconciliation and reporting package"

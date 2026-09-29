@@ -169,10 +169,6 @@ def _review_tuple(data):
     return tuple(review.get(key) for key in _REVIEW_FIELDS)
 
 
-def _canonical_state(data):
-    return tuple(data.get(key) for key in _STATE_FIELDS) + (_review_tuple(data), data.get('finalized_at'))
-
-
 def _coherent(result):
     status = result.get('status')
     execution = result.get('execution_status')

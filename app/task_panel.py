@@ -1,31 +1,56 @@
-"""Render a small local task and routing view without running providers."""
+"""Render a small local task and routing view without running providers.
+
+Every link is a loopback route (`/tasks`, `/contributions`) marked for the shared
+workspace navigation script, which rewrites it to the sibling saved file when
+the page is opened from disk. No `file://` address is ever emitted, because a
+page served over http cannot navigate to one.
+"""
 import html
 import json
+import re
+
 from paths import ROOT, TASKS
 
-def render():
+RUN_ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,199}')
+
+
+def _link(page, text, *, fragment=None, run=None):
+    href = '/' + page + ('?run=' + run if run else '') + ('#' + fragment if fragment else '')
+    attrs = ' data-workspace-page="' + page + '"'
+    if fragment:
+        attrs += ' data-workspace-hash="' + html.escape(fragment, quote=True) + '"'
+    if run:
+        attrs += ' data-workspace-run="' + html.escape(run, quote=True) + '"'
+    return '<a href="' + html.escape(href, quote=True) + '"' + attrs + '>' + html.escape(text) + '</a>'
+
+
+def render(root=None, tasks=None):
+    root = ROOT if root is None else root
+    tasks = TASKS if tasks is None else tasks
     rows = []
-    files = sorted(TASKS.glob('*/record.json'), key=lambda p: p.stat().st_mtime, reverse=True)[:20]
+    files = sorted(tasks.glob('*/record.json'), key=lambda p: p.stat().st_mtime, reverse=True)[:20]
     for path in files:
         try:
             job = json.loads(path.read_text(encoding='utf-8'))
-            result_uri = (path.parent / 'result.json').as_uri()
-            audit = path.parent / 'contribution-audit.md'
-            audit_link = ('<br><a href="' + html.escape(audit.as_uri(), quote=True) + '">Contribution audit</a>') if audit.is_file() else ''
+            identifier = path.parent.name
+            evidence = (_link('tasks', 'Open in Tasks', fragment='task=' + identifier)
+                        if re.fullmatch(r'[a-f0-9]{32}', identifier) else 'Unreadable task folder')
             rows.append('<tr><td>' + html.escape(str(job.get('task', 'Task'))) + '</td><td>' +
                         html.escape(str(job.get('worker', 'unknown'))) + '</td><td>' +
-                        html.escape(str(job.get('status', 'unknown')).replace('_', ' ')) + '</td><td><a href="' +
-                        html.escape(result_uri, quote=True) + '">Saved result</a>' + audit_link + '</td></tr>')
+                        html.escape(str(job.get('status', 'unknown')).replace('_', ' ')) + '</td><td>' +
+                        evidence + '</td></tr>')
         except (OSError, ValueError, TypeError):
             rows.append('<tr><td colspan="4">A task record could not be read. Inspect runs/tasks.</td></tr>')
-    text = '<p><a href="' + (ROOT / 'runtime/project-map.html').as_uri() + '">Open Project Maps — see who helped</a></p>'
-    text += '<h2>Task review</h2><p>A response awaits review before Codex accepts it. Quota readiness alone does not establish task quality.</p>'
-    text += '<p><a href="' + (ROOT / 'runtime/task-inbox.html').as_uri() + '">Open Task Inbox</a> to search every saved task, read answers and see what needs attention. Reopen the Task Inbox shortcut to refresh its snapshot.</p>'
+    text = '<section class="task-review" aria-labelledby="task-review-title">'
+    text += '<h2 id="task-review-title">Task review</h2><p>A response waits for review before your lead accepts it. Quota readiness alone does not establish task quality.</p>'
+    text += ('<p>' + _link('tasks', 'Open Tasks') + ' to search every saved task, read answers, see why work was held '
+             'and what needs attention. ' + _link('contributions', 'Open Contributions') + ' to see who helped.</p>')
     if rows:
-        text += '<table><thead><tr><th>Task</th><th>Worker</th><th>Review state</th><th>Evidence</th></tr></thead><tbody>' + ''.join(rows) + '</tbody></table>'
+        text += ('<div class="table-wrap"><table class="tasks"><thead><tr><th>Task</th><th>Worker</th><th>Review state</th>'
+                 '<th>Evidence</th></tr></thead><tbody>' + ''.join(rows) + '</tbody></table></div>')
     else:
         text += '<p>No recorded application tasks yet.</p>'
-    reports = sorted((ROOT / '.orchestration').glob('*/contribution-audit.json'), key=lambda p: p.stat().st_mtime, reverse=True)[:5]
+    reports = sorted((root / '.orchestration').glob('*/contribution-audit.json'), key=lambda p: p.stat().st_mtime, reverse=True)[:5]
     if reports:
         text += '<h2>Contribution audits</h2><p>Estimated share of accepted work. Recorded usage is reported separately in each audit.</p>'
         for path in reports:
@@ -34,9 +59,12 @@ def render():
                 shares = '; '.join(str(row['name']) + ': ' + (str(row['accepted_work_pct']) + '%' if row['accepted_work_pct'] is not None else 'pending') for row in report['by_agent'])
                 if not report['attribution_complete']:
                     shares += '; attribution incomplete'
-                text += '<p><a href="' + html.escape(path.with_suffix('.md').as_uri(), quote=True) + '">' + html.escape(report['title']) + '</a><br>' + html.escape(shares) + '</p>'
+                scope = str(report.get('scope_id') or path.parent.name)
+                title = _link('contributions', str(report['title']), run=scope) if RUN_ID.fullmatch(scope) \
+                    else html.escape(str(report['title']))
+                text += '<p>' + title + '<br>' + html.escape(shares) + '</p>'
             except (OSError, ValueError, KeyError, TypeError):
                 text += '<p>A contribution report could not be read.</p>'
     text += '<p>Gemini uses the guarded Antigravity route. Account access and tool permissions remain separate from the saved allowance shown above. NotebookLM feature usage requires a manual account reading.</p>'
-    text += '<p><a href="' + (ROOT / 'README.md').as_uri() + '">Project guide</a> &middot; <a href="' + (ROOT / 'docs/AUDIT.md').as_uri() + '">Audit report</a></p>'
-    return text
+    text += '<p>The project guide is <code>README.md</code> and the audit report is <code>docs/AUDIT.md</code> in the Orchestrator folder.</p>'
+    return text + '</section>'

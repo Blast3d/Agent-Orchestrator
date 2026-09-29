@@ -13,7 +13,9 @@ from task_store import timestamp, write_json
 from usage_guard import Guard, file_lock
 from claude_models import select_model, require_model_allowed
 
-OWNERS = {'astra': 'codex', 'fable': 'claude'}
+# Owner keys name coordinator slots: ASTRA and Sol run in Codex; `fable` is the
+# legacy key for the Claude slot (its model comes from the coordinator policy).
+OWNERS = {'astra': 'codex', 'sol': 'codex', 'fable': 'claude'}
 LIST_FIELDS = ('completed', 'next_steps', 'decisions', 'constraints', 'authorization',
                'open_jobs', 'validation', 'artifacts')
 MAX_BYTES = 512 * 1024
@@ -197,6 +199,9 @@ class Coordinator:
                        'checkpoint_sha256': digest(state['checkpoint']), 'previous_lead_stopped': True}
             if target == 'fable':
                 handoff['receiving_model'] = select_model('coordinator')
+            else:
+                from lead_selection import LEADS, lead_for_owner
+                handoff['receiving_model'] = LEADS[lead_for_owner(target)]['model']
             state.update(status='handoff_ready', generation=generation + 1, handoff=handoff)
             state['history'].append(deepcopy(handoff))
             return self.save(state)
@@ -345,6 +350,8 @@ class Coordinator:
                 attach = None
                 model_paused = True
                 model_lines.append('This saved model is paused or unavailable under the current policy. Do not resume or claim this handoff.')
+        elif handoff.get('receiving_model'):
+            model_lines = [f"Receiving Codex model: {handoff['receiving_model']}. Select it in the Codex model menu before claiming."]
         return '\n'.join([
             '# Coordinator handoff', '',
             f"Run: {self.run.name}", f"Workspace: {self.workspace}",
@@ -393,6 +400,10 @@ class Coordinator:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='action', required=True)
+    # The switch is global configuration, not run state, so it takes no --run.
+    select = sub.add_parser('select', help='Choose who leads new runs: claude, astra or sol')
+    select.add_argument('lead', choices=('claude', 'astra', 'sol'))
+    sub.add_parser('selected', help='Show the lead-orchestrator switch')
     for action in ('init', 'status', 'role', 'checkpoint', 'prepare', 'claim', 'prompt', 'readiness', 'transfer'):
         command = sub.add_parser(action)
         command.add_argument('--run', type=Path, required=True)
@@ -417,6 +428,14 @@ def main():
         if action == 'transfer':
             command.add_argument('--manual', action='store_true', help='Explicit transfer without the near-zero trigger')
     args = parser.parse_args()
+    if args.action in ('select', 'selected'):
+        try:
+            from lead_selection import describe, select_lead
+            print(json.dumps(select_lead(args.lead) if args.action == 'select' else describe()))
+            return 0
+        except ValueError as exc:
+            print(json.dumps({'ok': False, 'status': 'error', 'error': str(exc), 'model_calls': 0}))
+            return 2
     try:
         coordinator = Coordinator(args.run)
         if args.action == 'init':

@@ -237,7 +237,9 @@ class OutputLimitTests(unittest.TestCase):
         ) % (ch * 2000)
         with patch.object(output_limits, 'EVENT_MAX', 100), patch.object(output_limits, 'READ_CHUNK', 32):
             with self.assertRaises(WorkerInterrupted) as raised:
-                self.run_child(code, timeout=2)
+                # A heavily loaded Windows host can delay 32-byte pipe chunks;
+                # leave ample room before the child's eight-second sleep ends.
+                self.run_child(code, timeout=5)
         self.assertEqual(raised.exception.cause, 'output_limit')
         self.assertFalse(raised.exception.progress.get('terminal_received'))
 

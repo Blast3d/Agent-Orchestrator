@@ -73,9 +73,14 @@ launchers and the VS Code bot extension. See [packaging and setup](docs/packagin
 The source ZIP is available alongside it. Provider applications and logins are
 configured separately; personal tasks, memory and credentials are excluded.
 
-Claude routing now uses **Opus** for workers and backup coordination. Fable is
-paused until the user resumes it (2026-09-11). See [coordinator handoffs](docs/coordinator-handoff.md)
-for the saved model policy, existing-session limits and recovery.
+A **lead switch** picks who orchestrates new runs: **Claude** (Opus 5.5,
+`claude-opus-5-5`), **ASTRA** (Codex GPT-6-Astra, the default) or **Sol** (Codex
+GPT-6-Sol). Use the switch at the top of the Orchestrator Viewer or
+`python orchestrator.py lead select claude|astra|sol`. A Codex lead hands off to
+Claude at 5% usage; Claude hands back to the Codex lead chosen last. Claude
+workers use **Opus**. Fable is paused until the user resumes it (2026-09-11).
+See [coordinator handoffs](docs/coordinator-handoff.md) for the switch, model
+policy, existing-session limits and recovery.
 
 The recorded lead assigns bounded tasks, checks answers, and integrates the final
 result. Use `lead role` to inspect session duties and the
@@ -83,7 +88,10 @@ result. Use `lead role` to inspect session duties and the
 and recovery. Historical Fable records and launcher names remain for compatibility;
 the current paused-model policy still applies.
 
-The thirteen-agent experiment remains available: **Open Panel Results.cmd** shows its vote, implemented winners and estimated contribution shares.
+In the original development workspace, **Open Panel Results.cmd** opens the
+historical thirteen-agent experiment, its vote and estimated contribution shares.
+This local-report shortcut is excluded from distribution ZIPs because its
+`.orchestration` report is not packaged.
 
 **Open Orchestrator Viewer.cmd** shows the selected run's lead, progress and saved
 conversation, with older-message paging and a provider-specific **Open Codex
@@ -97,13 +105,16 @@ See [the viewer guide](docs/orchestrator-viewer.md).
 
 Double-click **Open Project Maps.cmd** to see who helped on each project and compare their shares visually. **Open Dashboard.cmd** shows quota. **Open Project.cmd** opens this folder. **Check Setup.cmd** checks the installation without calling a model. See [Project Maps](docs/project-maps.md) for the visual guide.
 
-The **Orchestrator / Memory / Provider usage / Contribution maps** navigation at
-the top of all four pages connects them directly and preserves the project and
-run when you return. From a live dashboard, reports open through its local web
-address. The existing HTML files also keep these links; start the dashboards
-from **AI-Workspace** if their links report that a service is unavailable.
-Provider usage shows account allowance; contribution maps show reviewed shares
-of work kept in each project.
+Every page shares one top navigation: **Orchestrator · Usage · Tasks · Memory ·
+Contributions · Experiments · System map**, with a read-only **Lead for new runs**
+chip on the right that links to the lead switch. It preserves the project and run
+when you move between pages. From a live dashboard, Usage, Tasks, Contributions
+and the System map open through its local web address (Tasks is read live from
+the saved task store); saved HTML files link to their saved siblings. Start the
+dashboards from **AI-Workspace** if a link reports that a service is unavailable.
+Every page follows the system light or dark setting through one shared set of
+colour tokens. Usage shows which bots can start work now; Contributions shows
+reviewed shares of work kept in each project.
 
 Double-click **Open Task Inbox.cmd** for a searchable view of every saved task, its answer, review explanation and next step. This offline snapshot is refreshed each time you reopen the shortcut. It keeps uncertain work and rejected answers visible for deliberate follow-up.
 
@@ -112,6 +123,12 @@ The current update adds saved progress, deadlines and worker handoffs to the inb
 This is a Windows application built from Python scripts, local dashboards, and an optional globally available agent skill. It has durable local task records and a portable Windows ZIP distribution.
 
 ## Where everything lives
+
+**Jev through OpenRouter:** optional relevance scoring can reorder
+reviewed memory supplied to a task, with task-specific profiles and explicit
+project permissions. Worker routing remains advisory. See [setup](docs/jev-openrouter.md)
+and the [memory workflow and use-case map](docs/jev-memory-workflow.md).
+
 
 | Folder | Contents |
 |---|---|
@@ -161,6 +178,14 @@ A supplied-text worker task needs a UTF-8 brief containing the objective, releva
 python orchestrator.py run claude --prompt-file brief.txt --output answer.json --task code-review --size small
 ```
 
+Codex (ASTRA or Sol) takes supplied-text work the same way, whichever lead coordinates:
+
+```powershell
+python orchestrator.py run codex --prompt-file brief.txt --output answer.json --task review --size small --codex-model sol
+```
+
+`--codex-model` defaults to the Codex lead chosen on the lead switch; `--codex-effort low|medium|high` sets reasoning effort (default medium). The worker runs the VS Code extension's official `codex exec` only on a ChatGPT plan sign-in (included Codex allowance; an API-key sign-in is refused before any quota or model use) and reserves the shared Codex allowance like any other worker. It uses no tools: shell, code mode, MCP, apps, plugins, skills, memories, sub-agents and web search are switched off for that process only, the sandbox is read-only and the working folder is an empty job folder. Attempted tool use, an unknown event or an error during the turn stops the task. Codex still loads your global `~/.codex/AGENTS.md`; the worker preamble tells it that it is a worker with no tools.
+
 Output paths must be new and their parent directory must exist. The application claims the output before calling a model and keeps a separate durable result under `runs/tasks/`. A successful response is **awaiting_review**, not accepted work. Inspect the response against the brief and evidence, then record the decision:
 
 ```powershell
@@ -198,13 +223,13 @@ Give repeatable work a project and assignment name:
 python orchestrator.py run claude --prompt-file brief.txt --output answer.json --task review --project my-project --assignment-id review-v1 --require-brief-check
 ```
 
-Repeating that assignment returns its original saved task and latest review, without another model call or another exported answer. Changing its brief or worker requires a new assignment name. For a deliberate revision, add `--revision-of PREVIOUS_JOB_ID`; unresolved work remains held. Separate assignment names keep independent opinions independent.
+Repeating that assignment returns its original saved task and latest review, without another model call. A new `--output` path receives a copy of that saved task (the original files are unchanged); the original path is not rewritten. The exit code follows the saved outcome: 0 for an answer awaiting review or reviewed, 2 for held work, 1 for a failed or uncertain task. If the earlier attempt never finished, the repeat reports `reuse_state: incomplete`, sends nothing and exits 2; start it again under a new assignment name. Changing its brief or worker requires a new assignment name. For a deliberate revision, add `--revision-of PREVIOUS_JOB_ID`; unresolved work remains held. Separate assignment names keep independent opinions independent.
 
 ## Handoffs when allowance runs low
 
 Codex can choose suitable, already-approved alternatives before starting. For example, append `--fallback-worker grok` to the keyed command above. A confirmed quota hold or an exited rate-limit rejection hands the brief to Grok through the same allowance guard. Each attempt has its own result and a linked handoff record. Repeating the command reuses those attempts.
 
-This host configures Claude and Grok as each other's automatic alternate. Explicit `--fallback-worker` order takes precedence; `--no-auto-fallback` disables defaults for a task with narrower provider authorization. Unkeyed requests get a generated assignment ID in the receipt; use explicit project/assignment IDs to resume a known request. No local models are used for Orchestrator/Brain work, and no new billable route is enabled. Unknown allowance does not prevent startup. Missing permissions, incomplete briefs and uncertain execution still require inspection. Codex includes accepted progress and remaining steps when preparing a continuation brief for work that has already made progress.
+This host configures Claude and Grok as each other's automatic alternate; Codex can be named with `--fallback-worker codex` or added to `automatic_fallbacks`. Explicit `--fallback-worker` order takes precedence; `--no-auto-fallback` disables defaults for a task with narrower provider authorization. Unkeyed requests get a generated assignment ID in the receipt; use explicit project/assignment IDs to resume a known request. An unkeyed repeat of a brief whose earlier run on the same worker is still unresolved (its reservation is open because the provider may still be working) is held before any reservation or model call; reconcile the earlier job first, or give deliberately new work its own assignment ID. No local models are used for Orchestrator/Brain work, and no new billable route is enabled. Unknown allowance does not prevent startup. Missing permissions, incomplete briefs and uncertain execution still require inspection. Codex includes accepted progress and remaining steps when preparing a continuation brief for work that has already made progress.
 
 Local handoff plans require a tiny or small task in general chat, formatting, extraction, summarization or classification. Other sizes and categories are held before the first worker starts. Handoff plans freeze the brief and chosen worker order so a file edit or repeated command cannot quietly change the work midway.
 
@@ -232,12 +257,12 @@ Quota availability, working authentication, enforced tool boundaries and a corre
 
 ## Quota protection and recovery
 
-This host uses advisory quota admission: collection timeouts, stale readings and missing readings do not block task startup. The dispatcher reads saved allowance and collects updates in the background. At **20% available or below**, after pending reservations, prefer an eligible alternate. Confirmed quota rejection also permits replacement after the first attempt safely finishes. A past reset makes an old reading historical, with current allowance unknown. Tasks still reserve 1/3/8/15 percentage points for tiny/small/medium/large work. These estimates cannot guarantee completion or account for every simultaneous manual chat. Legacy strict admission remains available in `runtime/policy.json`; its extra 10% floor is inactive in advisory mode.
+This host uses advisory quota admission: collection timeouts, stale readings and missing readings do not block task startup. The dispatcher reads saved allowance and collects updates in the background. At **20% available or below**, after pending reservations, prefer an eligible alternate. Confirmed quota rejection also permits replacement after the first attempt safely finishes. A past reset makes an old reading historical, with current allowance unknown. A reservation only counts against the window it was made in: once that window resets (or, without a reset time, after its 5-hour, daily or weekly period; 7 days when unknown) it stops holding work, even if the job's outcome is still uncertain. Finished jobs keep their estimate only while the reading is fresh; after it goes stale the estimate is shown as "unsettled" instead of holding new work. Reading `status`, opening the dashboard or running `check` queues a background refresh (at most every 5 minutes per provider) for stale or never-read providers, so native Codex sessions no longer go stale just because they bypass the dispatcher. Tasks still reserve 1/3/8/15 percentage points for tiny/small/medium/large work. These estimates cannot guarantee completion or account for every simultaneous manual chat. Legacy strict admission remains available in `runtime/policy.json`; its extra 10% floor is inactive in advisory mode.
 
-The dashboard shows last-observed allowance, observation time, reservation estimates and collection failures. The lead can inspect the same local evidence with `python orchestrator.py status` or `runtime/usage-status.json`. Snapshot generation time is separate from when usage was measured.
+The Usage page lists held bots first. Each row says whether new work can start ("Blocking new work", or "Not blocking new work (advisory mode)" for an old reading), shows the reading age as a chip (fresh under 10 minutes, aging under 24 hours, stale after that) and gives one plain sentence with the next step. Raw window and bucket identifiers stay under **Technical details**, with observation times, reservation estimates and collection failures. The lead can inspect the same local evidence with `python orchestrator.py status` or `runtime/usage-status.json`. Snapshot generation time is separate from when usage was measured.
 
-The usage monitor is manual. Turn it on with the **Usage monitor** switch near the
-top of the Orchestrator viewer, or click **Usage monitor** in VS Code's status bar
+The usage monitor is manual. Turn it on with the **Background usage checks** switch
+in the viewer's **Bot readiness** panel, or click **Usage monitor** in VS Code's status bar
 and choose **Turn on usage monitor**. The Command Palette also has **Agent
 Orchestrator: Usage Monitor On/Off**. Turn it off when finished coding. Opening
 the viewer or VS Code does not start the monitor. Closing either app does not stop

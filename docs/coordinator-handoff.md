@@ -1,14 +1,43 @@
-# Orchestrator-run ASTRA to Claude handoff
+# Lead orchestrator switch and handoffs
 
-Current model choice (2026-09-11): **Claude Opus**. The user paused Fable until
-further notice. `config/workers.json` now controls worker and coordinator
-models and blocks paused model families before launches. New handoffs save
-their selected model; old Fable handoffs and console resumes remain blocked.
-The legacy `fable` owner/target key identifies the Claude coordinator slot;
-it does not select the Fable model. Existing records retain their history.
+## Choosing the lead
 
-At **5% or less remaining**, the current ASTRA orchestrator can handle the handoff
-commands itself. You do not need to stop ASTRA manually or type the takeover
+Three leads are available. Pick one in the **Orchestrator Viewer** (the lead
+switch at the top of the page) or from a terminal:
+
+| Lead | Runs in | Model | Owner key | Runner-up at 5% |
+| --- | --- | --- | --- | --- |
+| ASTRA (default) | Codex | `gpt-6-astra` | `astra` | Claude |
+| Sol | Codex | `gpt-6-sol` | `sol` | Claude |
+| Claude | Claude Code | `claude-opus-5-5` (Opus 5.5) | `fable` | the Codex lead chosen last |
+
+```powershell
+python orchestrator.py lead selected        # show the switch
+python orchestrator.py lead select sol      # choose Sol for new runs
+python orchestrator.py start --workspace . --name my-run --objective "..." --lead claude   # one-off override
+```
+
+The switch decides who leads **new runs** and who is the **runner-up**. It never
+moves a run that already has a lead; that only happens through the ownership-checked
+`lead transfer` / `lead prepare` + `lead claim` commands below, so a click cannot
+pull a run away from a working session. ASTRA and Sol share one Codex allowance,
+which is why a Codex lead hands off to Claude rather than to the other Codex model.
+To use Sol or ASTRA, also pick that model in the Codex model menu; the switch
+does not change Codex's own default model. Each startup packet states the run's
+lead, the switch's selection and the runner-up.
+
+The Claude model comes from `coordinator_handoff.backup_model` (currently
+`claude-opus-5-5`). The user paused Fable until further notice (2026-09-11).
+`config/workers.json` controls worker and coordinator models and blocks paused
+model families before launches; selecting Claude is refused while its configured
+model is paused. New handoffs save their receiving model; old Fable handoffs and
+console resumes remain blocked. The legacy `fable` owner/target key identifies the
+Claude coordinator slot; it does not select the Fable model.
+
+## Handoff at 5 percent
+
+At **5% or less remaining**, the current Codex orchestrator (ASTRA or Sol) can handle the handoff
+commands itself. You do not need to stop it manually or type the takeover
 command. The check runs at work milestones; it is not a new background watcher.
 The quota value is the lowest usable account reading, without subtracting worker
 reservations. In this host's advisory mode, the lead uses cached readings and
@@ -24,7 +53,7 @@ threshold** remains separate from the **5% leadership-transfer threshold**.
 2. `lead transfer` verifies the current owner/session/generation, confirms the
    near-zero source reading and checks/reserves Claude's included-account allowance.
 3. It saves the checkpoint and launch intent atomically, records ASTRA's explicit
-   yield, then starts the installed Claude CLI once with `opus`.
+   yield, then starts the installed Claude CLI once with `claude-opus-5-5`.
 4. The receiving session uses its pinned identity to claim that handoff before
    coordinating the run. ASTRA becomes a worker and stops coordinating.
 5. Claude reconciles existing files, jobs, reviews and reservations and continues
@@ -115,8 +144,10 @@ object, not the whole coordinator record.
 $orchestratorEntry = Join-Path $env:USERPROFILE 'Documents/Agent-Orchestrator/orchestrator.py'
 $runPath = 'C:\path\to\PROJECT\.orchestration\RUN_NAME'
 $coordinatorState = python $orchestratorEntry lead status --run $runPath | ConvertFrom-Json
-python $orchestratorEntry lead transfer --run $runPath --owner astra --session $coordinatorState.session --generation $coordinatorState.generation --file (Join-Path $runPath 'checkpoint-next.json')
+python $orchestratorEntry lead transfer --run $runPath --owner $coordinatorState.owner --session $coordinatorState.session --generation $coordinatorState.generation --file (Join-Path $runPath 'checkpoint-next.json')
 ```
+
+`--owner` is `astra` or `sol`, whichever Codex lead owns the run.
 
 The default threshold is 5%; `--threshold-pct 0` requires an exhausted reading.
 Use `--manual` only for an explicitly requested transfer independent of quota.
@@ -127,9 +158,11 @@ a successful launcher exit only confirms submission.
 
 Any current lead can relinquish its own record with `lead prepare --to TARGET
 --reason near-zero --owner OWNER --session SESSION --generation N --yield-lead`
-after verifying the target is ready. Claude can use this to yield back to ASTRA,
-but this application currently launches only Claude; an existing ready Codex
-session must claim a return handoff.
+after verifying the target is ready. When Claude leads, its runner-up is the
+Codex lead selected last (`--to astra` or `--to sol`). The prepared handoff
+records that Codex model (`gpt-6-astra` or `gpt-6-sol`) and the viewer shows it
+as awaiting claim. This application launches only Claude automatically; an
+existing Codex session running the recorded model must claim a return handoff.
 
 ## Approval for code review
 
@@ -155,7 +188,7 @@ for ASTRA bindings and unavailable-session recovery.
 
 ## Recovery and limits
 
-If a limit stops ASTRA before its next milestone, use `/model opus` and then
+If a limit stops ASTRA before its next milestone, use `/model claude-opus-5-5` and then
 `/orchestrator-takeover EXACT_RUN_PATH` in Claude. Checkpoints contain saved facts,
 not unsaved conversation memory. Inspect real task records before retrying any
 uncertain job. A quota reset never returns leadership automatically.

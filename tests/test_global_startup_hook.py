@@ -26,6 +26,16 @@ class StartupHookTests(unittest.TestCase):
             self.assertIn('app-two', content)
             self.assertNotIn('app-one', content)
 
+    def test_hook_explains_the_lead_switch_and_own_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'CLAUDE.md'
+            INSTALL.install_startup_hook(path, Path(directory) / 'app')
+            content = path.read_text(encoding='utf-8')
+            self.assertIn('lead selected', content)
+            self.assertIn('--lead', content)
+            for name in ('Claude', 'ASTRA', 'Sol'):
+                self.assertIn(name, content)
+
     def test_ambiguous_markers_preserve_the_file(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'CLAUDE.md'

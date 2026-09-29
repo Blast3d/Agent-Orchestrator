@@ -85,6 +85,17 @@ class QuotaParserTests(unittest.TestCase):
         with self.assertRaises(q.QuotaError):
             q.parse_rate_limits({"rateLimits": {"credits": {"unlimited": True, "hasCredits": True}}})
 
+    def test_normal_model_metadata_does_not_hide_limits_or_expose_labels(self):
+        for label in (None, "private-model-label"):
+            result = q.parse_rate_limits({"rateLimits": {
+                "primary": window(22, 10080), "normalModelSlug": label,
+                "spendControlReached": True,
+            }}, OBSERVED)
+            self.assertEqual([row["remaining_pct"] for row in result["windows"]], [78, 0])
+            self.assertNotIn("private-model-label", json.dumps(result))
+        with self.assertRaises(q.QuotaError):
+            q.parse_rate_limits({"rateLimits": {"primary": window(1), "normalModelSlug": {"limit": 0}}})
+
     def test_absent_timestamp_is_not_invented_and_overlimit_closes(self):
         result = q.parse_rate_limits({"rateLimits": {"primary": {"usedPercent": 102}}})
         self.assertIsNone(result["windows"][0]["reset_at"])

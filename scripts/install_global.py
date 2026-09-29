@@ -27,6 +27,13 @@ and scoped Brain recall. Follow `{root / 'docs' / 'startup-and-closeout.md'}`.
 After a checkpoint or handoff changes the generation, reload that run's startup
 context. Never choose an unrelated latest run automatically.
 
+The user's lead-orchestrator switch picks Claude (Opus 5.5), ASTRA (Codex
+GPT-6-Astra) or Sol (Codex GPT-6-Sol) to lead new runs and the runner-up at the
+5% handoff; see it with `python "{root / 'orchestrator.py'}" lead selected`. When
+you start a run yourself, pass `--lead` with your own identity (claude, astra
+or sol). If the switch names a different lead, say so once and continue the
+work the user asked you to do.
+
 Give every native worker the operating guide and relevant authorized recall in
 its actual assignment. The guarded dispatcher supplies operating guidance itself,
 even with project recall disabled. Keep each provider's content permissions and

@@ -1,0 +1,38 @@
+{
+  "aggregation": [
+    {"name":"empty","args":[[]],"public":true,"expected":[],"invalid":false},
+    {"name":"known-zero","args":[[{"id":" A ","revision":0,"provider":" P ","status":"ok","tokens":0}]],"public":true,"expected":[{"provider":"p","attempts":1,"failures":0,"tokens":0,"unknown_attempts":0}],"invalid":false},
+    {"name":"all-unknown","args":[[{"id":"a","revision":0,"provider":"p","status":"ok","tokens":null}]],"public":true,"expected":[{"provider":"p","attempts":1,"failures":0,"tokens":null,"unknown_attempts":1}],"invalid":false},
+    {"name":"revision-beats-order","args":[[{"id":"a","revision":3,"provider":"Q","status":"ok","tokens":7},{"id":"a","revision":1,"provider":"p","status":"ok","tokens":1}]],"public":true,"expected":[{"provider":"q","attempts":1,"failures":0,"tokens":7,"unknown_attempts":0}],"invalid":false},
+    {"name":"normalized-duplicate","args":[[{"id":" A ","revision":0,"provider":" P ","status":"ok","tokens":1},{"id":"a","revision":0,"provider":"p","status":"ok","tokens":1}]],"public":true,"expected":[{"provider":"p","attempts":1,"failures":0,"tokens":1,"unknown_attempts":0}],"invalid":false},
+    {"name":"partial-and-failed","args":[[{"id":"a","revision":0,"provider":"p","status":"ok","tokens":0},{"id":"b","revision":0,"provider":"p","status":"error","tokens":null}]],"public":true,"expected":[{"provider":"p","attempts":2,"failures":1,"tokens":0,"unknown_attempts":1}],"invalid":false},
+    {"name":"cancelled-winner","args":[[{"id":"a","revision":0,"provider":"p","status":"ok","tokens":1},{"id":"a","revision":1,"provider":"p","status":"cancelled","tokens":1}]],"public":true,"expected":[],"invalid":false},
+    {"name":"obsolete-conflict","args":[[{"id":"a","revision":2,"provider":"p","status":"ok","tokens":1},{"id":"a","revision":0,"provider":"p","status":"ok","tokens":2},{"id":"a","revision":0,"provider":"p","status":"ok","tokens":3}]],"public":true,"expected":null,"invalid":true},
+    {"name":"invalid-cancelled","args":[[{"id":"a","revision":0,"provider":"p","status":"cancelled","tokens":true}]],"public":true,"expected":null,"invalid":true},
+    {"name":"provider-sort","args":[[{"id":"a","revision":0,"provider":"z","status":"ok","tokens":1},{"id":"b","revision":0,"provider":"a","status":"ok","tokens":1}]],"public":true,"expected":[{"provider":"a","attempts":1,"failures":0,"tokens":1,"unknown_attempts":0},{"provider":"z","attempts":1,"failures":0,"tokens":1,"unknown_attempts":0}],"invalid":false}
+  ],
+  "allocation": [
+    {"name":"empty","args":[[],3],"public":true,"expected":{"allocations":[],"remaining":3},"invalid":false},
+    {"name":"tie-by-canonical-id","args":[[{"id":" Z ","weight":1,"limit":10},{"id":" A ","weight":1,"limit":10}],1],"public":true,"expected":{"allocations":[{"id":"a","slots":1},{"id":"z","slots":0}],"remaining":0},"invalid":false},
+    {"name":"weighted-remainders","args":[[{"id":"a","weight":3,"limit":10},{"id":"b","weight":2,"limit":10},{"id":"c","weight":1,"limit":10}],7],"public":true,"expected":{"allocations":[{"id":"a","slots":4},{"id":"b","slots":2},{"id":"c","slots":1}],"remaining":0},"invalid":false},
+    {"name":"redistribute-capped-share","args":[[{"id":"a","weight":9,"limit":1},{"id":"b","weight":1,"limit":10}],6],"public":true,"expected":{"allocations":[{"id":"a","slots":1},{"id":"b","slots":5}],"remaining":0},"invalid":false},
+    {"name":"all-caps-exhausted","args":[[{"id":"a","weight":1,"limit":2},{"id":"b","weight":7,"limit":0}],8],"public":true,"expected":{"allocations":[{"id":"a","slots":2},{"id":"b","slots":0}],"remaining":6},"invalid":false},
+    {"name":"zero-slots-sorted","args":[[{"id":"b","weight":1,"limit":10},{"id":"a","weight":1,"limit":10}],0],"public":true,"expected":{"allocations":[{"id":"a","slots":0},{"id":"b","slots":0}],"remaining":0},"invalid":false},
+    {"name":"normalized-duplicate-invalid","args":[[{"id":" A ","weight":1,"limit":10},{"id":"a","weight":1,"limit":10}],3],"public":true,"expected":null,"invalid":true},
+    {"name":"validate-even-zero","args":[[{"id":"p","weight":false,"limit":10}],0],"public":true,"expected":null,"invalid":true},
+    {"name":"iterated-cap-removal","args":[[{"id":"a","weight":10,"limit":1},{"id":"b","weight":2,"limit":3},{"id":"c","weight":1,"limit":20}],10],"public":true,"expected":{"allocations":[{"id":"a","slots":1},{"id":"b","slots":3},{"id":"c","slots":6}],"remaining":0},"invalid":false},
+    {"name":"huge-integers","args":[[{"id":"a","weight":1000000000000000000000000000001,"limit":100000000000000000000000000000000000000000000000000},{"id":"b","weight":1000000000000000000000000000000,"limit":100000000000000000000000000000000000000000000000000}],1000000000000000000000000000001],"public":true,"expected":{"allocations":[{"id":"a","slots":500000000000000000000000000001},{"id":"b","slots":500000000000000000000000000000}],"remaining":0},"invalid":false}
+  ],
+  "summary": [
+    {"name":"empty","args":[[],{"allocations":[],"remaining":0}],"public":true,"expected":"provider\tattempts\tfailures\ttokens\tslots\nTOTAL\t0\t0\t-\t0\nUNASSIGNED\t0\n","invalid":false},
+    {"name":"zero-measured","args":[[{"provider":"p","attempts":1,"failures":0,"tokens":0,"unknown_attempts":0}],{"allocations":[{"id":"p","slots":2}],"remaining":0}],"public":true,"expected":"provider\tattempts\tfailures\ttokens\tslots\np\t1\t0\t0\t2\nTOTAL\t1\t0\t0\t2\nUNASSIGNED\t0\n","invalid":false},
+    {"name":"join-union-and-partial","args":[[{"provider":"b","attempts":2,"failures":1,"tokens":0,"unknown_attempts":1}],{"allocations":[{"id":"a","slots":3}],"remaining":4}],"public":true,"expected":"provider\tattempts\tfailures\ttokens\tslots\na\t0\t0\t-\t3\nb\t2\t1\t0+\t0\nTOTAL\t2\t1\t0+\t3\nUNASSIGNED\t4\n","invalid":false},
+    {"name":"all-unknown","args":[[{"provider":"p","attempts":1,"failures":0,"tokens":null,"unknown_attempts":1}],{"allocations":[],"remaining":0}],"public":true,"expected":"provider\tattempts\tfailures\ttokens\tslots\np\t1\t0\t?\t0\nTOTAL\t1\t0\t?\t0\nUNASSIGNED\t0\n","invalid":false},
+    {"name":"escape-provider","args":[[{"provider":"a\\b\tc\rd\ne","attempts":1,"failures":0,"tokens":1,"unknown_attempts":0}],{"allocations":[],"remaining":0}],"public":true,"expected":"provider\tattempts\tfailures\ttokens\tslots\na\\\\b\\tc\\rd\\ne\t1\t0\t1\t0\nTOTAL\t1\t0\t1\t0\nUNASSIGNED\t0\n","invalid":false},
+    {"name":"mixed-measurement-total","args":[[{"provider":"b","attempts":1,"failures":0,"tokens":null,"unknown_attempts":1},{"provider":"a","attempts":1,"failures":0,"tokens":2,"unknown_attempts":0}],{"allocations":[],"remaining":0}],"public":true,"expected":"provider\tattempts\tfailures\ttokens\tslots\na\t1\t0\t2\t0\nb\t1\t0\t?\t0\nTOTAL\t2\t0\t2+\t0\nUNASSIGNED\t0\n","invalid":false},
+    {"name":"inconsistent-unknown-count","args":[[{"provider":"p","attempts":1,"failures":0,"tokens":0,"unknown_attempts":1}],{"allocations":[],"remaining":0}],"public":true,"expected":null,"invalid":true},
+    {"name":"canonical-only","args":[[{"provider":" P ","attempts":1,"failures":0,"tokens":1,"unknown_attempts":0}],{"allocations":[],"remaining":0}],"public":true,"expected":null,"invalid":true},
+    {"name":"duplicate-allocation","args":[[],{"allocations":[{"id":"p","slots":1},{"id":"p","slots":2}],"remaining":0}],"public":true,"expected":null,"invalid":true},
+    {"name":"bool-count-invalid","args":[[{"provider":"p","attempts":true,"failures":0,"tokens":1,"unknown_attempts":0}],{"allocations":[],"remaining":0}],"public":true,"expected":null,"invalid":true}
+  ]
+}

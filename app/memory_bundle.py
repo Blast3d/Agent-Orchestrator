@@ -175,13 +175,21 @@ def record_accepted_bundle(task_store, job_id, bundle):
                    'status':'writing','request_sha256':request_hash,'source_sha256':source_hash,
                    'memory_id':None,'memory_ids':[],'retryable':False,'updated_at':timestamp()}
         write_json(receipt_path,receipt)
+        brain = None
         try:
-            ids, relations, explanations = _insert(BrainStore(root),result,bundle)
+            brain = BrainStore(root)
+            ids, relations, explanations = _insert(brain,result,bundle)
         except (ValueError,StorageLimitError):
             # Validation/admission rolls back the SQLite transaction. An I/O or
             # arbitrary interruption remains writing/uncertain, never guessed safe.
             receipt.update(status='error',retryable=True,updated_at=timestamp())
             write_json(receipt_path,receipt)
+            raise
+        except TimeoutError:
+            # A busy Brain lock that was never acquired means no write began.
+            if brain is None or not getattr(brain,'write_lock_acquired',False):
+                receipt.update(status='error',retryable=True,updated_at=timestamp())
+                write_json(receipt_path,receipt)
             raise
         receipt.update(status='remembered',memory_id=next(iter(ids.values())),memory_ids=list(ids.values()),
                        memory_keys=ids,relation_ids=relations,relation_evidence=explanations,
@@ -233,6 +241,18 @@ def capture_run(root, run_id, bundle, *, owner, session, generation, reviewer, n
             job_id = old.get('job_id')
             if not isinstance(job_id,str) or not re.fullmatch(r'[a-f0-9]{32}',job_id):
                 raise ValueError('Closeout journal has an invalid task identifier')
+            if old.get('status') == 'importing' and not (store.directory(job_id) / 'result.json').exists():
+                # The journal was saved but the artifact result was not, so nothing reached the Brain.
+                # Finish the same deterministic import rather than failing every retry.
+                record = read_json(store.directory(job_id) / 'record.json',root)
+                if (not isinstance(record,dict) or record.get('job_id') != job_id
+                        or record.get('status') != 'preparing' or record.get('finalized_at')):
+                    raise ValueError('Closeout journal does not match its canonical imported evidence')
+                record.update(status='awaiting_review',execution_status='succeeded',review_status='pending',
+                              response=json.dumps({'knowledge':bundle,'evidence':proof},ensure_ascii=False),
+                              finalized_at=timestamp(),ended_at=timestamp(),provider_calls=0,
+                              artifact_origin='reviewed-run-closeout')
+                store.save(job_id,record)
             result = read_json(store.directory(job_id) / 'result.json',root,8*1024**2)
             if (not isinstance(result,dict) or result.get('job_id') != job_id
                     or result.get('run_id') != run_id or result.get('assignment_project_id') != project

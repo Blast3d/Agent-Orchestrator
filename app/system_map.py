@@ -49,7 +49,9 @@ def _validate(data):
 def render_map(root=ROOT):
     """Return HTML text from fixed maintained assets, without writes or launches."""
     assets = Path(root) / 'app' / 'assets'
-    template = (assets / 'system-map-template.html').read_text(encoding='utf-8')
+    from workspace_navigation import THEME
+    # Shared tokens go in before the data, so map text never reaches the style placeholder.
+    template = (assets / 'system-map-template.html').read_text(encoding='utf-8').replace('/*__WORKSPACE_THEME__*/', THEME, 1)
     if template.count(MARKER) != 1:
         raise ValueError('System map template needs exactly one data placeholder')
     data = json.loads((assets / 'system-map-data.json').read_text(encoding='utf-8'))
@@ -103,6 +105,11 @@ def build_map(root=ROOT, output=None):
     target = Path(output).expanduser() if output is not None else Path(root) / 'runtime' / 'system-map.html'
     target = target.resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
+    if output is None:
+        # The standard saved map joins the shared workspace navigation; exports stay standalone.
+        from workspace_navigation import decorate_report, write_navigation_script
+        page = decorate_report(page, root, 'system-map')
+        write_navigation_script(root, directory=target.parent)
     _atomic_text(target, page)
     return {'output': str(target), 'bytes': len(page.encode('utf-8')), 'offline': True}
 

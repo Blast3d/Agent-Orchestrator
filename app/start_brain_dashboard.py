@@ -49,6 +49,27 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def _start_server(argv, root):
+    kwargs = {'stdin': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL,
+              'stderr': subprocess.DEVNULL, 'cwd': str(root), 'close_fds': True}
+    if os.name != 'nt':
+        return subprocess.Popen(argv, start_new_session=True, **kwargs)
+    # Hiding a console does not detach its process from an IDE/agent job.
+    # Such jobs can terminate every child when the command session is cleaned up.
+    flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_BREAKAWAY_FROM_JOB
+    try:
+        return subprocess.Popen(argv, creationflags=flags, **kwargs)
+    except OSError as error:
+        if getattr(error, 'winerror', None) != 5:
+            raise
+        # Some managed jobs forbid breakaway. Preserve ordinary launching there,
+        # but do not claim that the service can outlive that job.
+        process = subprocess.Popen(argv, creationflags=subprocess.CREATE_NO_WINDOW, **kwargs)
+        print('Windows kept the dashboard attached to this launcher. If closing the '
+              'terminal stops it, open its desktop launcher instead.', file=sys.stderr)
+        return process
+
+
 def open_dashboard(root=ROOT,open_browser=True,*,service=SERVICE,script='brain_dashboard.py',state_name='brain-dashboard'):
     root=Path(root).resolve()
     state_path=safe_path(root,root/('runtime/'+state_name+'.json'))
@@ -59,12 +80,8 @@ def open_dashboard(root=ROOT,open_browser=True,*,service=SERVICE,script='brain_d
         reused=state is not None
         if state is None:
             state_path.unlink(missing_ok=True)
-            kwargs={'stdin':subprocess.DEVNULL,'stdout':subprocess.DEVNULL,'stderr':subprocess.DEVNULL,
-                    'cwd':str(root),'close_fds':True}
-            if os.name=='nt':kwargs['creationflags']=subprocess.CREATE_NO_WINDOW
-            else:kwargs['start_new_session']=True
-            process=subprocess.Popen([sys.executable,str(Path(__file__).with_name(script)),
-                '--root',str(root),'--port','0','--state-file',str(state_path)],**kwargs)
+            process=_start_server([sys.executable,str(Path(__file__).with_name(script)),
+                '--root',str(root),'--port','0','--state-file',str(state_path)],root)
             deadline=time.monotonic()+12
             while time.monotonic()<deadline and process.poll() is None:
                 state=running_state(state_path,service)

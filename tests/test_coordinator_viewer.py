@@ -259,6 +259,14 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(provider['model'], 'opus')
         self.model_policy.assert_called_with('opus')
 
+    def test_pinned_opus_5_5_receiving_model_is_labeled_opus(self):
+        state = self.coordinator.read()
+        state['handoff']['launch']['model'] = 'claude-opus-5-5'
+        provider = self.store.provider(state)
+        self.assertEqual(provider['name'], 'Claude / Opus')
+        self.assertEqual(provider['model'], 'claude-opus-5-5')
+        self.model_policy.assert_called_with('claude-opus-5-5')
+
     def test_paused_legacy_fable_preserves_history_but_cannot_attach_or_interact(self):
         self.model_policy.side_effect = ValueError('Claude Fable is paused by the user until further notice')
         state = self.coordinator.read()
@@ -449,6 +457,35 @@ class StoreTests(unittest.TestCase):
         self.assertFalse(self.store.history(self.run.name)['available'])
         self.assertEqual(self.opened, [])
 
+    def test_sol_is_a_codex_lead_that_can_bind_its_conversation(self):
+        state = self.coordinator.read()
+        state.update(owner='sol', session='logical-sol-session')
+        self.coordinator.save(state)
+        transcript = self.home / '.codex/sessions/2026/09/27' / ('rollout-2026-09-27-' + ACTUAL_SESSION + '.jsonl')
+        append_rows(transcript, [
+            {'type': 'session_meta', 'payload': {'id': ACTUAL_SESSION, 'cwd': str(self.root)}},
+            {'type': 'response_item', 'payload': {'type': 'message', 'role': 'assistant', 'channel': 'final',
+                'content': [{'type': 'output_text', 'text': 'Sol conversation'}]}},
+        ])
+        provider = self.store.provider(state)
+        self.assertEqual((provider['name'], provider['format']), ('Codex / Sol', 'codex'))
+        self.store.bind(self.run.name, 'codex', ACTUAL_SESSION)
+        self.assertIn('Sol conversation', json.dumps(self.store.history(self.run.name)))
+        summary = self.store.summary(self.coordinator.read(), {})
+        self.assertEqual((summary['lead'], summary['lead_label']), ('sol', 'Sol'))
+        self.assertEqual(self.opened, [])
+
+    def test_pending_handoff_to_a_codex_lead_does_not_show_a_claude_console(self):
+        state = self.coordinator.read()
+        state['status'] = 'handoff_ready'
+        state['handoff'] = dict(state['handoff'], to='sol', receiving_model='gpt-6-sol')
+        state['handoff'].pop('launch', None)
+        provider = self.store.provider(state)
+        self.assertEqual(provider['format'], 'codex')
+        self.assertEqual(provider['name'], 'Codex / Sol')
+        self.assertFalse(provider['can_attach'])
+        self.assertIn('claim', provider['history_note'])
+
     def test_run_identifiers_cannot_read_other_directories(self):
         for identifier in ('../outside', str(self.run), self.run.name + '/../outside', '.', ''):
             with self.subTest(identifier=identifier):
@@ -522,7 +559,7 @@ class StoreTests(unittest.TestCase):
             detail = self.store.detail(self.run.name)
         self.assertEqual(detail['memory_projects'], ['shared-library'])
         self.assertEqual(detail['activity'], expected)
-        activity.assert_called_once_with(self.root.resolve(), self.run.name, ['shared-library'], home=self.home.resolve())
+        activity.assert_called_once_with(self.root.resolve(), self.run.name, home=self.home.resolve())
 
 
 class FakeHTTPStore:
@@ -597,6 +634,25 @@ class HTTPTests(unittest.TestCase):
             with self.subTest(headers=headers, authorized=authorized):
                 status, _, _ = self.request(path='/api/runs', headers=headers, authorized=authorized)
                 self.assertEqual(status, 403)
+        self.assertEqual(self.store.opened, [])
+
+    def test_lead_switch_reads_freely_and_changes_only_with_valid_intent(self):
+        from unittest.mock import patch
+        with patch('lead_selection.describe', return_value={'lead': 'astra', 'model_calls': 0}) as reader, \
+                patch('lead_selection.select_lead', return_value={'lead': 'sol', 'model_calls': 0}) as change:
+            status, _, body = self.request(path='/api/lead')
+            self.assertEqual((status, json.loads(body)['lead']), (200, 'astra'))
+            reader.assert_called_once_with()
+            for payload in ({}, {'lead': 'fable'}, {'lead': 1}, {'lead': 'sol', 'extra': True}):
+                with self.subTest(payload=payload):
+                    self.assertEqual(self.request('POST', '/api/lead', payload=payload)[0], 400)
+            self.assertEqual(self.request('POST', '/api/lead', payload={'lead': 'sol'}, authorized=False)[0], 403)
+            self.assertEqual(self.request('POST', '/api/lead', payload={'lead': 'sol'},
+                                          headers={'Origin': 'https://foreign.example'})[0], 403)
+            change.assert_not_called()
+            status, _, body = self.request('POST', '/api/lead', payload={'lead': 'sol'})
+            self.assertEqual((status, json.loads(body)['lead']), (200, 'sol'))
+            change.assert_called_once_with('sol')
         self.assertEqual(self.store.opened, [])
 
     def test_monitor_reads_do_not_launch_and_mutations_require_valid_intent(self):

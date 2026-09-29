@@ -280,5 +280,92 @@ class AdvisoryAdmissionTests(unittest.TestCase):
         self.assertEqual(result['windows'][0]['available_pct'], 37)
 
 
+def _ts(moment):
+    return moment.isoformat().replace('+00:00', 'Z')
+
+
+def _period_policy(pools):
+    return _policy(worker_pools={'coder': pools, 'local-chat': []})
+
+
+class ReservationPeriodTests(unittest.TestCase):
+    """Estimates must not outlive the window they were charged to or a stale reading."""
+
+    def test_finished_work_after_a_stale_reading_is_reported_but_does_not_hold(self):
+        stale = _window(99, NOW - timedelta(hours=40), max_age=600, reset_at=_ts(NOW + timedelta(days=5)))
+        finished = {f'r{i}': {'pools': ['codex-weekly'], 'estimate_pct': 3,
+                              'created_at': _ts(NOW - timedelta(hours=30)),
+                              'finished_at': _ts(NOW - timedelta(hours=29))} for i in range(27)}
+        result = evaluate_advisory(_period_policy(['codex-weekly']), _data({'codex-weekly': stale}, finished),
+                                   'coder', 'small', NOW)
+        self.assertTrue(result['allowed'])
+        window = result['windows'][0]
+        self.assertEqual(window['reserved_pct'], 0)
+        self.assertEqual(window['unsettled_finished_pct'], 81)
+        self.assertEqual(window['available_pct'], 99)
+        self.assertTrue(any('not counted' in warning for warning in result['warnings']))
+
+    def test_pending_work_still_holds_on_a_stale_reading(self):
+        stale = _window(99, NOW - timedelta(hours=40), max_age=600, reset_at=_ts(NOW + timedelta(days=5)))
+        pending = {'r1': {'pools': ['codex-weekly'], 'estimate_pct': 81,
+                          'created_at': _ts(NOW - timedelta(hours=1)), 'finished_at': None}}
+        result = evaluate_advisory(_period_policy(['codex-weekly']), _data({'codex-weekly': stale}, pending),
+                                   'coder', 'small', NOW)
+        self.assertFalse(result['allowed'])
+        self.assertEqual(result['windows'][0]['pending_pct'], 81)
+
+    def test_finished_work_after_a_fresh_reading_still_counts(self):
+        fresh = _window(30, NOW - timedelta(seconds=30), max_age=600)
+        finished = {'r1': {'pools': ['codex-weekly'], 'estimate_pct': 15,
+                           'created_at': _ts(NOW - timedelta(minutes=5)), 'finished_at': _ts(NOW - timedelta(seconds=10))}}
+        result = evaluate_advisory(_period_policy(['codex-weekly']), _data({'codex-weekly': fresh}, finished),
+                                   'coder', 'small', NOW)
+        self.assertFalse(result['allowed'])
+        self.assertEqual(result['windows'][0]['reserved_pct'], 15)
+
+    def test_reservations_created_before_the_current_window_do_not_count(self):
+        window = _window(60, reset_at=_ts(NOW + timedelta(hours=2)))
+        old = {'r1': {'pools': ['claude-five-hour'], 'estimate_pct': 45, 'outcome': 'recovery_hold',
+                      'created_at': _ts(NOW - timedelta(days=20)), 'finished_at': None}}
+        result = evaluate_advisory(_period_policy(['claude-five-hour']), _data({'claude-five-hour': window}, old),
+                                   'coder', 'small', NOW)
+        self.assertTrue(result['allowed'])
+        self.assertEqual(result['windows'][0]['reserved_pct'], 0)
+        current = {'r1': dict(old['r1'], created_at=_ts(NOW - timedelta(hours=1)))}
+        held = evaluate_advisory(_period_policy(['claude-five-hour']), _data({'claude-five-hour': window}, current),
+                                 'coder', 'small', NOW)
+        self.assertFalse(held['allowed'])
+
+    def test_window_period_bounds_reservations_without_a_reset_time(self):
+        for key, old_age, recent_age in (('grok-weekly', timedelta(days=8), timedelta(days=2)),
+                                         ('agy:gemini-weekly', timedelta(days=8), timedelta(days=2)),
+                                         ('notebooklm-chat-daily', timedelta(hours=25), timedelta(hours=2)),
+                                         ('codex-provider-block', timedelta(days=10), timedelta(days=6))):
+            with self.subTest(key=key):
+                data = _data({key: _window(30)}, {'r1': {'pools': [key], 'estimate_pct': 16,
+                                                          'created_at': _ts(NOW - old_age), 'finished_at': None}})
+                self.assertTrue(evaluate_advisory(_period_policy([key]), data, 'coder', 'small', NOW)['allowed'])
+                data['reservations']['r1']['created_at'] = _ts(NOW - recent_age)
+                self.assertFalse(evaluate_advisory(_period_policy([key]), data, 'coder', 'small', NOW)['allowed'])
+
+    def test_passed_reset_drops_earlier_reservations_and_keeps_later_ones(self):
+        window = _window(10, NOW - timedelta(hours=3), max_age=600, reset_at=_ts(NOW - timedelta(hours=1)))
+        reservations = {
+            'before': {'pools': ['claude-five-hour'], 'estimate_pct': 50,
+                       'created_at': _ts(NOW - timedelta(hours=2)), 'finished_at': None},
+            'after': {'pools': ['claude-five-hour'], 'estimate_pct': 5,
+                      'created_at': _ts(NOW - timedelta(minutes=30)), 'finished_at': None}}
+        result = evaluate_advisory(_period_policy(['claude-five-hour']),
+                                   _data({'claude-five-hour': window}, reservations), 'coder', 'small', NOW)
+        self.assertTrue(result['allowed'])
+        self.assertEqual(result['windows'][0]['pending_pct'], 5)
+
+    def test_invalid_reservation_creation_time_raises(self):
+        data = _data({'codex-weekly': _window(90)},
+                     {'r1': {'pools': ['codex-weekly'], 'estimate_pct': 3, 'created_at': 'yesterday'}})
+        with self.assertRaises(ValueError):
+            evaluate_advisory(_period_policy(['codex-weekly']), data, 'coder', 'small', NOW)
+
+
 if __name__ == '__main__':
     unittest.main()

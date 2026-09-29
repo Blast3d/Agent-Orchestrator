@@ -101,6 +101,17 @@ class DispatchTests(unittest.TestCase):
         self.invoke.assert_not_called()
         self.guard.check.assert_not_called()
 
+    def test_bridge_preflight_happens_before_any_memory_lookup(self):
+        from brain_store import BrainStore
+        self.args.project = 'synthetic'
+        self.args.assignment_id = 'missing-bridge'
+        with patch.object(vscode_bots, 'select_bridge', side_effect=ValueError('Enable VS Code Bots.')), \
+                patch.object(BrainStore, 'search', side_effect=AssertionError('No lookup before readiness')):
+            result = self.run_task()
+        self.assertEqual(result['status'], 'held')
+        self.guard.check.assert_not_called()
+        self.invoke.assert_not_called()
+
     def test_quota_hold_prevents_a_model_request(self):
         self.guard.check.return_value = {'allowed': False}
         self.assertEqual(self.run_task()['status'], 'held')

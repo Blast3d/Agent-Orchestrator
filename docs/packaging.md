@@ -34,8 +34,9 @@ After choosing this installation as the maintained home, run:
 This also installs startup instructions for Codex and Claude to load the
 Orchestrator workflow automatically for substantial work. The shared operating
 guide and `start` / `closeout` commands are included in the portable package.
-See [startup and closeout](startup-and-closeout.md). The viewer's **Memory Brain**
-button opens scoped memory beside the **Usage monitor** toggle.
+See [startup and closeout](startup-and-closeout.md). The shared navigation's **Memory**
+link opens scoped memory; background usage checks are switched in the viewer's
+Bot readiness panel.
 
 The general `doctor` command checks those global integrations too. `Setup.cmd`
 and `scripts/check_package.py` check portable components without installing global

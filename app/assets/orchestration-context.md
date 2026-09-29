@@ -56,6 +56,13 @@ Curate verified native knowledge through `brain capture`. Finalize its evidence
 files before capture; later status belongs in separate records. Saved, retrieved,
 included-in-input, and reviewed-useful memory are separate observations.
 
+Keep measured task duration and usage recallable for future planning. New hosted
+review episodes include available performance data automatically. For native
+builds, curate a dated run-level snapshot of elapsed time, interruptions and
+observed provider usage; an artifact-import task is not the build's duration.
+Separate wall time, execution time, tokens, reported prices and verified charges.
+Keep missing measurements unknown and do not infer efficiency from one sample.
+
 Complete the contribution ledger, generate the standard audit and project map,
 then run `orchestrator.py closeout`. Resolve missing receipts, pending work,
 unattributed accepted work, or invalid reports before claiming completion.

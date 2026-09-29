@@ -75,10 +75,14 @@ def parse_rate_limits(result: object, observed_at: str | None = None) -> dict:
     for bucket_id, bucket in buckets:
         if not isinstance(bucket_id, str) or not isinstance(bucket, dict):
             raise QuotaError("Codex returned an invalid quota bucket.")
-        known_bucket_fields = {"credits", "individualLimit", "limitId", "limitName",
+        known_bucket_fields = {"credits", "individualLimit", "limitId", "limitName", "normalModelSlug",
             "planType", "primary", "secondary", "rateLimitReachedType", "spendControlReached"}
         if set(bucket) - known_bucket_fields:
             raise QuotaError("Codex quota schema changed; revalidate all applicable limits.")
+        # Current official schema: display/reasoning metadata for a quota alias,
+        # not an additional allowance. Never expose the supplied model label.
+        if bucket.get("normalModelSlug") is not None and not isinstance(bucket["normalModelSlug"], str):
+            raise QuotaError("Codex returned invalid quota model metadata.")
         prefix = "codex" if bucket_id == "codex" else (
             "codex-bucket-" + hashlib.sha256(bucket_id.encode()).hexdigest()[:12]
         )

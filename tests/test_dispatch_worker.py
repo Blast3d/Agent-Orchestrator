@@ -350,6 +350,21 @@ class BoundaryTests(unittest.TestCase):
             finally:
                 claim.close()
 
+    def test_readiness_preflight_does_not_create_provider_input_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory) / 'uncreated'
+            command, stdin = dispatcher.cloud_command('grok', '', work, preflight=True)
+            self.assertTrue(command[0].endswith('grok.exe'))
+            self.assertIsNone(stdin)
+            self.assertFalse(work.exists())
+            command, stdin = dispatcher.cloud_command('gemini', '', work, preflight=True)
+            self.assertTrue(command[0].endswith('agy.exe'))
+            self.assertIsNone(stdin)
+            self.assertFalse(work.exists())
+            with self.assertRaises(ValueError):
+                dispatcher.cloud_command('grok', 'PRIVATE EVIDENCE', work, preflight=True)
+            self.assertFalse(work.exists())
+
     def test_claude_uses_native_executable_and_tool_boundary_flags(self):
         with tempfile.TemporaryDirectory() as directory:
             command, stdin = dispatcher.cloud_command('claude', 'Brief', Path(directory), 'sonnet')

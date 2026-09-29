@@ -114,7 +114,10 @@ unverified refresh, or missing executable), while suppressing arbitrary terminal
 output. Failed reads invalidate freshness but advisory mode permits work from
 the saved allowance. A successful
 retry confirms that reading only; it does not repair an intermittent reader.
-Keep prior uncertain reservations until reconciliation.
+Keep prior uncertain reservations until reconciliation. Admission counts a
+reservation only inside the account window it was made in; after that window
+resets it stays on record but no longer holds work. Finished-job estimates hold
+only while the reading is fresh; a stale reading reports them as unsettled.
 
 The `status` command reports quota eligibility. Check the worker registry and
 dispatcher restrictions separately: fresh Antigravity allowance alone does not

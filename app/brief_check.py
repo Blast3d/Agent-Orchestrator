@@ -13,7 +13,7 @@ import re
 import sys
 
 
-WORKERS = ('claude', 'grok', 'gemini', 'local-chat', 'vscode-copilot')
+WORKERS = ('claude', 'codex', 'grok', 'gemini', 'local-chat', 'vscode-copilot')
 SECTION_NAMES = {
     'objective': 'Objective',
     'inputs': 'Inputs',
@@ -24,7 +24,8 @@ ALIASES = {
     'objective': ('objective', 'goal', 'outcome', 'purpose'),
     'inputs': ('inputs', 'context', 'sources'),
     'output': ('output', 'deliverable', 'deliverables', 'expected output', 'required output'),
-    'acceptance': ('acceptance', 'acceptance criteria', 'success criteria', 'checks', 'definition of done'),
+    'acceptance': ('acceptance', 'acceptance checks', 'acceptance criteria', 'success criteria', 'checks',
+                   'definition of done'),
 }
 LOOKUP = {alias: section for section, aliases in ALIASES.items() for alias in aliases}
 LIMITATION = 'This checks the brief structure; a reviewer must still judge clarity and correctness.'
@@ -162,7 +163,7 @@ def inspect_brief(text, worker='claude'):
     """Return a JSON-safe report without state changes, inference or execution."""
     report = _new_report(text)
     if worker not in WORKERS:
-        report['errors'].append('Choose a supported worker: claude, grok, gemini, local-chat or vscode-copilot.')
+        report['errors'].append('Choose a supported worker: claude, codex, grok, gemini, local-chat or vscode-copilot.')
     if not isinstance(text, str):
         report['errors'].append('The brief must be text.')
         return _finish(report)

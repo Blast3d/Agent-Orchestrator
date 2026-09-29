@@ -17,15 +17,16 @@ def main():
                'contributions': ('contribution_cli.py', None), 'visuals': ('project_visuals.py', None),
                'inbox': ('task_inbox.py', None), 'brief-check': ('brief_check.py', None),
                'summary': ('task_summary_repair.py', None), 'lead': ('coordinator_handoff.py', None),
-               'brain': ('brain_cli.py', None), 'watch': ('watch_coordinator.py', None),
+               'brain': ('brain_cli.py', None), 'jev': ('jev_cli.py', None), 'watch': ('watch_coordinator.py', None),
                'team': ('team_planner.py', None), 'remember': ('automatic_memory.py', None),
                'vscode-bots': ('vscode_bots.py', None),
                'viewer': ('start_coordinator_viewer.py', None), 'map': ('system_map.py', None)}
     if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
-        print('Agent Orchestrator: ASTRA leads by default; configured Claude Opus can continue through an explicit handoff.\n'
-              'Commands: start, closeout, brain, lead, viewer, watch, team, remember, map, doctor, status, refresh, dashboard, inbox, summary, visuals, brief-check, run, review, contributions, tasks, monitor, stop-monitor, local, inventory, vscode-bots\n'
+        print('Agent Orchestrator: the lead switch picks Claude (Opus 5.5), ASTRA or Sol (see lead selected); the runner-up continues through an explicit handoff.\n'
+              'Commands: start, closeout, brain, jev, lead, viewer, watch, team, remember, map, doctor, status, refresh, dashboard, inbox, summary, visuals, brief-check, run, review, contributions, tasks, monitor, stop-monitor, local, inventory, vscode-bots\n'
               'Examples:\n  python orchestrator.py doctor\n  python orchestrator.py refresh --provider claude\n'
               '  python orchestrator.py run claude --prompt-file brief.txt --output answer.json --task review --size small\n'
+              '  python orchestrator.py run codex --prompt-file brief.txt --output answer.json --task review --codex-model sol\n'
               '  python orchestrator.py review JOB_ID --decision accepted --reviewer Codex --note "Verified against source and tests."')
         return 0
     action = sys.argv[1]

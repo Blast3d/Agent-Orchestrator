@@ -45,7 +45,7 @@ def _canonical(root, directory, job_id):
     return result
 
 
-def _payload(result, curated_payload):
+def _payload(result, curated_payload, *, include_performance=False):
     project = scope(result['assignment_project_id'])
     review = result['review']
     if curated_payload is not None:
@@ -60,7 +60,7 @@ def _payload(result, curated_payload):
     category = _compact(result.get('category'), 60, 'general')
     evidence = _compact(review.get('note'), 800, 'Accepted canonical review')
     assignment = _compact(result.get('assignment_id'), 140, result['job_id'])
-    return {
+    payload = {
         'project_id': project, 'kind': 'episode',
         'title': _compact('Accepted review: ' + task, 160, 'Accepted task review'),
         'content': 'Task: ' + task + '\nReview evidence: ' + evidence +
@@ -75,6 +75,14 @@ def _payload(result, curated_payload):
         'source': {'type': 'task', 'job_id': result['job_id'],
                    'review_sha256': digest(review)},
     }
+    if include_performance:
+        from task_performance import snapshot, measured, describe
+        performance = snapshot(result)
+        if measured(performance):
+            payload['content'] += '\n' + describe(performance)
+            payload['tags'] += ['performance','duration','usage','tokens']
+            payload['source']['performance_sha256'] = digest(performance)
+    return payload
 
 
 def _error(exc):
@@ -144,13 +152,20 @@ def _record_locked(root, directory, job_id, receipt, brain_factory, curated_payl
                     or not review['reviewer'].strip() or not isinstance(review.get('note'), str)
                     or len(review['note'].strip()) < 20 or len(review['note'].split()) < 4):
                 raise ValueError('Accepted source needs a named reviewer and validation evidence')
-            payload = _payload(result, curated_payload)
+            version = (existing.get('automatic_version',1) if existing and existing.get('source_sha256') else 2)
+            if type(version) is not int or version not in (1,2):
+                raise ValueError('Unknown automatic memory version; preserve its receipt')
+            payload = _payload(result, curated_payload, include_performance=version==2)
             source_hash = digest({key: result.get(key) for key in (
                 'job_id', 'assignment_project_id', 'response', 'finalized_at', 'review',
                 'task', 'category', 'assignment_id')})
+            if payload['source'].get('performance_sha256'):
+                source_hash = digest([source_hash, payload['source']['performance_sha256']])
             request_hash = digest(payload)
             receipt.update(project_id=payload['project_id'], source_sha256=source_hash,
                            request_sha256=request_hash)
+            if curated_payload is None:
+                receipt['automatic_version'] = version
             if existing:
                 receipt.update(existing)
                 if existing.get('status') == 'skipped' and not existing.get('source_sha256'):

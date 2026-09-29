@@ -1,0 +1,5 @@
+{
+  "astra": "Inspect local repository files, integrate changes and validate the result.",
+  "claude": "Review supplied code, reason about correctness and draft explanations.",
+  "grok": "Provide an independent technical review of supplied material."
+}

@@ -2,14 +2,113 @@
 
 Open **Open Brain Dashboard.cmd** from the application folder. It opens or reuses
 one small Python server on this computer. It does not start a model, install a
-graph server, call a provider, or register a new startup task.
+graph server or register a new startup task. When Jev is enabled for a project in
+`runtime/jev-config.json` (it is for `agent-orchestrator` and `openwhispr`), recall
+ranking sends bounded excerpts to OpenRouter and is billed per call; that includes
+startup, dispatch and `brain search` by default. Dashboard searches stay local
+unless **Use Jev ranking (OpenRouter, billed)** is selected. The retrieval method,
+including **Keywords only**, controls local candidate selection and does not itself
+control Jev. Use `python orchestrator.py brain search QUERY --project ID --no-jev`
+for a CLI search that stays local.
 
 The approved first version uses SQLite FTS5, reviewed facts/preferences, compact
 problem-action-outcome episodes, procedures, and dated relationships. Graphiti's
 episode provenance and temporal-fact concepts informed the design. This is our
-own implementation; Graphiti is not installed. Search uses keywords, explicit
-aliases, importance, age and up to two relationship hops. It does not provide
-embedding similarity or automatic semantic contradiction resolution.
+own implementation; Graphiti is not installed. Automatic search starts with
+keywords and aliases. A complete lexical match avoids semantic work; relationship
+questions can expand the graph. An explicitly configured embedding connector can
+help weak lexical matches. There is no automatic semantic contradiction resolution.
+
+## Adaptive retrieval
+
+An optional [Jev connector](jev-openrouter.md) can score the already-retrieved
+shortlist through OpenRouter for authorized projects. Task profiles tailor the
+scoring to implementation, review, research or handoff work. See the
+[memory workflow](jev-memory-workflow.md) for bot delivery, limits and planned
+use cases. Source review and forgetting remain enforced by the Brain.
+
+The search form's **Retrieval method** selector supports:
+
+| Choice | Work performed |
+| --- | --- |
+| Automatic | Keywords first; relationship queries add one graph hop. Weak or absent lexical matches may use the configured semantic index. |
+| Keywords only | FTS5, aliases, importance and age; no graph or embedding request. |
+| Keywords + relationships | Keywords plus one graph hop, without embedding requests. |
+| Semantic fallback | Keywords plus an explicit attempt to retrieve semantic matches; no graph expansion. |
+
+The dashboard's **Use Jev ranking** checkbox is off by default. Selecting it can
+make billed OpenRouter requests for any retrieval method, including **Keywords
+only** and **Deep**. An explicitly configured semantic connector is a separate
+provider path for **Semantic fallback**.
+
+The CLI accepts `--strategy auto|keyword|graph|semantic`. `--hops 0|1|2`
+overrides graph depth for `auto` or `graph`. The default is now adaptive rather
+than unconditional graph expansion. Keyword match quality is a routing heuristic,
+not a confidence percentage. Matching one filename does not count as an exact
+answer when other meaningful query constraints are absent.
+
+An empty active project returns immediately with no memory context or recall-trace
+write. Worker operating guidance still applies. A populated project with no matches
+still records a trace when storage permits. Graph traversal happens after any
+provider request so semantic seeds can reach related memories and current relation
+periods are checked. Network work does not hold the Brain lock. Sources and indexed
+content are checked again before context is supplied. Each lookup inspects at most
+128 distinct task sources across all stages, with fresh proof validation after
+network work. Task-sized recall uses separate search, ranking and delivery budgets:
+
+| Depth | Jev shortlist ceiling | Delivered memories | Context characters |
+| --- | ---: | ---: | ---: |
+| Compact | 16 | 6 | 8,000 |
+| Balanced | 48 | 12 | 16,000 |
+| Deep | 100 | 24 | 32,000 |
+
+These are ceilings, not targets. Fewer matches or large excerpts produce fewer
+delivered memories; unrelated project records never fill unused space. Local
+keyword search checks up to 1,000 rows and retains up to 100 candidates for deep
+recall. Jev only judges locally found candidates; it cannot discover unseen facts.
+Wider shortlists use bounded batches, at most eight requests and three concurrent
+requests per lookup. Byte limits can reduce the scored coverage, which is reported.
+A dashboard search with Jev selected has a 40-second Jev deadline: batches that could not finish
+before it are never started and keep their local order (the retrieval details say
+how many). The page waits 70 seconds; if it stops waiting, it says that ranking
+may still finish on the server and count toward usage, so wait before searching again.
+Low-confidence scores keep their existing positions. Semantic search still needs
+an explicitly configured index; Jev reranking is not an embedding index.
+
+Workers automatically select compact for tiny/small tasks, balanced for medium,
+and deep for large. Override with `--memory-depth compact|balanced|deep`.
+The Brain search form has a **Recall depth** selector; the CLI uses `--depth`.
+Startup defaults to balanced and accepts `--memory-depth`; its 64 KiB receipt
+ceiling can further reduce delivered records, recorded as `startup_delivery`.
+Direct library searches and CLI searches remain compact unless specified.
+
+More reviewed memories increase the chance of finding an applicable fix or decision.
+They do not guarantee faster work. Task size determines the context budget;
+project size alone does not force more text into every bot. One recall request,
+one newly captured review episode, and one supplied memory are different counters.
+Actual benefit requires a reviewed usefulness rating or a controlled task comparison.
+
+**How this memory was found** shows the route actually executed, lexical match
+quality, memory count, context characters, provider request count, and timings for
+keywords, graph expansion, semantic search, packing and saving the receipt. Lookup
+time excludes receipt saving; total elapsed time includes it. Saved stage timings
+are approximate because a receipt cannot include its own completed write time.
+Worker-memory details retain this evidence per task. Old records say the method was
+not recorded; missing token or charge information remains unknown. Supplied context
+is evidence of delivery, not proof that a provider read or benefited from it.
+
+Semantic retrieval is **off until explicitly configured and indexed**. See
+[the optional semantic connector](brain-semantic.md) for project authorization,
+indexing, provider limits, and deletion behavior. Neither startup nor search
+installs a model, builds an index automatically, or picks a paid service.
+
+For a small offline comparison from the source checkout, run
+`python benchmarks/brain_retrieval.py --output comparison.json`. It uses temporary
+synthetic memories and isolated searches, records each case/mode separately, and
+makes no provider requests. It measures retrieval behavior and overhead, not the
+speed, quality or cost of a whole bot task.
+
+For the complete timing and delivery sequence, parallel-worker limits, and cross-project linking workflow, see [Brain timing and linked projects](brain-timing-and-links.md).
 
 ## Dashboard workflow
 
@@ -17,17 +116,39 @@ Select a project, then search its memories or open a card to inspect its source,
 review and history. Add a memory with a source note; it enters **Pending review**.
 Approve it after checking the evidence. Link related approved memories, replace
 outdated facts with **Supersede**, or **Forget** unwanted memories. The graph is
-interactive: select nodes, drag and zoom. The overview/library graph shows a
-bounded recent window, not every stored memory; search finds older matching
-records. The review queue loads pending records separately.
+interactive: select nodes, drag and zoom. Drag the selected node's green **+** handle to another memory to save a typed connection. **Connect memory** offers a keyboard alternative and a project dropdown for explicitly reviewed cross-project reuse. Selected foreign evidence becomes a source-bound reference in this project; Forget and source validity still apply. Both the overview and **Relationships**
+view load up to **3,000 nodes** by default from a separate project graph feed.
+The 2D map fills a loose, irregular cluster with memories across its center.
+Toggle **3D view** for a globe: drag to spin continuously in either direction
+on both axes, Shift-drag to pan, and use
+**Reset rotation** to restore its orientation. Zoom, search, and opening memories
+work in both views. Turning off 3D returns to the 2D cluster.
+**Show up to** also offers 5,000 or 10,000. The caption gives the actual number
+shown and eligible project total, and reports any truncation. The library's
+200-record browsing window and worker recall limits do not limit this map.
+
+The canvas groups connected components without a continuous force simulation.
+Use **Find a memory in map** to locate a loaded node, then **Open memory** to
+inspect its evidence. Search results page ten at a time; increase the node limit
+to include older records outside the current map. Click a node or press Enter to
+open it, use arrow keys to move selection, drag the background to pan, drag nodes
+to rearrange, and use the wheel, zoom buttons or **Fit map**. Labels appear on
+hover/selection and when zoomed far enough into a small visible group.
+
+The graph feed contains compact titles, kinds and explicit connections for the
+selected project/local user. It includes approved records within their validity
+period and current connections between the selected nodes, up to 30,000 edges.
+It does not revalidate canonical source proofs or call a model; source checks
+still occur during recall. Full memory bodies load only when opening a node.
+The review queue loads pending records separately.
 
 The page polls the project's change feed every 10 seconds, starting from the
 head it loaded, so only later writes count. Memories written elsewhere (`brain
 propose`/`approve`, an accepted task's `--remember-file`, another dashboard
 window) are applied quietly when nothing would be disturbed: no open dialog, no
 active search, and not the Relationships view. Otherwise the Refresh button shows
-how many changes are waiting. Recall traces are not part of the feed; use Refresh
-to see new recall activity. A hidden tab does not poll.
+how many changes are waiting. Recall activity follows a separate recall revision
+(see below), not the memory change feed. A hidden tab does not poll.
 
 The **Orchestrator** crumb at the top opens the Orchestrator viewer, starting
 its server if it is not running. When the selected project is named after a run,
@@ -40,7 +161,7 @@ changes or a revoked task review exclude the old memory from recall. Dashboard
 record status reflects its memory review; source validation is repeated by search.
 
 Plain task sources and review-bound sources for the same task are validated
-independently from one canonical read per lookup. A missing, malformed or
+independently from one canonical read per validation phase. A missing, malformed or
 non-object canonical result excludes its dependent memories while other valid
 matches remain available. Search, export and vault responses include
 `source_validation` counts/reasons and warnings for these exclusions; zero
@@ -69,13 +190,17 @@ python orchestrator.py run claude --prompt-file brief.md --output answer.json --
 ```
 
 The dispatcher records recalled IDs, the exact bounded context, its hash and
-whether execution was initiated with that context, then appends at most six
-memories within 8,000 characters. This is a character bound, not an exact model
-token count. The query is part of the assignment contract. An identical repeated
+whether execution was initiated with that context, then appends at most 6, 12 or 24
+memories within the selected character budget. This is a character bound, not an exact model
+token count. The query and noncompact recall depth are part of the assignment contract. An identical repeated
 assignment returns its saved result without retrieving again or calling a model.
 Explicit fallback attempts use the same query and project but revalidate current
 memory when each attempt starts; each attempt records its own context and hash.
 The handoff plan records whether its memory context changed between attempts.
+Antigravity and VS Code worker transports have byte ceilings that include the
+operating guide and task. Delivery trims memory records to fit those ceilings,
+records `delivery.retrieved_count` versus `delivered_count`, and preserves source
+warnings. It never truncates the assigned task or guide to fit more memory.
 Incomplete briefs do not trigger retrieval. A quota-held task marks any prepared
 context as unsent. Copies retained in canonical task evidence survive later
 forgetting in the brain, so the audit can show exactly what the worker received.
@@ -85,6 +210,27 @@ Memory content grants no permissions and does not transfer leadership.
 Accepting a successful, project-scoped task now automatically stores a compact
 episode containing the task identity and the review note. This runs for both the
 normal CLI and `TaskStore.review` API, without a model call or raw-answer import.
+New automatic episodes also include a bounded **performance snapshot** when
+measurements exist: creation-to-finalization wall seconds, provider execution
+seconds, task size, observed models, normalized input/output/cache tokens,
+provider-reported cost, separately verified additional charges, and Brain/Jev
+recall overhead. Unknown measurements remain `null`; a reported model price is
+not an invoice, cache tokens are not double-counted, and a prepared memory
+packet is not counted as supplied until execution was requested.
+
+Find these with `brain search "performance duration retry cancellation" --project
+PROJECT --depth balanced`, or enter a specific task plus **performance duration
+usage** in the dashboard. The performance fields are tied to canonical source
+proofs; changed measurements exclude the old memory until reviewed. Existing
+receipts retain their original format and are not rewritten or resurrected after
+Forget. Native multi-agent run timing still needs a reviewed run-level capture:
+a short artifact-import task is not the duration of the entire build. Preserve
+interruptions, failed attempts and unmeasured native usage as explicit limitations
+when using historical observations for future planning.
+
+Open a measured episode to see **Task time and usage** as readable duration,
+token, cost and recall fields. Missing values say **Not recorded**. This display
+preserves the stored evidence; malformed or older records remain readable as text.
 The note should state what was verified and the useful outcome. This episode is
 review evidence; it does not claim to summarize the entire solution. Unscoped
 tasks are explicitly skipped, and rejected or unreviewed answers do not become
@@ -148,7 +294,10 @@ Limits: 10,000 memory records, 500 pending candidates, 30,000 relationships,
 characters; episodes have three fields of up to 1,000 characters each. Exact
 duplicates are collapsed only when source, tags, importance and validity also
 match. Semantic duplicates and contradictions need review. Forgetting restores
-record capacity. Search traces keep query hashes and IDs, not raw queries.
+record capacity. Search traces keep a plain SHA-256 hash of the JSON-encoded
+query and memory IDs, not the raw query. Short or predictable queries may be
+guessed from that hash. Canonical tasks and startup packets can retain raw queries
+as separate evidence.
 
 Search skips stale source hits before selecting its current candidates. It checks
 up to 1,000 candidate records and 128 distinct task sources; `recall_incomplete`

@@ -2,7 +2,6 @@
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
-import html
 import json
 import math
 import os
@@ -302,8 +301,11 @@ class Guard:
             cooldown = data['cooldowns'].get(key)
             if cooldown and instant(cooldown['until']) > now():
                 result['reasons'].append(f'{key}: provider rejected work; cooldown active')
+            from quota_admission import window_period_start
+            since = window_period_start(key, instant(window['reset_at']) if window.get('reset_at') else None, now())
             held = sum(r['estimate_pct'] for r in data['reservations'].values()
-                       if key in r['pools'] and (not r.get('finished_at') or instant(r['finished_at']) >= observed))
+                       if key in r['pools'] and (not r.get('finished_at') or instant(r['finished_at']) >= observed)
+                       and not (r.get('created_at') and instant(r['created_at']) < since))
             available = max(0, window['remaining_pct'] - held)
             result['windows'].append({'id': key, 'remaining_pct': round(window['remaining_pct'], 2),
                                       'reserved_pct': round(held, 2), 'available_pct': round(available, 2),
@@ -318,6 +320,24 @@ class Guard:
             result['allowed'] = False
             result['status'] = 'held'
         return result
+
+    def open_reservation_jobs(self, worker):
+        """Read job IDs from this worker's unfinished reservations."""
+        import re
+        with file_lock(self.root / 'state.lock'):
+            path = self.root / 'usage.json'
+            if not path.exists():
+                return []
+            data = json.loads(path.read_text(encoding='utf-8'))
+        jobs = set()
+        for reservation in data.get('reservations', {}).values():
+            if reservation.get('worker') != worker or reservation.get('finished_at') is not None:
+                continue
+            label = reservation.get('task')
+            match = re.search(r'\[job:([a-f0-9]{32})\]$', label) if isinstance(label, str) else None
+            if match:
+                jobs.add(match.group(1))
+        return sorted(jobs)
 
     def check(self, worker, size='small', reserve=False, task=None):
         with self.state() as data:
@@ -338,7 +358,8 @@ class Guard:
             if reservation.get('finished_at'):
                 raise ValueError('Reservation already completed')
             reservation.update({'finished_at': stamp(), 'outcome': status, 'reported_usage': usage})
-            # Hold the estimate until a quota reading taken after completion arrives.
+            # Hold the estimate until a fresh reading taken after completion arrives;
+            # advisory admission stops subtracting it once that reading goes stale.
 
     def block(self, worker, seconds=900):
         with self.state() as data:
@@ -386,6 +407,35 @@ class Guard:
         """Queue bounded collection without putting a quota CLI on the task path."""
         from background_usage import request_refresh
         return request_refresh(self.root, provider)
+
+    def queue_stale_refreshes(self, min_interval_seconds=300):
+        """Queue background readers for stale, reset or never-read providers; never waits."""
+        def provider_of(key):
+            return 'antigravity' if key.startswith('agy:') else key.split('-', 1)[0]
+        with self.state() as data:
+            windows = dict(data['windows'])
+            pools = {key for keys in data.get('worker_pools', {}).values() for key in keys}
+            pools.update(key for keys in self.policy['worker_pools'].values() for key in keys)
+        current = now()
+        observed, stale = set(), set()
+        for key, window in windows.items():
+            provider = provider_of(key)
+            observed.add(provider)
+            try:
+                expired = (current - instant(window['observed_at'])).total_seconds() > window['max_age_seconds']
+                reset = bool(window.get('reset_at')) and instant(window['reset_at']) <= current
+            except (KeyError, TypeError, ValueError):
+                expired, reset = True, False
+            if expired or reset:
+                stale.add(provider)
+        # A provider that has never been read is queued too; missing dynamic
+        # buckets of an already-read provider are not, or they would re-queue forever.
+        stale.update(provider_of(key) for key in pools if provider_of(key) not in observed)
+        from background_usage import request_refresh
+        queued = {}
+        for provider in sorted(stale & set(REFRESH_PROVIDERS)):
+            queued[provider] = request_refresh(self.root, provider, min_interval_seconds=min_interval_seconds)
+        return queued
 
     def _refresh_failure(self, target, exc):
         result = {'ok': False, 'reason': str(exc) if isinstance(exc, RuntimeError) else type(exc).__name__}
@@ -481,6 +531,22 @@ class Guard:
     def status(self):
         with self.state() as data:
             workers = [self.evaluate(data, worker) for worker in self.policy['worker_pools']]
+            from quota_admission import window_period_start
+            current = now()
+            for worker in workers:
+                measured = [window for window in worker['windows']
+                            if not window['id'].endswith('provider-block')]
+                if not measured:
+                    worker['active_reservation_count'] = 0
+                    continue
+                limiting = min(measured, key=lambda window: window['available_pct'])
+                key = limiting['id']
+                reset = instant(limiting['reset_at']) if limiting.get('reset_at') else None
+                since = window_period_start(key, reset, current)
+                worker['active_reservation_count'] = sum(
+                    1 for reservation in data['reservations'].values()
+                    if (not reservation.get('finished_at') and key in reservation.get('pools', [])
+                        and (not reservation.get('created_at') or instant(reservation['created_at']) >= since)))
             return {'updated_at': stamp(), 'snapshot_generated_at': stamp(),
                     'admission_mode': self.policy.get('quota_admission_mode', 'strict'),
                     'worker_start_threshold_pct': self.policy.get('worker_start_threshold_pct', 20),
@@ -490,56 +556,8 @@ class Guard:
 
     def dashboard(self):
         report = self.status()
-        rows = []
-        labels = {'codex': 'Codex', 'gemini': 'Gemini', 'antigravity-claude': 'Claude / GPT via Antigravity',
-                  'grok': 'Grok Build', 'grok-bot': 'Grok Bot', 'claude': 'Claude Code', 'local-chat': 'Local Qwen chat',
-                  'notebooklm-chat': 'NotebookLM · chat', 'notebooklm-audio': 'NotebookLM · audio',
-                  'notebooklm-slides': 'NotebookLM · slides'}
-        for worker in report['workers']:
-            windows = [w for w in worker['windows'] if not w['id'].endswith('provider-block')]
-            expiry = ''
-            if windows:
-                limiting = min(windows, key=lambda w: w['available_pct'])
-                value = limiting['available_pct']
-                detail = f'<strong>{value:g}% available</strong><div class="bar" aria-label="{value:g} percent available"><i style="width:{value}%"></i></div>'
-                reset = limiting.get('reset_display')
-                if limiting.get('reset_at'):
-                    reset = instant(limiting['reset_at']).astimezone().strftime('%b %d, %I:%M %p')
-                detail += '<small>' + (html.escape('Resets ' + reset) if reset else 'Reset time not supplied') + '</small>'
-                deadlines = []
-                # Admission flags also expire, even though they are not visible
-                # percentage bars. Mirror the exact freshness/reset gate in UI.
-                for window in worker['windows']:
-                    deadlines.append(instant(window['observed_at']).timestamp() + window['max_age_seconds'])
-                    if window.get('reset_at'):
-                        deadlines.append(instant(window['reset_at']).timestamp())
-                expiry = str(min(deadlines))
-            else:
-                detail = 'Runs on your computer' if worker['status'] == 'local' else 'Awaiting a current account reading'
-            reason = ''
-            if worker['status'] == 'held':
-                if worker['worker'].startswith('notebooklm'):
-                    reason = 'Check this feature’s allowance in NotebookLM before assigning work.'
-                elif not windows:
-                    reason = 'Complete account setup or refresh the official usage screen.'
-                else:
-                    reason = 'Quota needs refreshing or there is too little room for another task.'
-            rows.append('<tr data-valid-until="' + expiry + '"><td>' + html.escape(labels.get(worker['worker'], worker['worker'])) +
-                '</td><td class="badge ' + worker['status'] + '">' + ('QUOTA READY' if worker['status'] == 'ready' else worker['status'].upper()) + '</td><td>' +
-                detail + '<small class="reason">' + html.escape(reason) + '</small></td></tr>')
-        page = '''<!doctype html><html lang="en"><meta charset="utf-8"><meta http-equiv="refresh" content="30">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Model usage</title>
-<style>body{background:#10151f;color:#e6edf6;font:16px system-ui;margin:5vw;max-width:1100px}h1{font-size:36px}p,small{color:#aebbcf}table{border-collapse:collapse;width:100%;margin:2em 0}th,td{text-align:left;padding:18px 12px;border-bottom:1px solid #344055}small{display:block;margin-top:7px}.ready,.local{color:#7ce0b4}.held{color:#ffb4a5}.low{color:#ffd37d}strong{color:#e6edf6}.bar{height:5px;max-width:300px;background:#293447;border-radius:6px;margin-top:8px;overflow:hidden}.bar i{display:block;height:100%;background:#7ce0b4}.badge{font-size:12px;letter-spacing:.07em}td:first-child{min-width:180px}@media(max-width:650px){body{margin:20px;font-size:14px}td,th{padding:14px 7px}td:first-child{min-width:95px}}</style>
-<h1>Model usage</h1><p>Codex coordinates the work. Quota checks protect each worker's remaining allowance.</p>
-<p><strong>Warn at 20%. Preserve 10%.</strong> Larger tasks also need room for their estimated usage.
-Unknown or stale cloud quotas hold new assignments. Estimates are conservative planning allowances, not guarantees.</p>
-<table><thead><tr><th>Worker</th><th>Quota status</th><th>Available allowance</th></tr></thead><tbody>'''
-        page += ''.join(rows) + '</tbody></table><p>Updated ' + html.escape(report['updated_at']) + ' · ' + str(report['active_reservations']) + ' active reservations.</p>'
-        page += '''<p>Automatic readers refresh every five minutes while the monitor runs. This page refreshes every 30 seconds. NotebookLM feature counters need a current account reading.</p>
-<script>function stale(){for(const row of document.querySelectorAll('tr[data-valid-until]')){const until=Number(row.dataset.validUntil);if(until&&Date.now()/1000>until){const badge=row.querySelector('.badge');badge.textContent='STALE';badge.className='badge held';row.querySelector('.reason').textContent='This reading has expired. Refresh usage before assigning work.';}}}stale();setInterval(stale,10000);</script></html>'''
-        if report['admission_mode'] == 'advisory':
-            from usage_report import render_usage
-            page = render_usage(report)
+        from usage_report import render_usage
+        page = render_usage(report)
         from task_panel import render
         page = page.replace('</html>', render() + '</html>')
         from workspace_navigation import decorate_report, write_navigation_script
@@ -627,6 +645,7 @@ def main():
         guard.dashboard()
     elif args.action in ('check', 'reserve'):
         result = guard.check(args.worker, args.size, args.action == 'reserve', getattr(args, 'task', None))
+        guard.queue_stale_refreshes()
         print(json.dumps(result))
         return 0 if result['allowed'] else 2
     elif args.action == 'record':
@@ -662,6 +681,9 @@ def main():
         return 0
     else:
         result = guard.dashboard() if args.action == 'dashboard' else guard.status()
+        # Native sessions never pass through the dispatcher, so reading status is
+        # what keeps their provider (for example Codex) from going stale.
+        result['background_refresh'] = guard.queue_stale_refreshes()
     print(json.dumps(result))
     return 0
 

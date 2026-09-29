@@ -121,6 +121,19 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(safe['metrics']['total_seconds'], 17)
         self.assertIsNone(safe['metrics']['queue_wait_seconds'])
 
+    def test_monotonic_execution_wins_over_wall_clock_adjustment(self):
+        for ended in ('2026-09-09T00:00:00+00:00', '2026-09-09T01:10:04+00:00'):
+            safe = planner.sanitize_record(record(ended_at=ended,
+                phase_durations_ms={'provider_execution': 5000.0}))
+            self.assertEqual(safe['metrics']['execution_seconds'], 5.0)
+
+    def test_invalid_phase_timing_uses_legacy_wall_fallback(self):
+        for duration in (None, True, -1, float('nan'), float('inf')):
+            safe = planner.sanitize_record(record(phase_durations_ms={'provider_execution': duration}))
+            self.assertEqual(safe['metrics']['execution_seconds'], 10)
+        safe = planner.sanitize_record(record(phase_durations_ms={'provider_execution': 0}))
+        self.assertEqual(safe['metrics']['execution_seconds'], 0)
+
     def test_imported_completed_artifact_is_not_zero_second_inference(self):
         safe = planner.sanitize_record(record(imported_completed_artifact=True, started_at=None))
         self.assertFalse(safe['timed_success'])

@@ -13,14 +13,14 @@ from usage_guard import file_lock
 from claude_models import select_model
 
 
-WORKERS = frozenset(('claude', 'grok', 'local-chat'))
+WORKERS = frozenset(('claude', 'codex', 'grok', 'local-chat'))
 BASIC_LOCAL_CATEGORIES = frozenset(('general', 'chat', 'formatting', 'extraction', 'summarization', 'classification'))
 _ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,159}')
 _JOB = re.compile(r'[a-f0-9]{32}')
 _LOW = ': task plus safety buffer exceeds available quota'
 _ADVISORY_LOW = ': available allowance is at or below the worker start threshold'
 _BLOCKED = ': provider rejected work; cooldown active'
-_AUTOMATIC_WORKERS = frozenset(('claude', 'grok'))
+_AUTOMATIC_WORKERS = frozenset(('claude', 'codex', 'grok'))
 
 
 class HandoffHeld(ValueError):
@@ -85,6 +85,7 @@ def apply_automatic_fallbacks(args, policy, *, project_default=None):
         args.no_memory = True
     else:
         args.project = project
+    args.automatic_assignment_id_added = not bool(assignment)
     if not assignment:
         args.assignment_id = 'auto-' + uuid.uuid4().hex
     args.fallback_worker = fallback
@@ -186,7 +187,7 @@ def _configuration(args):
         raise HandoffHeld('Choose an ordered list of fallback workers.')
     order = [args.worker, *fallback]
     if len(order) > 3 or len(set(order)) != len(order) or any(worker not in WORKERS for worker in order):
-        raise HandoffHeld('A handoff can use at most three different workers: Claude, Grok, or an explicitly chosen local worker.')
+        raise HandoffHeld('A handoff can use at most three different workers: Claude, Codex, Grok, or an explicitly chosen local worker.')
     category = getattr(args, 'category', 'general')
     if 'local-chat' in order and (args.size not in ('tiny', 'small') or not isinstance(category, str)
                                  or category.strip().lower() not in BASIC_LOCAL_CATEGORIES):
@@ -197,6 +198,9 @@ def _configuration(args):
     brief = Path(args.prompt_file).read_bytes()
     try:
         claude_model = select_model(requested=getattr(args, 'claude_model', None)) if 'claude' in order else None
+        if 'codex' in order:
+            from codex_worker import select_codex_model
+            codex_model = select_codex_model(getattr(args, 'codex_model', None))
     except ValueError as exc:
         raise HandoffHeld(str(exc)) from exc
     contract = {'workers': order, 'prompt_sha256': hashlib.sha256(brief).hexdigest(),
@@ -205,6 +209,9 @@ def _configuration(args):
                 'claude_effort': getattr(args, 'claude_effort', 'medium') if 'claude' in order else None,
                 'require_brief_check': getattr(args, 'require_brief_check', False),
                 'revision_of': getattr(args, 'revision_of', None)}
+    if 'codex' in order:
+        # Only Codex plans carry these keys, so existing saved plans keep their identity.
+        contract.update(codex_model=codex_model, codex_effort=getattr(args, 'codex_effort', 'medium'))
     from memory_usage import recall_plan, contract_fields
     contract.update(contract_fields(recall_plan(args)))
     if getattr(args,'timeout_seconds',None) is not None:
@@ -319,6 +326,12 @@ def _run_locked(args, dispatch_fn, store, path, snapshot, workflow_id, project, 
         step_args = copy(args)
         step_args.worker, step_args.assignment_id = worker, key
         step_args.claude_model = contract['claude_model']
+        if 'codex_model' in contract:
+            # The frozen plan holds the resolved model; map it back to its identity.
+            from lead_selection import LEADS
+            step_args.codex_model = next(lead for lead, option in LEADS.items()
+                                         if option['model'] == contract['codex_model'])
+            step_args.codex_effort = contract['codex_effort']
         step_args.fallback_worker = []
         step_args.prompt_file = snapshot
         step_args.revision_of = predecessor

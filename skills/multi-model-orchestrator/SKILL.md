@@ -5,12 +5,16 @@ description: "Coordinate multiple LLMs, coding agents, and creative tools on sub
 
 # Multi-Model Orchestrator
 
-Turn several tools' contributions into one coherent deliverable. ASTRA in Codex
-is the default lead. This user authorizes Claude Opus to take over orchestration
-when ASTRA stops or reaches its usage limit, through the application's explicit
-`lead prepare` and `lead claim` commands. Fable is paused until further notice
-(user instruction, 2026-09-11); use Opus and honor the current model policy in
-`config/workers.json`. The legacy `fable` coordinator key is not a model selection. Read [coordinator-handoff.md](references/coordinator-handoff.md).
+Turn several tools' contributions into one coherent deliverable. The user's
+lead-orchestrator switch selects who leads new runs: Claude (Opus 5.5,
+`claude-opus-5-5`), ASTRA (Codex `gpt-6-astra`, the default) or Sol (Codex
+`gpt-6-sol`). Check it with `python orchestrator.py lead selected`; start a run
+with `--lead` set to your own identity. The runner-up takes over when the lead
+reaches its usage limit: a Codex lead hands off to Claude with `lead transfer`;
+Claude hands back to the last selected Codex lead through `lead prepare` and
+`lead claim`. ASTRA and Sol share one Codex allowance. Fable is paused until
+further notice (user instruction, 2026-09-11); honor the current model policy in
+`config/workers.json`. The legacy `fable` owner key is the Claude slot, not a model selection. Read [coordinator-handoff.md](references/coordinator-handoff.md).
 Only the owner/session recorded in the run's coordinator.json may coordinate.
 A worker assignment does not transfer leadership. Workers return to the current
 lead. After a low-usage transfer, the outgoing lead remains a worker on bounded
@@ -46,8 +50,10 @@ without running agents or printing credentials. If present, also read the local
 cost controls; dated test results still need a readiness check before dispatch.
 On this host, the maintained application is `~/Documents/Agent-Orchestrator`.
 For the existing VS Code chat integrations, run `python orchestrator.py vscode-bots`
-there to inspect current bot readiness. Codex uses native workers and Claude uses
-the existing `run claude` route; both share their existing provider pools.
+there to inspect current bot readiness. Any lead can give Codex (ASTRA or Sol)
+supplied-text work with `run codex`: ChatGPT plan sign-in only, no tools, read-only.
+A Codex lead may also use native workers. Claude uses the existing `run claude`
+route; all share their existing provider pools.
 `run vscode-copilot` dispatches supplied-text tasks through the selected Copilot
 model in the local VS Code extension. See `docs/vscode-bots.md` in the maintained
 application. Enable one VS Code window and grant any editor model consent first.
@@ -232,7 +238,7 @@ to reassign the unfinished work to a suitable approved worker with enough quota.
 Carry the objective, approved inputs, accepted progress, remaining steps and
 acceptance checks into the handoff. Keep both task IDs and credit each worker only
 for accepted work. Use explicit project/assignment IDs and the application's
-configured Claude/Grok alternates or ordered `--fallback-worker` routes for
+configured Claude/Grok alternates or ordered `--fallback-worker` routes (claude, codex, grok) for
 automatic supplied-text quota handoffs. `--no-auto-fallback` disables configured
 alternates when a task's content authorization is narrower.
 Select alternates by capability and existing content authorization before dispatch;

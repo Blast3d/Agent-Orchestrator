@@ -12,6 +12,9 @@ import re
 from brain_store import digest, safe_path, scope, text
 from task_store import timestamp
 from usage_guard import file_lock
+from brain_retrieval_metadata import public_retrieval
+from jev_profiles import PROFILES, select_profile
+from brain_recall_budget import resolve as recall_budget
 
 
 RATINGS = ('helped', 'neutral', 'harmful')
@@ -24,6 +27,8 @@ _SHA = re.compile(r'[a-f0-9]{64}')
 
 def recall_plan(args):
     """Freeze a project-scoped recall choice without inspecting the brief."""
+    profile = select_profile(getattr(args, 'category', None), getattr(args, 'memory_profile', None))
+    budget = recall_budget(getattr(args, 'memory_depth', 'auto'), task_size=getattr(args, 'size', None))
     query = getattr(args, 'memory_query', None)
     disabled = getattr(args, 'no_memory', False)
     project = getattr(args, 'project', None)
@@ -48,13 +53,17 @@ def recall_plan(args):
     else:
         policy, query = 'unscoped', None
     return {'policy': policy, 'query': query, 'enabled': query is not None,
-            'project_id': project, 'user_id': 'local'}
+            'project_id': project, 'user_id': 'local', 'profile': profile, 'budget': budget}
 
 
 def contract_fields(plan):
     fields = {'memory_policy': plan['policy']}
     if plan['enabled']:
         fields['memory_query'] = plan['query']
+    if plan.get('profile', 'general') != 'general':
+        fields['memory_profile'] = plan['profile']
+    if plan['enabled'] and plan.get('budget', {}).get('depth', 'compact') != 'compact':
+        fields['memory_depth'] = plan['budget']['depth']
     return fields
 
 
@@ -98,12 +107,32 @@ def _context(result):
         return None, 'Saved memory user scope does not match the task request.'
     if type(context.get('execution_requested')) is not bool:
         return None, 'Memory execution-request state was not recorded.'
+    profile = context.get('profile')
+    requested_profile = result.get('memory_profile')
+    if (('profile' in context and profile not in PROFILES)
+            or ('memory_profile' in result and requested_profile not in PROFILES)
+            or (requested_profile is not None and profile != requested_profile)):
+        return None, 'Saved memory profile does not match the task request.'
+    delivery = context.get('delivery')
+    if (not isinstance(delivery, dict) or delivery.get('reason') != 'worker transport byte limit'
+            or type(delivery.get('retrieved_count')) is not int
+            or not len(ids) <= delivery['retrieved_count'] <= 24
+            or delivery.get('delivered_count') != len(ids)):
+        delivery = None
+    else:
+        delivery = {key:_number(delivery.get(key)) for key in
+                    ('retrieved_count','delivered_count','max_request_bytes','request_bytes')}
     return {'ids': ids, 'sha256': sha, 'project_id': project, 'user_id': user,
+            'delivery': delivery,
+            'profile': profile,
             'trace_id': _identifier(context.get('trace_id'), _ID),
+            'trace_status': context.get('trace_status') if context.get('trace_status') in ('recorded','failed','skipped_empty','disabled') else None,
             'lookup_ms': _number(context.get('lookup_ms')),
             'elapsed_ms': _number(context.get('elapsed_ms')),
             'execution_requested': context['execution_requested'],
-            'recall_incomplete': context.get('recall_incomplete') is True}, None
+            'recall_incomplete': context.get('recall_incomplete') is True,
+            'retrieval':public_retrieval(context.get('retrieval')),
+            'context_chars':len(content)}, None
 
 
 def _accepted(result):
@@ -127,8 +156,12 @@ def _bindings(result, context):
     source_hash = digest({key: result.get(key) for key in (
         'job_id', 'assignment_project_id', 'response', 'finalized_at', 'review',
         'task', 'category', 'assignment_id')})
-    context_hash = digest({key: context.get(key) for key in (
-        'ids', 'sha256', 'project_id', 'user_id', 'trace_id', 'execution_requested')})
+    context_binding = {key: context.get(key) for key in (
+        'ids', 'sha256', 'project_id', 'user_id', 'trace_id', 'execution_requested')}
+    # Retain old general-profile feedback bindings; bind new role-specific input.
+    if context.get('profile') not in (None, 'general'):
+        context_binding['profile'] = context['profile']
+    context_hash = digest(context_binding)
     return source_hash, context_hash
 
 
@@ -178,9 +211,10 @@ def summary(result):
             'reason': 'This task has no recorded memory request telemetry.',
             'project_id': _scope(result.get('assignment_project_id')), 'user_id': None,
             'memory_ids': [], 'memory_count': 0, 'context_sha256': None,
-            'trace_id': None, 'lookup_ms': None, 'elapsed_ms': None,
-            'execution_requested': None, 'recall_incomplete': False,
+            'trace_id': None, 'trace_status':None, 'lookup_ms': None, 'elapsed_ms': None,'retrieval':None,'context_chars':None,
+            'execution_requested': None, 'recall_incomplete': False, 'delivery':None,
             'provider_read': 'not_observable', 'feedback': _feedback(result, context),
+            'memory_profile': result.get('memory_profile') if result.get('memory_profile') in PROFILES else None,
             'memory_policy': result.get('memory_policy') if result.get('memory_policy') in POLICIES else None}
     if 'memory_context' not in result:
         requested = result.get('memory_lookup_requested')
@@ -195,13 +229,18 @@ def summary(result):
         base.update(stage='invalid_context', label='Memory context needs inspection', reason=problem)
         return base
     base.update(project_id=context['project_id'], user_id=context['user_id'],
+                memory_profile=context['profile'],
                 memory_ids=context['ids'], memory_count=len(context['ids']),
-                context_sha256=context['sha256'], trace_id=context['trace_id'],
+                context_sha256=context['sha256'], trace_id=context['trace_id'],trace_status=context['trace_status'],
                 lookup_ms=context['lookup_ms'], elapsed_ms=context['elapsed_ms'],
-                execution_requested=context['execution_requested'], recall_incomplete=context['recall_incomplete'])
+                execution_requested=context['execution_requested'], recall_incomplete=context['recall_incomplete'],
+                retrieval=context['retrieval'],context_chars=context['context_chars'],delivery=context['delivery'])
     if not context['ids']:
         base.update(stage='empty', label='No memories matched',
                     reason='The scoped lookup returned no memories for this task.')
+        if context['delivery'] and context['delivery']['retrieved_count']:
+            base.update(label='Memory omitted to fit worker input',
+                        reason='Relevant memories were retrieved but did not fit alongside the operating guide and assigned task.')
     elif context['execution_requested']:
         base.update(stage='execution_requested', label='Memory included in requested input',
                     reason='Execution was requested with this context; provider reading and usefulness are not inferred.')

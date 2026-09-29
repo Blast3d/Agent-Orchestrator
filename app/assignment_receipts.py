@@ -57,8 +57,19 @@ def _read_json(path):
 
 
 def _contract(value):
-    if not isinstance(value, dict) or not _CONTRACT_KEYS <= set(value) or set(value)-_CONTRACT_KEYS-{'memory_query','memory_policy','timeout_seconds'}:
+    if not isinstance(value, dict) or not _CONTRACT_KEYS <= set(value) or set(value)-_CONTRACT_KEYS-{'memory_query','memory_policy','memory_profile','memory_depth','timeout_seconds','codex_model','codex_effort'}:
         raise ValueError('Assignment contract must contain declared identity fields and supported optional settings')
+    if ('codex_model' in value or 'codex_effort' in value) and (
+            value.get('worker') != 'codex' or value.get('codex_model') not in ('gpt-6-astra', 'gpt-6-sol')
+            or value.get('codex_effort') not in ('low', 'medium', 'high')):
+        raise ValueError('Codex model identity is invalid')
+    if 'memory_depth' in value:
+        from brain_recall_budget import DEPTHS
+        if value['memory_depth'] not in DEPTHS:
+            raise ValueError('Memory depth identity is invalid')
+    if 'memory_profile' in value:
+        from jev_profiles import validate_profile
+        validate_profile(value['memory_profile'])
     if 'timeout_seconds' in value:
         from execution_limits import timeout_for_task
         timeout_for_task(value['size'],value['timeout_seconds'])
@@ -127,8 +138,46 @@ class AssignmentReceipts:
                 continue
             if (record.get('assignment_project_id') == project_id and
                     (assignment_id is None or record.get('assignment_id') == assignment_id)):
+                if self._reviewed_import_without_assignment(path, record):
+                    continue
                 return True
         return False
+
+    def _reviewed_import_without_assignment(self, path, record):
+        """A reviewed Brain import is project evidence, not a dispatched identity.
+
+        Check its canonical result as well as the small index. Missing or
+        contradictory evidence still holds new work; never reconstruct an index
+        for a real or uncertain provider assignment.
+        """
+        identity_fields = _ASSIGNMENT_FIELDS - {'assignment_project_id'}
+        if (record.get('imported_completed_artifact') is not True
+                or any(record.get(key) is not None for key in identity_fields)
+                or path.parent.is_symlink()):
+            return False
+        canonical_path = path.parent / 'result.json'
+        try:
+            canonical = _read_json(canonical_path)
+        except AssignmentIncomplete:
+            return False
+        for document in (record, canonical):
+            if (document.get('job_id') != path.parent.name
+                    or document.get('assignment_project_id') != record.get('assignment_project_id')
+                    or document.get('canonical_result') != str(canonical_path)
+                    or document.get('imported_completed_artifact') is not True
+                    or document.get('artifact_origin') != 'reviewed-run-closeout'
+                    or document.get('worker') != 'native-review'
+                    or document.get('category') != 'memory-curation'
+                    or document.get('status') != 'accepted'
+                    or document.get('execution_status') != 'succeeded'
+                    or document.get('review_status') != 'accepted'
+                    or not document.get('finalized_at')
+                    or type(document.get('provider_calls')) is not int
+                    or document.get('provider_calls') != 0
+                    or document.get('reservation_id') is not None
+                    or any(document.get(key) is not None for key in identity_fields)):
+                return False
+        return True
 
     def _index(self, path, project_id):
         if not path.exists():
@@ -207,7 +256,10 @@ class AssignmentReceipts:
             errors = document.get('cleanup_errors', [])
             if not isinstance(errors, list) or any(not isinstance(item, dict) for item in errors):
                 raise AssignmentIncomplete('Canonical cleanup evidence is invalid')
-            for field, key in (('requested_model', 'claude_model'), ('requested_effort', 'claude_effort'),
+            # Codex tasks record their Codex model and effort in the same result fields.
+            model_keys = (('codex_model', 'codex_effort') if entry['contract']['worker'] == 'codex'
+                          else ('claude_model', 'claude_effort'))
+            for field, key in (('requested_model', model_keys[0]), ('requested_effort', model_keys[1]),
                                ('require_brief_check', 'require_brief_check')):
                 if field in document and document[field] != entry['contract'][key]:
                     raise AssignmentIncomplete('Canonical worker settings do not match the assignment contract')

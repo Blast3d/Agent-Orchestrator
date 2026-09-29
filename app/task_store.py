@@ -121,8 +121,18 @@ class TaskStore:
         directory = self.directory(job_id)
         with file_lock(directory / 'review.lock'):
             result = json.loads((directory / 'result.json').read_text(encoding='utf-8'))
-            if (result.get('execution_status') != 'succeeded' or result.get('status') != 'awaiting_review'
-                    or not result.get('finalized_at')):
+            # A terminal preflight hold has no answer to accept. Permit an
+            # explicit rejection only when there is no provider-start evidence
+            # or uncertain allowance/storage reservation to reconcile.
+            rejected_preflight = (decision == 'rejected'
+                and result.get('status') == result.get('execution_status') == 'held'
+                and not any(result.get(key) for key in ('started_at', 'reservation_id',
+                    'process_pid', 'response', 'provider_result', 'usage', 'modelUsage', 'model'))
+                and result.get('reservation_state') in (None, 'released')
+                and result.get('storage_reservation_state') in (None, 'released')
+                and (not result.get('storage_reservation_id') or result.get('storage_reservation_state') == 'released'))
+            if (not result.get('finalized_at') or (not rejected_preflight and
+                    (result.get('execution_status') != 'succeeded' or result.get('status') != 'awaiting_review'))):
                 raise ValueError('Only an unreviewed, successfully executed answer can be reviewed')
             result.update(status=decision, review_status=decision,
                           review={'reviewer': reviewer.strip(), 'note': note.strip(), 'reviewed_at': timestamp()})

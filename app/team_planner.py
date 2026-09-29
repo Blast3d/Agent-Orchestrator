@@ -102,6 +102,12 @@ def sanitize_record(record):
             # Manual reconciliation may replace finalization long after inference.
             if not reconciled or key not in ('postprocessing_seconds', 'total_seconds'):
                 metrics[key] = _interval(record.get(first), record.get(last))
+        # Prefer the dispatcher's monotonic measurement when wall time changed.
+        # Historical records without phase receipts keep the timestamp fallback.
+        phases = record.get('phase_durations_ms')
+        execution_ms = _number(phases.get('provider_execution')) if isinstance(phases, dict) else None
+        if execution_ms is not None:
+            metrics['execution_seconds'] = execution_ms / 1000
         progress = record.get('execution_progress')
         if isinstance(progress, dict):
             metrics['first_event_seconds'] = _number(progress.get('first_event_s'))
@@ -184,7 +190,8 @@ def timing_history(tasks_root, limit=DEFAULT_HISTORY_LIMIT):
     report['interpretation'] = (
         'Durations describe successfully started tasks only; status counts include all indexed tasks. '
         'Preparation includes quota and other setup, not a measured queue. Imported artifacts have '
-        'unknown execution duration. Reconciled finalization is excluded from total/postprocessing. '
+        'unknown execution duration. Execution prefers monotonic phase timing; other stage totals use wall timestamps. '
+        'Reconciled finalization is excluded from total/postprocessing. '
         'Providers received different tasks: these samples do not rank model speed or prove an optimal team size.')
     return report
 

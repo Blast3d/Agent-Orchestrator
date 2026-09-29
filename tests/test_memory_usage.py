@@ -63,6 +63,27 @@ class MemoryUsageTests(unittest.TestCase):
         self.assertEqual(summary({'memory_lookup_requested': False})['stage'], 'not_requested')
         self.assertEqual(summary({'memory_lookup_requested': True})['stage'], 'lookup_missing')
 
+    def test_transport_omission_is_not_reported_as_no_matching_memories(self):
+        context=self.result['memory_context']
+        context.update(ids=[],context='',sha256=hashlib.sha256(b'').hexdigest(),
+                       delivery={'reason':'worker transport byte limit','retrieved_count':12,
+                                 'delivered_count':0,'max_request_bytes':12000,'request_bytes':11900})
+        value=summary(self.result)
+        self.assertEqual(value['memory_count'],0)
+        self.assertEqual(value['delivery']['retrieved_count'],12)
+        self.assertEqual(value['label'],'Memory omitted to fit worker input')
+
+    def test_retrieval_projection_preserves_known_zero_and_unknown_history(self):
+        self.assertIsNone(summary(self.result)['retrieval'])
+        self.result['memory_context'].update(trace_status='recorded',retrieval={
+            'schema_version':1,'route':'keyword','provider_calls':0,'input_tokens':None,
+            'timings_ms':{'lexical':1.25,'trace':2.0},'query':'PRIVATE QUERY'})
+        value=summary(self.result)
+        self.assertEqual(value['trace_status'],'recorded')
+        self.assertEqual(value['retrieval']['provider_calls'],0)
+        self.assertIsNone(value['retrieval']['input_tokens'])
+        self.assertNotIn('PRIVATE',json.dumps(value))
+
     def test_empty_lookup_and_prepared_input_differ(self):
         self.result['memory_context']['execution_requested'] = False
         self.assertEqual(summary(self.result)['stage'], 'prepared')

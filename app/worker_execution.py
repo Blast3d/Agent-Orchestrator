@@ -14,6 +14,9 @@ from execution_limits import timeout_for_task
 from task_store import write_json
 from worker_progress import ClaudeProgress
 from antigravity_progress import AntigravityProgress, AntigravityProtocolError
+from codex_progress import CodexProgress, CodexProtocolError
+
+_PROTOCOL_ERRORS = (AntigravityProtocolError, CodexProtocolError)
 
 
 class WorkerInterrupted(Exception):
@@ -61,11 +64,12 @@ def invoke_cloud(command, stdin, work, env, *, timeout_seconds=None, protocol='c
     if isinstance(limit, bool) or not isinstance(limit, (int, float)) or not 0 < limit <= 1800:
         raise ValueError('Execution deadline must be positive and no more than 1800 seconds')
     work = Path(work)
-    stream = '--output-format' in command and command[command.index('--output-format') + 1] == 'stream-json'
-    if protocol not in ('claude', 'antigravity'):
+    stream = protocol == 'codex' or ('--output-format' in command and
+                                     command[command.index('--output-format') + 1] == 'stream-json')
+    if protocol not in ('claude', 'antigravity', 'codex'):
         raise ValueError('Unknown worker stream protocol')
-    parser = (AntigravityProgress(expected_model=expected_model)
-              if protocol == 'antigravity' else ClaudeProgress())
+    parser = (AntigravityProgress(expected_model=expected_model) if protocol == 'antigravity' else
+              CodexProgress(expected_model=expected_model) if protocol == 'codex' else ClaudeProgress())
     started = time.monotonic()
     last_persist = 0.0
     output_chars = 0
@@ -288,7 +292,7 @@ def invoke_cloud(command, stdin, work, env, *, timeout_seconds=None, protocol='c
                     event_time = 0.0
                 try:
                     handle_stream_line(leftover, event_time)
-                except (OutputLimitExceeded, AntigravityProtocolError):
+                except (OutputLimitExceeded, *_PROTOCOL_ERRORS):
                     if not cleanup:
                         raise
         elif label == 'error':
@@ -353,9 +357,9 @@ def invoke_cloud(command, stdin, work, env, *, timeout_seconds=None, protocol='c
             except queue.Empty:
                 if done:
                     break
-            except (OutputLimitExceeded, AntigravityProtocolError):
+            except (OutputLimitExceeded, *_PROTOCOL_ERRORS):
                 pass
-        cause = (exc.cause if isinstance(exc, (WorkerInterrupted, AntigravityProtocolError)) else
+        cause = (exc.cause if isinstance(exc, (WorkerInterrupted, *_PROTOCOL_ERRORS)) else
                  'timeout' if isinstance(exc, subprocess.TimeoutExpired) else
                  'output_limit' if isinstance(exc, OutputLimitExceeded) else
                  'interrupted' if isinstance(exc, KeyboardInterrupt) else 'process_io_error')

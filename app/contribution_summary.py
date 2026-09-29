@@ -20,7 +20,7 @@ TASK_FIELDS = ('job_id', 'worker', 'task', 'category', 'status', 'review_status'
                'size', 'created_at', 'finalized_at', 'assignment_project_id')
 NOTES = ['Accepted-work shares are the reviewer\'s recorded estimates, not measured effort or time.',
          'Token counts come only from dispatched workers whose provider reported them; unknown stays unknown.',
-         'The coordinator\'s own conversation (ASTRA or Fable) is not metered, so its tokens are always unknown.',
+         'The coordinator\'s own conversation (Claude, ASTRA or Sol) is not metered, so its tokens are always unknown.',
          'Cost is only what a provider CLI reported for a task (Claude modelUsage.costUSD); it is not a bill.']
 
 

@@ -28,10 +28,48 @@ SERVICE = 'orchestrator-session-viewer'
 UUID = re.compile(r'[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}')
 SHORT_ID = re.compile(r'[a-f0-9]{8}')
 MAX_HISTORY_BYTES = 512 * 1024
+# Run statuses that mean the lead has finished; anything else can still be current.
+FINISHED_RUN_STATUSES = {'completed', 'complete', 'closed', 'cancelled', 'canceled', 'abandoned', 'failed', 'archived'}
+CURRENT_SECONDS = 24 * 3600
+RECENT_SECONDS = 7 * 24 * 3600
 
 
 def now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def parse_time(value):
+    try:
+        parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def modified_at(path):
+    try:
+        return datetime.fromtimestamp(Path(path).stat().st_mtime, timezone.utc)
+    except OSError:
+        return None
+
+
+def run_grouping(manifest, run_status, last_activity, current_time):
+    """Picker group and idle flag: experiments apart, then current, recent and archived by last activity."""
+    experiment = bool(manifest.get('experiment_parent_run_id') or manifest.get('experiment_condition_id')
+                      or manifest.get('experiment_family')
+                      or str(manifest.get('project_id') or '').startswith('experiment-'))
+    finished = str(run_status).lower() in FINISHED_RUN_STATUSES
+    age = (current_time - last_activity).total_seconds() if last_activity else None
+    idle_since = last_activity.isoformat() if not finished and age is not None and age > CURRENT_SECONDS else None
+    if experiment:
+        group = 'experiments'
+    elif not finished and age is not None and age <= CURRENT_SECONDS:
+        group = 'current'
+    elif age is not None and age <= RECENT_SECONDS:
+        group = 'recent'
+    else:
+        group = 'archived'
+    return group, experiment, idle_since
 
 
 def contained(base, path):
@@ -151,8 +189,9 @@ def history_page(path, provider, before=None, limit=40):
 
 class ViewerStore:
     def __init__(self, root, home=None, collector=None, opener=None, async_listing=True,
-                 codex_opener=None, codex_capability=None):
+                 codex_opener=None, codex_capability=None, clock=None):
         self.root = Path(root).resolve()
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.home = Path(home or Path.home()).resolve()
         self.collector = collector or self._collect
         self.opener = opener or open_viewer
@@ -231,15 +270,29 @@ class ViewerStore:
                 rows.append(self.summary(state, manifest))
             except (OSError, ValueError, KeyError, TypeError):
                 errors.append({'id': path.parent.name, 'error': 'Saved coordinator state needs recovery.'})
-        rows.sort(key=lambda row: str(row.get('checkpoint_at') or ''), reverse=True)
-        return {'runs': rows, 'errors': errors, 'model_calls': 0}
+        rows.sort(key=lambda row: str(row.get('last_activity_at') or row.get('checkpoint_at') or ''), reverse=True)
+        return {'runs': rows, 'errors': errors, 'checked_at': self.clock().isoformat(), 'model_calls': 0}
 
     def summary(self, state, manifest):
         from local_services import memory_projects
+        from lead_selection import LEADS, lead_for_owner
+        lead = lead_for_owner(state['owner'])
+        # Last activity is the newest checkpoint or coordinator write, so an old
+        # "planning" run no longer reads as live just because nobody closed it.
+        times = [t for t in (parse_time(state.get('checkpoint_at')),
+                             modified_at(self.run_path(state['run_id']) / 'coordinator.json')) if t]
+        last = max(times) if times else None
+        run_status = manifest.get('status', 'unknown')
+        group, experiment, idle_since = run_grouping(manifest, run_status, last, self.clock())
+        objective = str(state['checkpoint'].get('objective') or manifest.get('objective') or '').strip()
+        title = manifest.get('display_name').strip() if isinstance(manifest.get('display_name'), str) else ''
+        title = title or (objective.splitlines()[0] if objective else '')
         return {**{key: state.get(key) for key in ('owner', 'session', 'generation', 'status', 'checkpoint_at')},
-                'id': state['run_id'], 'objective': state['checkpoint']['objective'],
+                'lead': lead, 'lead_label': LEADS[lead]['label'],
+                'id': state['run_id'], 'objective': state['checkpoint']['objective'], 'title': title[:160],
                 'memory_projects': memory_projects(self.root, state['run_id'], manifest),
-                'run_status': manifest.get('status', 'unknown'),
+                'run_status': run_status, 'last_activity_at': last.isoformat() if last else None,
+                'group': group, 'experiment': experiment, 'idle_since': idle_since,
                 'background_id': state.get('handoff', {}).get('launch', {}).get('background_id')}
 
     def _job(self, identifier):
@@ -401,9 +454,19 @@ class ViewerStore:
         return path
 
     def provider(self, state, force=False):
+        from lead_selection import CODEX_LEADS, LEADS
         binding = self._binding(state)
-        if state['owner'] == 'astra' and state['status'] != 'handoff_ready':
-            provider = {'name': 'Codex / ASTRA', 'format': 'codex', 'status': 'checkpoint only', 'state': 'unknown',
+        pending_codex = (state['status'] == 'handoff_ready'
+                         and state.get('handoff', {}).get('to') in CODEX_LEADS)
+        if pending_codex:
+            target = state['handoff']['to']
+            provider = {'name': 'Codex / ' + LEADS[target]['label'], 'format': 'codex', 'status': 'awaiting claim',
+                        'state': 'unknown', 'session_id': None, 'background_id': None, 'checked_at': now(),
+                        'waiting_for': None, 'error': None, 'can_attach': False, 'history_available': False,
+                        'history_note': 'A Codex session running ' + str(state['handoff'].get('receiving_model') or LEADS[target]['model'])
+                                        + ' must claim this handoff before it can coordinate.'}
+        elif state['owner'] in CODEX_LEADS and state['status'] != 'handoff_ready':
+            provider = {'name': 'Codex / ' + LEADS[state['owner']]['label'], 'format': 'codex', 'status': 'checkpoint only', 'state': 'unknown',
                         'session_id': binding.get('session_id') if binding.get('provider') == 'codex' else None,
                         'background_id': None, 'checked_at': now(), 'waiting_for': None, 'error': None,
                         'can_attach': False, 'history_available': False,
@@ -424,6 +487,9 @@ class ViewerStore:
             provider['history_available'] = bool(path)
         except (OSError, ValueError, TypeError):
             provider['history_available'] = False
+        # When the lead's saved conversation last changed; not a live-process signal.
+        updated = modified_at(path) if path else None
+        provider['history_updated_at'] = updated.isoformat() if updated else None
         if provider['format'] == 'codex':
             if self._codex_support is None or force or time.monotonic() - self._codex_support_checked >= 30:
                 self._codex_support = self.codex_capability()
@@ -439,8 +505,14 @@ class ViewerStore:
         state, manifest = self.state(run_id)
         from task_activity import snapshot
         summary = self.summary(state, manifest)
-        return dict(summary, checkpoint=state['checkpoint'], provider=self.provider(state),
-                    activity=snapshot(self.root, run_id, summary['memory_projects'], home=self.home))
+        provider = self.provider(state)
+        # "Lead last active" is the newest saved sign of lead work, never the viewer's poll time.
+        signs = [(t, source) for t, source in ((parse_time(state.get('checkpoint_at')), 'checkpoint'),
+                                               (parse_time(provider.get('history_updated_at')), 'conversation')) if t]
+        at, source = max(signs) if signs else (None, None)
+        return dict(summary, checkpoint=state['checkpoint'], provider=provider,
+                    lead_activity={'at': at.isoformat() if at else None, 'source': source},
+                    activity=snapshot(self.root, run_id, home=self.home))
 
     def history(self, run_id, before=None):
         state, _ = self.state(run_id)
@@ -451,14 +523,33 @@ class ViewerStore:
                     'notice': provider['history_note'], 'revision': ''}
         return history_page(path, provider['format'], before)
 
+    def readiness(self):
+        """Per-bot readiness from the last saved usage status; reads only, never refreshes usage."""
+        from usage_report import readiness
+        path = contained(self.root / 'runtime', self.root / 'runtime' / 'usage-status.json')
+        try:
+            report = object_file(path)
+        except FileNotFoundError:
+            return {'available': False, 'model_calls': 0,
+                    'reason': 'No usage reading has been saved yet. Open Usage, or turn on background usage checks.'}
+        except (OSError, ValueError):
+            return {'available': False, 'model_calls': 0,
+                    'reason': 'The saved usage reading could not be read. Open Usage to regenerate it.'}
+        try:
+            value = readiness(report, self.clock())
+        except (KeyError, TypeError, ValueError, AttributeError):
+            return {'available': False, 'model_calls': 0,
+                    'reason': 'The saved usage reading has an unexpected format. Open Usage to regenerate it.'}
+        return dict(value, available=True, model_calls=0)
+
     def bind(self, run_id, provider, session_id):
         if provider != 'codex' or not isinstance(session_id, str) or not UUID.fullmatch(session_id):
             raise ValueError('Bind requires an exact Codex conversation UUID.')
         coordinator = Coordinator(self.run_path(run_id))
         with file_lock(coordinator.lock):
             state = coordinator.read()
-            if state['owner'] != 'astra' or state['status'] != 'active':
-                raise ValueError('Only the active ASTRA coordinator can be bound to Codex history.')
+            if state['owner'] not in ('astra', 'sol') or state['status'] != 'active':
+                raise ValueError('Only an active ASTRA or Sol coordinator can be bound to Codex history.')
             if not self._transcript({'format': 'codex', 'session_id': session_id}):
                 raise ValueError('The exact saved Codex conversation was not found.')
             value = {'owner': state['owner'], 'session': state['session'], 'provider': provider,
@@ -553,6 +644,8 @@ class ViewerHandler(DashboardHandler):
         return True
 
     def _handle_error(self, error):
+        if isinstance(error, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
+            return super()._handle_error(error)
         if isinstance(error, ValueError):
             self._error(400, str(error))
         else:
@@ -567,12 +660,33 @@ class ViewerHandler(DashboardHandler):
             if address.path == '/system-map' and not address.query:
                 return self._system_map()
             if address.path == '/':
+                from brain_dashboard import with_lead
                 from coordinator_viewer_page import PAGE
-                return self._reply(200, PAGE.replace('__TOKEN__', self.server.viewer_token).replace('__NONCE__', self.server.nonce), 'text/html; charset=utf-8')
+                return self._reply(200, with_lead(PAGE).replace('__TOKEN__', self.server.viewer_token).replace('__NONCE__', self.server.nonce), 'text/html; charset=utf-8')
+            if address.path == '/experiments':
+                from brain_dashboard import with_lead
+                from experiment_page import PAGE
+                return self._reply(200, with_lead(PAGE).replace('__TOKEN__', self.server.viewer_token).replace('__NONCE__', self.server.nonce), 'text/html; charset=utf-8')
             if address.path == '/health':
                 return self._reply(200, {'service': SERVICE, 'version': 1, 'instance_id': self.server.instance_id})
             if address.path == '/favicon.ico':
                 return self._reply(204, '', 'image/svg+xml')
+            if address.path in ('/api/experiments', '/api/experiment', '/api/experiment-output'):
+                from experiment_view import ExperimentStore
+                params = parse_qs(address.query, max_num_fields=3, keep_blank_values=True)
+                allowed = set() if address.path == '/api/experiments' else {'run','condition'} | ({'item'} if address.path.endswith('-output') else set())
+                if set(params) != allowed or any(len(value)!=1 for value in params.values()):
+                    raise ValueError('Choose one experiment condition and output.')
+                store = ExperimentStore(self.server.root)
+                if not allowed: value = store.listing()
+                elif 'item' in allowed: value = store.output(params['run'][0],params['condition'][0],params['item'][0])
+                else: value = store.detail(params['run'][0],params['condition'][0])
+                return self._reply(200,value)
+            if address.path == '/api/lead' and not address.query:
+                from lead_selection import describe
+                return self._reply(200, describe())
+            if address.path == '/api/readiness' and not address.query:
+                return self._reply(200, self.server.store.readiness())
             if address.path not in ('/api/runs', '/api/run', '/api/history', '/api/services', '/api/usage-monitor'):
                 return self._error(404, 'This page is not available.')
             params = parse_qs(address.query, max_num_fields=3)
@@ -595,7 +709,7 @@ class ViewerHandler(DashboardHandler):
 
     def do_POST(self):
         if not self._gate(mutation=True): return
-        if self.path not in ('/api/attach', '/api/interact', '/api/open', '/api/usage-monitor'):
+        if self.path not in ('/api/attach', '/api/interact', '/api/open', '/api/usage-monitor', '/api/lead'):
             return self._error(404, 'This action is not available.')
         try:
             body = self._body()
@@ -604,6 +718,12 @@ class ViewerHandler(DashboardHandler):
                     if not isinstance(body, dict) or set(body) != {'enabled'} or type(body['enabled']) is not bool:
                         raise ValueError('Choose On or Off for the usage monitor.')
                     value = set_monitor_enabled(body['enabled'])
+                elif self.path == '/api/lead':
+                    if (not isinstance(body, dict) or set(body) != {'lead'}
+                            or body['lead'] not in ('claude', 'astra', 'sol')):
+                        raise ValueError('Choose Claude, ASTRA or Sol as the lead orchestrator.')
+                    from lead_selection import select_lead
+                    value = select_lead(body['lead'])
                 elif self.path == '/api/open':
                     value = self._open_service(body)
                 elif self.path == '/api/interact':

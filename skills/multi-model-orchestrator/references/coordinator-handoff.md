@@ -1,14 +1,19 @@
 # Coordinator continuity
 
-Current model choice (2026-09-11): **Claude Opus**. The user paused Fable until
-further notice. `config/workers.json` now controls worker and coordinator
+Lead-orchestrator switch (2026-09-28): the user picks **Claude** (Opus 5.5,
+`claude-opus-5-5`, owner key `fable`), **ASTRA** (Codex `gpt-6-astra`, owner key
+`astra`, the default) or **Sol** (Codex `gpt-6-sol`, owner key `sol`) with
+`lead select LEAD` or the viewer's switch; `lead selected` shows it. The switch
+sets the lead for new runs and the runner-up. It never moves an existing run.
+ASTRA and Sol share the Codex allowance, so their runner-up is Claude; Claude's
+runner-up is the Codex lead selected last. The user paused Fable until further
+notice (2026-09-11). `config/workers.json` controls worker and coordinator
 models and blocks paused model families before launches. New handoffs save
-their selected model; old Fable handoffs and console resumes remain blocked.
+their receiving model; old Fable handoffs and console resumes remain blocked.
 The legacy `fable` owner/target key identifies the Claude coordinator slot;
 it does not select the Fable model. Existing records retain their history.
 
 Read `~/Documents/Agent-Orchestrator/docs/coordinator-handoff.md` for commands.
-ASTRA is the default lead; Claude Opus is this user's approved backup coordinator.
 New runs contain coordinator.json with an initial checkpoint. The lead must keep
 its objective, completed work, next steps, decisions, constraints, authorization,
 open jobs, validation and artifacts current. Update before dispatch and after
@@ -35,9 +40,9 @@ at 5% or less remaining. At work milestones check `lead readiness --run RUN`;
 it reads the current owner's account windows. Keep worker safety floors unchanged.
 Unknown or stale quota is not exhaustion.
 
-While ASTRA owns the run, update the complete checkpoint JSON and run:
+While ASTRA or Sol owns the run, update the complete checkpoint JSON and run:
 `python ~/Documents/Agent-Orchestrator/orchestrator.py lead transfer --run RUN
---owner astra --session CURRENT_SESSION --generation N --file CHECKPOINT.json`.
+--owner astra|sol --session CURRENT_SESSION --generation N --file CHECKPOINT.json`.
 The command checks source and receiving quota, reserves the receiving session,
 saves the checkpoint and a launch intent, records the current lead's self-yield,
 and invokes the installed Claude CLI once in user-authorized Auto permission mode.
@@ -96,7 +101,9 @@ the explicit lead CLI state transition authorized by the user.
 Any current lead can self-yield its own record with `lead prepare --to TARGET
 --reason near-zero --owner OWNER --session CURRENT_SESSION --generation N
 --yield-lead` after checking its target is ready. Automatic CLI launching currently
-targets Claude. Returning to ASTRA requires an existing ready Codex session to claim.
+targets Claude. When Claude leads, its 5% handoff goes to the runner-up Codex lead
+(`--to astra` or `--to sol`); the prepared handoff records that Codex model, and
+an existing Codex session running it must claim. The viewer shows the pending claim.
 A launch reservation stays held until its provider session has actually ended;
 inspect that evidence before using the existing usage-guard finish command.
 

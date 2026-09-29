@@ -6,6 +6,12 @@ It never sends a model prompt, extracts tokens, or calls a private billing API.
 The account's privacy and billing settings are not changed. Use `--output FILE`
 to save normalized JSON; no raw terminal transcript is saved.
 
+The quota-only session uses a fresh empty temporary directory outside the
+checkout. Grok resolves trust to the enclosing Git root even when started from a
+nested workspace; using a folder inside the checkout can leave `/usage` blocked
+on a repository-trust prompt. Explicit workspace overrides remain available to
+callers that have already isolated their target directory.
+
 The tested version is Grok Build 1.0.13. An unknown upgraded CLI version fails
 closed until its output and freshness semantics are checked. Isolated dependencies
 are in `.quota-deps`: pywinpty 3.0.5, pyte 0.8.2, wcwidth 0.8.3. To restore them:

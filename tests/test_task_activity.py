@@ -59,12 +59,50 @@ class ActivityTests(unittest.TestCase):
         write_json(self.store.directory(task['job_id']) / 'record.json', index)
         self.assertEqual(snapshot(self.root, 'audit')['tasks'], [])
 
-    def test_explicit_checkpoint_job_and_shared_project(self):
+    def test_shared_memory_project_does_not_mix_execution_runs(self):
         task = self.task('shared')
         write_json(self.run / 'coordinator.json', {'checkpoint': {'open_jobs': [{'job_id': task['job_id']}]}})
         self.assertEqual(snapshot(self.root, 'audit')['task_count'], 1)
         write_json(self.run / 'coordinator.json', {})
-        self.assertEqual(snapshot(self.root, 'audit', ['shared'])['task_count'], 1)
+        write_json(self.run / 'run.json', {'project_id': 'shared'})
+        self.assertEqual(snapshot(self.root, 'audit')['task_count'], 0)
+
+    def test_exact_run_and_legacy_output_bindings_are_discovered(self):
+        linked = self.task('shared', run_id='audit')
+        legacy = self.task('shared', requested_output=str(self.run/'worker.json'))
+        self.task('shared', run_id='other', requested_output=str(self.run/'stale.json'))
+        self.task('shared', requested_output=str(self.run.parent/'audit-other/worker.json'))
+        self.assertEqual({row['job_id'] for row in snapshot(self.root, 'audit')['tasks']},
+                         {linked['job_id'], legacy['job_id']})
+
+    def test_canonical_run_wins_over_forged_index_run(self):
+        task = self.task('shared', run_id='other')
+        write_json(self.store.directory(task['job_id'])/'record.json', dict(task, run_id='audit'))
+        self.assertEqual(snapshot(self.root, 'audit')['tasks'], [])
+
+    def test_imported_capture_is_preserved_outside_worker_activity(self):
+        task = self.task(worker='native-review', imported_completed_artifact=True,
+                         status='accepted', finalized_at='2026-09-26T00:00:00Z', provider_calls=0)
+        write_json(self.store.directory(task['job_id'])/'memory-outcome.json',
+                   {'job_id':task['job_id'], 'status':'remembered', 'memory_ids':['a'*32, 'b'*32]})
+        result = snapshot(self.root, 'audit')
+        self.assertEqual(result['tasks'], [])
+        self.assertEqual(result['capture_count'], 1)
+        self.assertEqual(result['captures'][0]['memory_count'], 2)
+        self.assertEqual(result['captures'][0]['saved_at'], '2026-09-26T00:00:00+00:00')
+        self.assertNotIn('PRIVATE', json.dumps(result))
+
+    def test_legacy_finalized_task_has_saved_update_time(self):
+        self.task(status='accepted', started_at=None, finalized_at='2026-09-26T00:00:00Z',
+                  created_at='2026-09-25T23:00:00Z')
+        row=snapshot(self.root, 'audit')['tasks'][0]
+        self.assertEqual(row['updated_at'], '2026-09-26T00:00:00+00:00')
+        self.assertEqual(row['elapsed_seconds'], 3600)
+
+    def test_failed_work_is_prioritized_over_completed_history(self):
+        self.task(status='accepted', started_at='2026-09-25T00:00:00Z')
+        failed=self.task(status='failed', started_at='2026-09-26T00:00:00Z')
+        self.assertEqual(snapshot(self.root, 'audit')['tasks'][0]['job_id'], failed['job_id'])
 
     def test_explicit_job_survives_missing_index(self):
         task = self.task()

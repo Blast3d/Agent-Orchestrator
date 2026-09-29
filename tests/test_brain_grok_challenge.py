@@ -27,7 +27,7 @@ class ReviewedMemoryChallenge(unittest.TestCase):
         again = self.brain.relate(a['id'], b['id'], 'supports', 'Tester')
         self.assertNotEqual(again['id'], stale['id'])
         self.assertIsNone(again['valid_to'])
-        self.assertEqual(len(self.brain.search('zebra', 'alpha')['results']), 2)
+        self.assertEqual(len(self.brain.search('zebra', 'alpha', strategy='graph')['results']), 2)
 
     def test_malformed_provenance_and_bounded_episode_fields(self):
         with self.assertRaises(ValueError):

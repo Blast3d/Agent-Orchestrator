@@ -28,6 +28,13 @@ class BriefCheckTests(unittest.TestCase):
         self.assertIn('audience notes', report['sections']['inputs'])
         self.assertEqual(report['character_count'], len(text))
 
+    def test_every_suggested_section_name_is_accepted_as_a_heading(self):
+        # The checker tells users to add "Acceptance checks"; that exact heading must count.
+        report = inspect_brief('# Objective\nFix x.\n## Inputs\nfile a\n## Required output\nA patch.\n'
+                               '## Acceptance checks\n- Tests pass.\n')
+        self.assertEqual(report['missing'], [])
+        self.assertTrue(report['ok'])
+
     def test_colon_fields_and_case(self):
         report = inspect_brief(COMPLETE.replace('Goal:', 'pUrPoSe :').replace('Checks:', 'Success criteria:'))
         self.assertTrue(report['ok'], report)

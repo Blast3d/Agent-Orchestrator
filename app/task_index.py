@@ -16,6 +16,14 @@ def project_task_index(result):
     operating = record.get('orchestration_context')
     if isinstance(operating, dict):
         record['orchestration_context'] = {key: value for key, value in operating.items() if key != 'context'}
+    memory = record.get('memory_context')
+    if isinstance(memory, dict):
+        # Deep recall can contain 32k Unicode characters; JSON escaping alone
+        # can exceed the index bound. Full evidence and its hash remain in the
+        # canonical result, which provenance readers already load and validate.
+        record['memory_context'] = {key: value for key, value in memory.items() if key != 'context'}
+        if isinstance(memory.get('context'), str):
+            record['memory_context']['context_chars'] = len(memory['context'])
     return record
 
 

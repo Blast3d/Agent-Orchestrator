@@ -1,12 +1,12 @@
-"""Local brain commands available to ASTRA, Fable and the human operator."""
+"""Local Brain commands for the selected lead and the human operator."""
 import argparse
 import json
 from pathlib import Path
-import sys
 
 from paths import ROOT
 from brain_store import BrainStore
 from storage_budget import StorageLimitError
+from jev_profiles import PROFILES
 
 
 def main(argv=None):
@@ -21,7 +21,14 @@ def main(argv=None):
     forget=sub.add_parser('forget');forget.add_argument('memory_id');forget.add_argument('--actor',required=True);forget.add_argument('--reason',required=True)
     replace=sub.add_parser('supersede');replace.add_argument('old_id');replace.add_argument('new_id');replace.add_argument('--actor',required=True);replace.add_argument('--reason',required=True)
     link=sub.add_parser('relate');link.add_argument('source_id');link.add_argument('target_id');link.add_argument('--relation',required=True);link.add_argument('--actor',required=True)
-    search=sub.add_parser('search');search.add_argument('query');search.add_argument('--project',required=True);search.add_argument('--user',default='local');search.add_argument('--limit',type=int,default=6);search.add_argument('--max-chars',type=int,default=8000);search.add_argument('--hops',type=int,default=1);search.add_argument('--context-only',action='store_true')
+    search=sub.add_parser('search');search.add_argument('query');search.add_argument('--project',required=True);search.add_argument('--user',default='local');search.add_argument('--limit',type=int);search.add_argument('--max-chars',type=int);search.add_argument('--hops',type=int);search.add_argument('--context-only',action='store_true')
+    search.add_argument('--depth',choices=['compact','balanced','deep'],default='compact')
+    search.add_argument('--strategy',choices=['auto','keyword','graph','semantic'],default='auto')
+    search.add_argument('--no-jev',action='store_true',help='Keep this search local: skip Jev (OpenRouter) ranking even when enabled')
+    search.add_argument('--profile',choices=PROFILES,default='general')
+    for command in ('semantic-status','semantic-index'):
+        semantic=sub.add_parser(command);semantic.add_argument('--project',required=True)
+        if command=='semantic-index':semantic.add_argument('--limit',type=int,default=100)
     capture=sub.add_parser('capture');capture.add_argument('--run',required=True);capture.add_argument('--file',type=Path,required=True)
     capture.add_argument('--owner',required=True);capture.add_argument('--session',required=True);capture.add_argument('--generation',type=int,required=True)
     capture.add_argument('--reviewer',required=True);capture.add_argument('--note',required=True)
@@ -60,9 +67,12 @@ def main(argv=None):
         elif args.command=='supersede':result=brain.supersede(args.old_id,args.new_id,args.actor,args.reason)
         elif args.command=='relate':result=brain.relate(args.source_id,args.target_id,args.relation,args.actor)
         elif args.command=='search':
-            result=brain.search(args.query,args.project,args.user,args.limit,args.max_chars,args.hops)
+            result=brain.search(args.query,args.project,args.user,args.limit,args.max_chars,args.hops,strategy=args.strategy,profile=args.profile,depth=args.depth,jev=not args.no_jev)
             if args.context_only:
                 print(result['context']);return 0
+        elif args.command in ('semantic-status','semantic-index'):
+            from brain_semantic import config_status, index_memories
+            result=config_status(brain,args.project) if args.command=='semantic-status' else index_memories(brain,args.project,limit=args.limit)
         elif args.command=='export':result=brain.export(args.project,args.user)
         elif args.command=='vault':result=brain.vault(args.project,args.user)
         elif args.command=='changes':result=brain.changes(args.project,args.user,args.after)

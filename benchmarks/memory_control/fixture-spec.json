@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "fixture_root": "fixture",
+  "roles": {
+    "aggregation": {
+      "path": "tern/usage/ledger.py",
+      "function": "aggregate_attempts",
+      "description": "Reconcile normalized attempt revisions, reject conflicting snapshots, and aggregate measured/unknown tokens per provider."
+    },
+    "allocation": {
+      "path": "tern/dispatch/allocator.py",
+      "function": "allocate_slots",
+      "description": "Distribute integer capacity by capped weighted largest remainders with canonical-ID ties and exact arithmetic."
+    },
+    "summary": {
+      "path": "tern/reporting/summary.py",
+      "function": "render_report",
+      "description": "Validate both stage outputs and render a deterministic TSV union with accurate partial-measurement markers and totals."
+    }
+  },
+  "overview_prompt": "Repair the Tern functions assigned to your role. Discover the implementations, read public contracts and historical notes, and satisfy the documented behavior without changing interfaces or unowned files. Solo repairs all three roles.",
+  "test_command": "python tests/test_public.py",
+  "public_cases_path": "tests/public_cases.json",
+  "contract_path": "docs/contracts.md",
+  "implementation_limits": "Pure Python functions and builtin operations only; no imports/classes/decorators/async/I/O/dunder access, only literal constants and function definitions at module load.",
+  "editable_paths": [
+    "tern/usage/ledger.py",
+    "tern/dispatch/allocator.py",
+    "tern/reporting/summary.py"
+  ]
+}

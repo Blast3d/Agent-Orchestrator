@@ -217,15 +217,15 @@ class CoordinatorTests(unittest.TestCase):
 
     def test_prompt_contains_resume_evidence_and_no_claim_of_automatic_transfer(self):
         prompt = self.coordinator.render(self.prepare())
-        for text in ('Accepted parser', 'keep-held', 'Receiving Claude model: opus', 'uncertain', 'coordinator.json'):
+        for text in ('Accepted parser', 'keep-held', 'Receiving Claude model: claude-opus-5-5', 'uncertain', 'coordinator.json'):
             self.assertIn(text, prompt)
 
     def test_manual_handoff_freezes_configured_opus_model(self):
         prepared = self.prepare()
-        self.assertEqual(prepared['handoff']['receiving_model'], 'opus')
+        self.assertEqual(prepared['handoff']['receiving_model'], 'claude-opus-5-5')
         with patch('claude_models.select_model', side_effect=AssertionError('Use the frozen model')):
             claimed = self.claim(prepared)
-        self.assertEqual(claimed['handoff']['receiving_model'], 'opus')
+        self.assertEqual(claimed['handoff']['receiving_model'], 'claude-opus-5-5')
 
     def test_legacy_fable_handoff_cannot_claim_during_pause(self):
         prepared = self.prepare()

@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
-from brain_dashboard import MAX_REQUEST_BYTES, PAGE, main, make_server
+from brain_dashboard import MAX_REQUEST_BYTES, PAGE, main, make_server, DashboardHandler
 
 
 class FakeStore:
@@ -64,6 +64,11 @@ class FakeStore:
         matches = [deepcopy(m) for m in self.items.values() if m['status'] == 'active'
                    and m['project_id'] == kwargs['project_id'] and m['user_id'] == kwargs['user_id']]
         return {'results': matches[:kwargs['limit']], 'elapsed_ms': 1.5, 'trace_id': 'trace-1'}
+
+    def graph(self, **kwargs):
+        self.calls.append(('graph',kwargs))
+        return {'project_id':kwargs['project_id'],'nodes':[],'relations':[],
+                'total_nodes':0,'node_limit':kwargs['limit'],'truncated':False}
 
     def forget(self, memory_id, actor, reason):
         self.items[memory_id] = {key: value for key, value in self.items[memory_id].items()
@@ -131,6 +136,49 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(status, 201, memory)
         return memory
 
+    def test_rejected_bounded_post_body_receives_403_without_mutation(self):
+        body = b'x' * 32768
+        for _ in range(12):
+            status, _, value = self.request('POST', '/api/memories', raw=body,
+                authorized=False, headers={'Content-Type':'application/json'})
+            self.assertEqual(status, 403, value)
+        self.assertEqual(self.store.items, {})
+        self.assertEqual(self.store.calls, [])
+
+    def test_cross_project_reuse_requires_explicit_consent(self):
+        payload = dict(project_id='alpha', memory_id='local', target_project_id='beta',
+                       target_id='foreign', relation='supports', actor='Reviewer',
+                       note='Reviewed this selected evidence for reuse.')
+        with patch('brain_links.create_reference') as create:
+            for value in (None, False, 'true', 1):
+                payload['reuse'] = value
+                status, _, result = self.request('POST', '/api/links', data=payload)
+                self.assertEqual(status, 400, result)
+            create.assert_not_called()
+
+    def test_cross_project_reuse_forwards_exact_scopes_and_selected_ids(self):
+        payload = dict(project_id='alpha', memory_id='local', target_project_id='beta',
+                       target_id='foreign', relation='supports', actor='Reviewer',
+                       note='Reviewed this selected evidence for reuse.', reuse=True)
+        expected = {'reference': {'id': 'reference'}, 'relation': {'id': 'edge'}}
+        with patch('brain_links.create_reference', return_value=expected) as create:
+            status, _, result = self.request('POST', '/api/links', data=payload)
+            self.assertEqual((status, result), (200, expected))
+            create.assert_called_once_with(self.store, project_id='alpha', memory_id='local',
+                target_project_id='beta', target_id='foreign', relation='supports',
+                actor='Reviewer', note=payload['note'], user_id='local')
+
+    def test_cross_project_reuse_retains_http_boundary_and_strict_fields(self):
+        payload = dict(project_id='alpha', memory_id='local', target_project_id='beta',
+                       target_id='foreign', relation='supports', actor='Reviewer',
+                       note='Reviewed this selected evidence for reuse.', reuse=True)
+        with patch('brain_links.create_reference') as create:
+            self.assertEqual(self.request('POST','/api/links',data=payload,authorized=False)[0],403)
+            self.assertEqual(self.request('POST','/api/links',data=payload,origin=False)[0],403)
+            self.assertEqual(self.request('POST','/api/links',data=dict(payload,user_id='other'))[0],400)
+            self.assertEqual(self.request('POST','/api/links',data=dict(payload,all_projects=True))[0],400)
+            create.assert_not_called()
+
     def test_oversized_body_rejection_closes_connection_before_reuse(self):
         # HTTP/1.0 closes rejected connections even for a keep-alive 1.1 client.
         connection=HTTPConnection(*self.server.server_address,timeout=3)
@@ -146,6 +194,29 @@ class DashboardTests(unittest.TestCase):
             connection.request('GET','/api/status',headers={'X-Brain-Token':self.server.brain_token})
             response=connection.getresponse();self.assertEqual(response.status,200);response.read()
         finally:connection.close()
+
+    def test_graph_has_independent_large_limit_and_exact_local_scope(self):
+        status,_,body=self.request(path='/api/graph?project_id=alpha')
+        self.assertEqual(status,200,body)
+        self.assertEqual(self.store.calls[-1],('graph',{'project_id':'alpha','user_id':'local','limit':3000}))
+        status,_,body=self.request(path='/api/graph?project_id=alpha&limit=10000')
+        self.assertEqual(status,200,body)
+        self.assertEqual(body['node_limit'],10000)
+
+    def test_graph_rejects_unauthorized_or_ambiguous_requests(self):
+        self.assertEqual(self.request(path='/api/graph?project_id=alpha',authorized=False)[0],403)
+        for query in ('','project_id=alpha&user_id=someone','project_id=alpha&limit=0',
+                      'project_id=alpha&limit=10001','project_id=alpha&limit=true',
+                      'project_id=alpha&limit=3000&limit=10000','project_id=alpha&limit=-1'):
+            self.assertEqual(self.request(path='/api/graph?'+query)[0],400,query)
+
+    def test_cancelled_graph_client_does_not_receive_a_second_error_write(self):
+        handler=object.__new__(DashboardHandler)
+        with patch.object(handler,'_error') as reply:
+            for error in (BrokenPipeError(),ConnectionResetError(),ConnectionAbortedError()):
+                handler.close_connection=False;handler._handle_error(error)
+                self.assertTrue(handler.close_connection)
+            reply.assert_not_called()
 
     def test_page_is_loopback_only_and_has_nonce_policy_without_external_dependencies(self):
         self.assertEqual(self.server.server_address[0], '127.0.0.1')
@@ -253,11 +324,24 @@ class DashboardTests(unittest.TestCase):
         _, _, found = self.request('POST', '/api/search', data={'project_id': 'alpha', 'query': 'concise', 'limit': 999, 'hops': 99})
         self.assertEqual(found['results'][0]['id'], item['id'])
         args = self.store.calls[-1][1]
-        self.assertEqual((args['limit'], args['max_chars'], args['hops'], args['user_id']), (6, 8000, 1, 'local'))
+        self.assertEqual((args['limit'], args['max_chars'], args['strategy'], args['user_id']), (12, 16000, 'auto', 'local'))
+        self.assertEqual(args['depth'], 'balanced')
+        self.assertIs(args['jev'], False)
+        self.assertEqual(self.request('POST', '/api/search', data={'project_id':'alpha','query':'concise','depth':'unbounded'})[0],400)
         status, _, forgotten = self.request('POST', '/api/forget', data={'project_id': 'alpha', 'memory_id': item['id'],
             'actor': 'Local user', 'reason': 'No longer applicable.'})
         self.assertEqual((status, forgotten['status']), (200, 'deleted'))
         self.assertNotIn('content', forgotten)
+
+    def test_dashboard_jev_ranking_requires_an_explicit_boolean_choice(self):
+        payload = {'project_id': 'alpha', 'query': 'handoff'}
+        self.assertIn('Use Jev ranking (OpenRouter, billed)', PAGE)
+        self.assertIn('jevRanking:false', PAGE)
+        status, _, _ = self.request('POST', '/api/search', data=dict(payload, jev=True))
+        self.assertEqual(status, 200)
+        self.assertIs(self.store.calls[-1][1]['jev'], True)
+        status, _, _ = self.request('POST', '/api/search', data=dict(payload, jev='true'))
+        self.assertEqual(status, 400)
 
     def test_cross_project_and_cross_user_ids_cannot_be_read_or_mutated(self):
         other = self.propose(project='beta')

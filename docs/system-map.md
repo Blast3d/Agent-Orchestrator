@@ -18,6 +18,18 @@ cover speech/readback, Away access, creating a team, and learning from work.
 Arrow labels distinguish audio transport, task execution, review, and retrieval.
 The mobile view provides the same hierarchy and details in a list.
 
+Drag any card by its title to reposition it; its connections follow as it moves.
+A click still selects the card and opens its details, and the +/− button expands
+or collapses a branch. Drag empty background to pan, scroll to zoom, and use
+**Fit map** to frame the current arrangement. Focus a card and press **Alt + arrow
+keys** to move it with the keyboard (add Shift for larger steps). Escape cancels
+a drag. Touch dragging is available in Map view.
+
+Card positions are saved locally in this browser when storage is available.
+The main map and each guided journey keep separate arrangements. **Reset layout**
+restores automatic card positions for the current view. These are display
+positions only; moving a card does not change components or relationships.
+
 The maintained content is `app/assets/system-map-data.json`; the interaction shell
 is `app/assets/system-map-template.html`. Keep only implemented components in
 this map. Include operating prerequisites in component details and maintain

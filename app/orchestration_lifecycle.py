@@ -54,11 +54,37 @@ def _identity(state):
     return {key: state[key] for key in ('owner', 'session', 'generation')}
 
 
-def start_run(*, run=None, workspace=None, name=None, objective=None, project=None,
+def _lead_summary(owner):
+    """Who leads this run versus who the switch selects; informational, never a gate."""
+    from lead_selection import LEADS, describe, lead_for_owner
+    run_lead = lead_for_owner(owner)
+    try:
+        selected = describe()
+    except ValueError:
+        selected = None
+    options = {option['id']: option for option in (selected or {}).get('options', [])}
+    label = LEADS[run_lead]['label']
+    model = options.get(run_lead, {}).get('model_label') or LEADS[run_lead]['model_label']
+    line = f'Lead orchestrator for this run: {label}' + (f' ({model})' if model else '') + '.'
+    summary = {'run_lead': run_lead, 'run_owner': owner,
+               'selected_lead': selected['lead'] if selected else None,
+               'runner_up': selected['runner_up'] if selected else None}
+    summary['matches_switch'] = summary['selected_lead'] == run_lead
+    if selected and not summary['matches_switch']:
+        line += (f" The switch currently selects {LEADS[selected['lead']]['label']} for new runs;"
+                 ' this run keeps its recorded lead.')
+    if selected:
+        line += f" Runner-up at the 5% handoff: {LEADS[selected['runner_up']]['label']}."
+    summary['line'] = line
+    return summary
+
+
+def start_run(*, run=None, workspace=None, name=None, objective=None, project=None, lead=None,
               owner=None, session=None, generation=None, query=None, no_memory=False,
+              memory_depth='balanced',
               root=ROOT, brain_factory=BrainStore, context_loader=None):
     """Prepare a bounded packet; existing runs require explicit lead authority."""
-    if run is not None and any(value is not None for value in (workspace, name, objective, project)):
+    if run is not None and any(value is not None for value in (workspace, name, objective, project, lead)):
         raise ValueError('Choose an existing --run or new-run creation options')
     if run is not None and any(value is None for value in (owner, session, generation)):
         raise ValueError('Resuming needs explicit --owner, --session and --generation')
@@ -67,9 +93,11 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
     if run is None and any(value is not None for value in (owner, session, generation)):
         raise ValueError('New run identity is established by create_run')
     operating = (context_loader or load_operating_context)()
+    from brain_recall_budget import resolve
+    budget = resolve(memory_depth)
     created = run is None
     if created:
-        run, _ = create_run(workspace, name, objective, project_id=project,
+        run, _ = create_run(workspace, name, objective, project_id=project, lead=lead,
                             native_parent_session_id=os.environ.get('CODEX_THREAD_ID') or None)
     coordinator = Coordinator(run)
     with file_lock(coordinator.lock):
@@ -87,22 +115,40 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
                         'results': [], 'context': '', 'context_chars': 0,
                         'status': 'not_requested', 'reason': 'explicit_no_memory'}
         else:
-            recalled = brain_factory(Path(root)).search(search, project_id, limit=6, max_chars=8000)
+            recalled = brain_factory(Path(root)).search(search, project_id, depth=budget['depth'])
+        calls = 0 if no_memory else (recalled.get('retrieval') or {}).get('provider_calls')
+        calls = calls if type(calls) is int and calls >= 0 else None
+        selection = _lead_summary(state['owner'])
         packet = {'schema_version': 1, 'status': 'prepared', 'created': created,
                   'prepared_at': timestamp(), 'run': str(coordinator.run),
                   'run_id': manifest['run_id'], 'project_id': project_id,
-                  'coordinator': _identity(state), 'operating_context': operating,
-                  'project_memory': recalled, 'provider_calls': 0,
+                  'coordinator': _identity(state), 'lead_selection': selection, 'operating_context': operating,
+                  'project_memory': recalled, 'provider_calls': calls,
                   'evidence_limit': 'Prepared for the lead; this is not proof of reading, obedience or native-worker delivery.'}
-        rendered = ('# Orchestration startup packet\n\n' + packet['evidence_limit'] + '\n\n'
-                    + operating['context'] + '\n\n## Project recall\n\n'
-                    + (recalled['context'] or 'Project recall was explicitly omitted.') + '\n')
-        packet['packet_sha256'] = hashlib.sha256(rendered.encode('utf-8')).hexdigest()
-        # Match write_json's ASCII JSON and platform newlines, including Windows
-        # CRLF, so the on-disk receipt stays within bounded metadata readers.
-        serialized = (json.dumps(packet, indent=2) + '\n').replace('\n', os.linesep).encode('utf-8')
-        if len(serialized) > 64 * 1024:
-            raise ValueError('Startup packet exceeds its 64 KiB bound')
+        # Wider recall still obeys the existing receipt bound. Reduce delivery,
+        # never repeat inference, and retain the original retrieval trace/counts.
+        original_count = len(recalled.get('results', []))
+        while True:
+            empty_reason = ('Project recall was explicitly omitted.' if no_memory
+                            else 'No current project evidence fit this startup packet.')
+            rendered = ('# Orchestration startup packet\n\n' + packet['evidence_limit'] + '\n\n'
+                        + selection['line'] + '\n\n'
+                        + operating['context'] + '\n\n## Project recall\n\n'
+                        + (recalled['context'] or empty_reason) + '\n')
+            packet['packet_sha256'] = hashlib.sha256(rendered.encode('utf-8')).hexdigest()
+            serialized = (json.dumps(packet, indent=2) + '\n').replace('\n', os.linesep).encode('utf-8')
+            if len(serialized) <= 64 * 1024:
+                break
+            if not recalled.get('results'):
+                raise ValueError('Startup packet exceeds its 64 KiB bound')
+            from brain_recall import _pack
+            remaining = recalled['results'][:-1]
+            rows, content, _ = _pack(None, remaining, budget['max_chars'],
+                                    recalled.get('recall_incomplete', False),
+                                    (recalled.get('source_validation') or {}).get('excluded_memories', 0))
+            recalled.update(results=rows, context=content, context_chars=len(content),
+                            startup_delivery={'reason':'64 KiB receipt bound',
+                                'retrieved_count':original_count, 'delivered_count':len(rows)})
         coordinator.require_owner(coordinator.read(), owner, session, generation)
         # Each file is atomic. JSON is written last and binds the Markdown bytes.
         _atomic_text(safe_path(coordinator.run, coordinator.run / 'startup-context.md'), rendered)
@@ -167,12 +213,22 @@ def _receipt(root, result, project, brain):
         raise ValueError('Memory capture receipt has missing, foreign or unfinished identity/status')
     if not isinstance(receipt.get('request_sha256'), str) or not re.fullmatch(r'[a-f0-9]{64}', receipt['request_sha256']):
         raise ValueError('Memory capture request identity cannot be verified')
-    if mode == 'automatic' and receipt['request_sha256'] != digest(_payload(result, None)):
-        raise ValueError('Automatic memory capture request changed after its receipt')
+    performance_hash = None
+    if mode == 'automatic':
+        version = receipt.get('automatic_version',1)
+        if type(version) is not int or version not in (1,2):
+            raise ValueError('Unknown automatic memory version')
+        payload = _payload(result, None, include_performance=version==2)
+        if receipt['request_sha256'] != digest(payload):
+            raise ValueError('Automatic memory capture request changed after its receipt')
+        performance_hash = payload['source'].get('performance_sha256')
     fields = ('job_id', 'assignment_project_id', 'response', 'finalized_at', 'review')
     if mode != 'curated_bundle':
         fields += ('task', 'category', 'assignment_id')
-    if receipt.get('source_sha256') != digest({key: result.get(key) for key in fields}):
+    source_hash = digest({key: result.get(key) for key in fields})
+    if performance_hash:
+        source_hash = digest([source_hash,performance_hash])
+    if receipt.get('source_sha256') != source_hash:
         raise ValueError('Memory capture source changed after its receipt')
     identifiers = receipt.get('memory_ids') if mode == 'curated_bundle' else [receipt.get('memory_id')]
     if (not isinstance(identifiers, list) or not 1 <= len(identifiers) <= 24
@@ -444,8 +500,11 @@ def main(argv=None):
     start.add_argument('--name')
     start.add_argument('--objective')
     start.add_argument('--project')
+    start.add_argument('--lead', choices=['claude', 'astra', 'sol'],
+                       help='Lead for a new run; defaults to the lead-orchestrator switch')
     start.add_argument('--query')
     start.add_argument('--no-memory', action='store_true')
+    start.add_argument('--memory-depth', choices=['compact','balanced','deep'], default='balanced')
     closeout = commands.add_parser('closeout')
     closeout.add_argument('--run', type=Path, required=True)
     for command in (start, closeout):

@@ -52,11 +52,13 @@ def _project_identity(parent, explicit):
 
 
 def create_run(workspace, name, objective, audience="Infer from current request", deliverables=None, *,
-               native_parent_session_id=None, project_id=None):
+               native_parent_session_id=None, project_id=None, lead=None):
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name) or len(name) > 60:
         raise ValueError("Name must be a short lowercase slug, using letters, digits, and hyphens.")
     if not objective.strip():
         raise ValueError("Objective must not be blank.")
+    from lead_selection import run_owner
+    owner = run_owner(lead)  # Validate before creating any run files.
     if native_parent_session_id is not None and (not isinstance(native_parent_session_id, str) or
             not re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', native_parent_session_id)):
         raise ValueError('Native parent session must be an exact Codex conversation UUID.')
@@ -135,7 +137,7 @@ Carry forward existing session authorization and constraints into run.json.
     (run / "brief.md").write_text(brief, encoding="utf-8")
     (run / "review" / "decisions.md").write_text("# Integration decisions\n\nRecord consequential findings, evidence, accepted corrections, and remaining limits.\n", encoding="utf-8")
     from coordinator_handoff import Coordinator
-    Coordinator(run).initialize('astra', run_id)
+    Coordinator(run).initialize(owner, run_id)
     return run, record
 
 
@@ -147,11 +149,13 @@ def main():
     parser.add_argument("--audience", default="Infer from current request")
     parser.add_argument("--deliverable", action="append", default=[])
     parser.add_argument("--project", help="Stable memory project; overrides .orchestration/project.json")
+    parser.add_argument("--lead", choices=("claude", "astra", "sol"),
+                        help="Lead for this run; defaults to the lead-orchestrator switch")
     args = parser.parse_args()
     try:
         run, _ = create_run(args.workspace, args.name, args.objective, args.audience, args.deliverable,
                             native_parent_session_id=os.environ.get('CODEX_THREAD_ID') or None,
-                            project_id=args.project)
+                            project_id=args.project, lead=args.lead)
     except (OSError, ValueError) as exc:
         # Avoid dumping user paths from OS exceptions into recording output.
         message = str(exc) if isinstance(exc, ValueError) else type(exc).__name__

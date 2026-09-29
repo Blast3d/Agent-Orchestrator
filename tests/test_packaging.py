@@ -34,14 +34,24 @@ class PackagingTests(unittest.TestCase):
             self.assertFalse(data['policy']['automatic_billable_fallback'])
             self.assertIn(str(root / 'user'), data['workers'][0]['executable'])
 
+    def test_fresh_install_hands_off_to_opus_5_5(self):
+        from unittest.mock import patch
+        import claude_models
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            initialize(root, home=root / 'user')
+            with patch.object(claude_models, 'ROOT', root):
+                self.assertEqual(claude_models.select_model('coordinator'), 'claude-opus-5-5')
+
     def test_source_selection_excludes_private_state_and_copies(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            included = ['app/module.py', 'docs/guide.md', 'orchestrator.py', '.gitignore']
+            included = ['app/module.py', 'docs/guide.md', 'orchestrator.py', '.gitignore',
+                        'Open Orchestrator Viewer.cmd']
             excluded = ['runtime/policy.json', 'runs/task/prompt.md', '.orchestration/secret.md',
                         'config/workers.json', '.claude/settings.local.json', 'app/.env',
                         'app/credentials.json', 'app/secrets.json', 'app/private.sqlite',
-                        'app/__pycache__/cache.pyc', 'archive/old.py']
+                        'app/__pycache__/cache.pyc', 'archive/old.py', 'Open Panel Results.cmd']
             for relative in included + excluded:
                 file = root / relative
                 file.parent.mkdir(parents=True, exist_ok=True)

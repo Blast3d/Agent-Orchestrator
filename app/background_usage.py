@@ -82,14 +82,14 @@ def _read(path, provider):
         return None
 
 
-def _recent(value, current):
+def _recent(value, current, window=DEBOUNCE_SECONDS):
     if not value:
         return False
     # Future or corrupt timestamps cannot suppress refreshes indefinitely.
     for key in ('requested_at', 'finished_at'):
         if value.get(key):
             elapsed = (current - _timestamp(value[key])).total_seconds()
-            if 0 <= elapsed < DEBOUNCE_SECONDS:
+            if 0 <= elapsed < window:
                 return True
     return False
 
@@ -107,8 +107,12 @@ def _spawn(root, provider, request_id):
                       '--provider', provider, '--request-id', request_id], **kwargs)
 
 
-def request_refresh(root, provider):
-    """Return queued/coalesced/error immediately; collector failures are advisory."""
+def request_refresh(root, provider, min_interval_seconds=DEBOUNCE_SECONDS):
+    """Return queued/coalesced/error immediately; collector failures are advisory.
+
+    Status polling passes a longer minimum interval so a frequently opened page
+    cannot start a quota reader more often than the monitor cadence.
+    """
     try:
         root, (metadata, launch_lock, worker_lock) = _locations(root, provider)
         with file_lock(launch_lock, timeout=0):
@@ -119,7 +123,7 @@ def request_refresh(root, provider):
                 return _receipt('coalesced', provider, 'A quota refresh is already running.')
             prior = _read(metadata, provider)
             current = _now()
-            if _recent(prior, current):
+            if _recent(prior, current, max(DEBOUNCE_SECONDS, min_interval_seconds)):
                 return _receipt('coalesced', provider, 'A quota refresh was requested recently.',
                                 request_id=prior['request_id'], requested_at=prior['requested_at'])
             request_id = uuid.uuid4().hex

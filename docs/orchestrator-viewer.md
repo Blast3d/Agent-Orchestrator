@@ -4,11 +4,55 @@ Double-click **Open Orchestrator Viewer.cmd**, or run `python orchestrator.py vi
 The launcher reuses one local server per workspace. It opens a browser page; it
 does not attach a console, resume a conversation or call a model.
 
-The **Memory Brain** button beside the **Usage monitor** switch opens the memory
-dashboard on the selected project and run, starting that server if needed. It
-also works without a selected run. The **Memory** link in the header opens the
-same dashboard. Its **Orchestrator** link comes back to this viewer on the same
-run. Both pages stay on `127.0.0.1`.
+The shared navigation at the top (**Orchestrator · Usage · Tasks · Memory ·
+Contributions · Experiments · System map**) is the same on every page. Its
+**Memory** link opens the memory dashboard on the selected project and run,
+starting that server if needed; Memory's **Orchestrator** link comes back to
+this viewer on the same run. The **Lead for new runs** chip links to the lead
+switch on this page. All pages stay on `127.0.0.1`.
+
+The **Bot readiness** panel at the top lists held bots with one plain sentence
+(what holds them and what to do next) and each bot's reading age, read from the
+last saved usage status. It never starts a usage check itself.
+
+The run picker groups runs as **Current**, **Recent**, **Experiments** and
+**Archived**, and names each by its title, lead and last activity. A run that is
+not finished but has had no checkpoint for over 24 hours is marked "Idle since".
+**Lead last active** is the newest checkpoint or saved-conversation time;
+**Status checked** is only when this page last asked the provider.
+
+## Experiment runs
+
+Use **Experiments** in the shared navigation. Select an experiment, then one
+execution: for example, solo without memory or a team with supplied memories.
+Each view shows that execution's token usage by provider and worker, requested
+and reported models, contestant and helper counts, timing, memory receipts,
+individual prompts and responses, and initial/final checks. It refreshes every
+five seconds while visible. Several calls from one contestant do not mean
+several bots. Solo is one OpenAI contestant with zero helper agents; the
+coordinating ASTRA conversation and fixture authors are outside its scored usage.
+
+New benchmark runners register a separate child run, workspace and Brain scope
+for each condition and repetition, then execute one condition at a time.
+Normal and edge cases are **separate result sections within that execution**,
+sharing its usage total. They are not additional model runs. See
+[isolated experiment instructions](../benchmarks/ISOLATED_EXPERIMENTS.md) for
+the cold-first protocol, failure holds, and commands that invoke real models.
+
+The older combined pilots are available as read-only condition views. Their
+recorded calls and totals are separated for inspection, but the viewer does
+not claim those original executions had separate run or memory scopes. Old
+checks without an explicit normal/edge tag remain **unclassified**. Original
+grades stay accessible when a documented correction exists; corrected checks
+cannot remove timing effects from incorrect feedback during the original run.
+
+Missing or unreconciled measurements display **Unknown**. Known partial token
+subtotals remain available, and failed or uncertain calls do not disappear from
+new execution totals. Setup usage is excluded and unmeasured. Account quota,
+estimated costs and token counts do not establish an additional charge or prove
+that work was free. Viewing results makes no model calls.
+
+## Recorded work
 
 Choose a project run to see its recorded lead, saved objective, completed work,
 next steps and open jobs. The viewer refreshes every five seconds while visible.
@@ -27,12 +71,22 @@ the viewer never switches the target of a conversation control silently.
 result saving and quota reconciliation. It shows measured elapsed time, completed
 phase durations, provider progress/retries, the configured deadline and the memory
 receipt after review. No percentage is invented for work whose completion cannot
-be measured. Native agents show saved session spans, latest-turn durations and
+be measured. Only workers linked to the selected run appear; sharing a Brain
+project does not mix activity from different runs. Older tasks can still match an
+explicit job ID, a project named after the run, or an output path inside that run.
+An explicit different run binding takes precedence over a legacy output path.
+Completed workers are collapsed, and the deadline column appears only when a
+worker has a recorded deadline. Local reviewed-artifact captures appear separately
+under **Local memory saves**, with their receipt, memory count and saved time.
+They are not worker executions or Jev calls; their short import time is not a
+task duration. Historical tasks and evidence stay in their original runs and inbox.
+
+Native agents show saved session spans, latest-turn durations and
 update times when their exact parent and child records can be verified in local
 Codex metadata. Session spans include pauses between follow-ups. Their completion
 state still comes from the coordinator; saved updates do not prove current
-execution. Native agents have no enforced dispatcher deadline, and the panel says
-so. Missing or unverified records have a visible reason. The panel reads bounded,
+execution. Native agents have no enforced dispatcher deadline. Missing or
+unverified records have a visible reason. The panel reads bounded,
 scoped metadata and does not display worker drafts or private reasoning.
 
 Claude status collection runs in the background; a slow or unavailable CLI does
@@ -50,7 +104,7 @@ history that is no longer visible in the terminal. **Jump to latest** returns to
 the newest loaded message. This view does not take over a console attached in
 another window. Closing the browser leaves the provider session alone.
 
-For Fable, **Open Fable console** runs `claude attach` for the selected
+For a Claude lead (Opus 5.5), **Connect to lead** opens **Open Claude console**, which runs `claude attach` for the selected
 background session. Send messages and answer permission or account prompts in
 that console. The button is deliberate: attachment can move the session out of
 another console window, and an ended session may need recovery in Claude.
@@ -62,10 +116,12 @@ If live status cannot be read, the session ended, or it no longer appears in
 Claude's listing, the viewer retains locally mapped history and disables
 attachment. The reason appears below the button rather than only in a tooltip.
 Conflicting session/workspace metadata also disables it. A specific run never
-falls back to a newer, unrelated Fable session. `Watch Fable Coordinator.cmd`
+falls back to a newer, unrelated Claude session. `Watch Fable Coordinator.cmd` (legacy name)
 still opens a console directly; prefer the viewer when choosing among runs.
 
-ASTRA's saved conversation can also be viewed after an explicit binding:
+The **Lead orchestrator** switch at the top chooses Claude, ASTRA or Sol for new
+runs (see [coordinator handoffs](coordinator-handoff.md)). A Codex lead (ASTRA or
+Sol) has no console; its saved conversation can be viewed after an explicit binding:
 
 ```powershell
 python orchestrator.py viewer --run RUN_NAME --bind-codex-session EXACT_CONVERSATION_UUID
@@ -132,8 +188,8 @@ counts and limits. A new quota-triggered takeover was not forced for this test.
 
 ## Manual usage monitor
 
-The **Usage monitor** switch near the top of the viewer turns background account
-allowance checks on or off. It works without selecting a run. Opening the viewer
+The **Background usage checks** switch in the Bot readiness panel turns
+background account allowance checks on or off. It works without selecting a run. Opening the viewer
 only reads its status. **Stopping** lasts until an active quota check ends; an old
 saved PID is never displayed as a running monitor. Turn it off when you finish
 coding. Closing the viewer leaves the current setting in effect until sign-out.

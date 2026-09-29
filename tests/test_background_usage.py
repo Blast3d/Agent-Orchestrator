@@ -41,6 +41,17 @@ class BackgroundUsageTests(unittest.TestCase):
         value.update(fields)
         self.metadata().write_text(json.dumps(value), encoding='utf-8')
 
+    def test_minimum_interval_coalesces_recently_completed_requests(self):
+        self.seed(status='completed', requested_at=(self.current - timedelta(minutes=2)).isoformat(),
+                  finished_at=(self.current - timedelta(minutes=2)).isoformat())
+        self.assertEqual(background.request_refresh(self.root, 'claude', min_interval_seconds=300)['status'],
+                         'coalesced')
+        self.launch.assert_not_called()
+        self.seed(status='completed', requested_at=(self.current - timedelta(minutes=10)).isoformat(),
+                  finished_at=(self.current - timedelta(minutes=10)).isoformat())
+        self.assertEqual(background.request_refresh(self.root, 'claude', min_interval_seconds=300)['status'],
+                         'queued')
+        self.launch.assert_called_once()
     def test_request_launches_fixed_hidden_detached_helper_and_never_collects_inline(self):
         result = background.request_refresh(self.root, 'claude')
         self.assertEqual(result['status'], 'queued')

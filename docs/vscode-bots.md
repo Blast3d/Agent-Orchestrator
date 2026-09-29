@@ -4,7 +4,7 @@ The existing VS Code integrations can participate in automatic orchestration:
 
 | Integration | Task route | Shared allowance |
 | --- | --- | --- |
-| Codex | The coordinator's native Codex workers | Existing Codex account pool |
+| Codex | `python orchestrator.py run codex ...` (ASTRA or Sol, supplied text, no tools), or native workers when Codex leads | Existing Codex account pool |
 | Claude Code | `python orchestrator.py run claude ...` | Existing Claude account pools |
 | Copilot | `python orchestrator.py run vscode-copilot ...` | Copilot account, shared with VS Code chat |
 

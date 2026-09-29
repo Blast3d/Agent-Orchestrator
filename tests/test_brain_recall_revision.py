@@ -51,16 +51,18 @@ class RecallRevisionTests(unittest.TestCase):
                          {key: value for key, value in after.items() if key != 'recall_revision'})
         self.assertEqual(after['recall_revision'], self.revision())
 
-    def test_empty_search_also_changes_revision_without_creating_memory_events(self):
+    def test_empty_scope_search_skips_trace_without_changing_revision(self):
         before = self.brain.changes('alpha')
         found = self.brain.search('no matching synthetic knowledge', 'alpha')
         self.assertEqual(found['results'], [])
         after = self.brain.changes('alpha')
-        self.assertNotEqual(before['recall_revision'], after['recall_revision'])
+        self.assertEqual(found['trace_status'],'skipped_empty')
+        self.assertEqual(before['recall_revision'], after['recall_revision'])
         self.assertEqual(after['head'], 0)
         self.assertEqual(after['changes'], [])
 
     def test_other_project_and_user_do_not_change_scoped_revision(self):
+        self.active();self.active('beta');self.active(user='another-user')
         self.brain.search('synthetic query', 'alpha')
         own = self.revision()
         other_user = self.revision(user='another-user')
@@ -71,6 +73,8 @@ class RecallRevisionTests(unittest.TestCase):
         self.assertNotEqual(other_user, self.revision(user='another-user'))
 
     def test_other_scope_retention_eviction_updates_only_affected_revision(self):
+        self.active();self.active('beta')
+        head=self.brain.changes('alpha')['head']
         self.brain.limits['max_traces'] = 2
         empty = self.revision()
         self.brain.search('synthetic query', 'alpha')
@@ -79,7 +83,15 @@ class RecallRevisionTests(unittest.TestCase):
         self.assertEqual(populated, self.revision())
         self.brain.search('second synthetic query', 'beta')
         self.assertEqual(empty, self.revision())
-        self.assertEqual(self.brain.changes('alpha')['head'], 0)
+        self.assertEqual(self.brain.changes('alpha')['head'], head)
+
+    def test_no_match_in_populated_scope_still_records_recall(self):
+        self.active()
+        before=self.revision()
+        result=self.brain.search('unrelated zebra','alpha')
+        self.assertEqual(result['results'],[])
+        self.assertEqual(result['trace_status'],'recorded')
+        self.assertNotEqual(before,self.revision())
 
     def test_forget_removes_recall_revision_and_preserves_other_scope(self):
         empty = self.revision()

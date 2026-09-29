@@ -3,7 +3,6 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 import json
 from pathlib import Path
-import re
 import sys
 import tempfile
 import unittest
@@ -77,6 +76,29 @@ class QuotaTests(unittest.TestCase):
         self.assertFalse(self.guard.check('gemini', 'medium')['allowed'])
         self.observe(22)
         self.assertTrue(self.guard.check('gemini', 'medium')['allowed'])
+
+    def test_reservations_from_an_earlier_window_period_do_not_hold_strict_admission(self):
+        self.observe(30, key='grok-weekly')
+        with self.guard.state() as data:
+            data['reservations']['old'] = {'worker': 'grok', 'task': 'uncertain', 'pools': ['grok-weekly'],
+                                           'estimate_pct': 20, 'created_at': stamp(now() - timedelta(days=8)),
+                                           'finished_at': None, 'outcome': 'recovery_hold'}
+        self.assertTrue(self.guard.check('grok')['allowed'])
+        with self.guard.state() as data:
+            data['reservations']['old']['created_at'] = stamp(now() - timedelta(days=1))
+        self.assertFalse(self.guard.check('grok')['allowed'])
+
+    def test_stale_or_missing_readers_queue_background_refresh_without_waiting(self):
+        self.observe(90, age=3600, key='codex-weekly')
+        self.guard.observe([{'id': 'grok-weekly', 'remaining_pct': 90, 'observed_at': stamp(now()),
+                             'max_age_seconds': 600, 'source': 'synthetic test'}], 'grok')
+        with patch('background_usage.request_refresh', return_value={'status': 'queued'}) as queue,                 patch.object(self.guard, 'refresh', side_effect=AssertionError('must not wait on a reader')):
+            queued = self.guard.queue_stale_refreshes()
+        called = sorted(call.args[1] for call in queue.call_args_list)
+        # codex is stale; claude and antigravity have never been read; grok is fresh.
+        self.assertEqual(called, ['antigravity', 'claude', 'codex'])
+        self.assertTrue(all(call.kwargs['min_interval_seconds'] == 300 for call in queue.call_args_list))
+        self.assertEqual(sorted(queued), called)
 
     def test_tightest_window_wins(self):
         self.guard.policy['worker_pools']['gemini'].append('second-window')
@@ -240,40 +262,29 @@ class QuotaTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.guard.check('gemini')
 
-    def test_dashboard_uses_per_window_expiry_and_quota_label(self):
-        observed = now()
+    def test_strict_dashboard_uses_shared_readiness_page(self):
         self.guard.observe([{'id': 'notebooklm-chat-daily', 'remaining_pct': 80,
-            'observed_at': stamp(observed), 'max_age_seconds': 30, 'source': 'manual test'}], 'manual')
+            'observed_at': stamp(), 'max_age_seconds': 30, 'source': 'manual test'}], 'manual')
         self.guard.dashboard()
         page = (self.guard.root / 'usage-dashboard.html').read_text(encoding='utf-8')
-        row = next(row for row in re.findall(r'<tr .*?</tr>', page) if 'NotebookLM' in row and 'chat' in row)
-        expiry = float(re.search(r'data-valid-until="([0-9.]+)"', row)[1])
-        self.assertAlmostEqual(expiry, observed.timestamp() + 30, places=3)
-        self.assertIn('QUOTA READY', row)
-        self.assertIn('<th>Quota status</th>', page)
+        self.assertIn('Bot readiness', page)
+        self.assertIn('when its reading is missing or stale', page)
+        self.assertIn('Technical details', page)
+        self.assertNotIn('Codex coordinates the work.', page)
 
-    def test_dashboard_expires_at_earlier_reset_or_hidden_admission_flag(self):
-        observed = now()
-        reset = observed + timedelta(seconds=10)
-        windows = [
-            {'id': 'codex-weekly', 'remaining_pct': 80, 'observed_at': stamp(observed),
-             'max_age_seconds': 600, 'reset_at': stamp(reset), 'source': 'test'},
-            {'id': 'codex-provider-block', 'remaining_pct': 100,
-             'observed_at': stamp(observed - timedelta(seconds=25)), 'max_age_seconds': 30, 'source': 'test'}]
-        self.guard.observe(windows, 'codex', complete=True,
-            memberships={'codex': [w['id'] for w in windows]})
-        self.guard.dashboard()
-        page = (self.guard.root / 'usage-dashboard.html').read_text(encoding='utf-8')
-        row = next(row for row in re.findall(r'<tr .*?</tr>', page) if '<td>Codex</td>' in row)
-        expiry = float(re.search(r'data-valid-until="([0-9.]+)"', row)[1])
-        self.assertAlmostEqual(expiry, observed.timestamp() + 5, places=3)
-        windows[1]['observed_at'] = stamp(observed)
-        self.guard.observe(windows, 'codex', complete=True)
-        self.guard.dashboard()
-        page = (self.guard.root / 'usage-dashboard.html').read_text(encoding='utf-8')
-        row = next(row for row in re.findall(r'<tr .*?</tr>', page) if '<td>Codex</td>' in row)
-        expiry = float(re.search(r'data-valid-until="([0-9.]+)"', row)[1])
-        self.assertAlmostEqual(expiry, reset.timestamp(), places=3)
+    def test_status_counts_unfinished_reservations_for_every_shared_pool_bot(self):
+        self.observe(80)
+        self.guard.policy['worker_pools']['second-google-model'] = ['agy:gemini-weekly']
+        reserved = self.guard.check('gemini', 'small', True, 'work')
+        with self.guard.state() as data:
+            data['reservations']['old'] = {'worker': 'gemini', 'task': 'prior window',
+                'pools': ['agy:gemini-weekly'], 'estimate_pct': 10,
+                'created_at': stamp(now() - timedelta(days=8)), 'finished_at': None}
+        counts = {item['worker']: item['active_reservation_count'] for item in self.guard.status()['workers']}
+        self.assertEqual((counts['gemini'], counts['second-google-model']), (1, 1))
+        self.guard.finish(reserved['reservation_id'], 'completed')
+        counts = {item['worker']: item['active_reservation_count'] for item in self.guard.status()['workers']}
+        self.assertEqual((counts['gemini'], counts['second-google-model']), (0, 0))
 
     def test_monitor_cancellation_stops_before_next_provider(self):
         stopped = False

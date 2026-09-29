@@ -23,6 +23,9 @@ def initialize(root=ROOT, home=None):
                    'paused_claude_model_families': ['fable']},
         'application_root': str(root), 'task_directory': str(root / 'runs/tasks'),
         'skill_source_directory': str(root / 'skills/multi-model-orchestrator'),
+        'coordinator_handoff': {'default': 'astra', 'backup': 'fable',
+                                'backup_model': 'claude-opus-5-5',
+                                'backup_display_name': 'Claude Opus 5.5'},
         'workers': [
             {'id': 'claude', 'provider': 'Anthropic', 'tool': 'claude-code',
              'requested_model': 'opus', 'effort': 'medium', 'quota_worker': 'claude',
