@@ -66,5 +66,11 @@ Keep missing measurements unknown and do not infer efficiency from one sample.
 Complete the contribution ledger, generate the standard audit and project map,
 then run `orchestrator.py closeout`. Resolve missing receipts, pending work,
 unattributed accepted work, or invalid reports before claiming completion.
+For the lead's final delivery, check `orchestrator.py notifications status`.
+When the user has enabled completion notifications, save the complete final answer
+as UTF-8 and pass it to closeout with `--final-report PATH`. OpenWhispr then applies
+the user's Call/Busy/Off preference. Keep ordinary worker replies out of this hook.
+Use the explicit question notification command for a question that needs the user.
+Do not replay historical results or retry an uncertain notification under a new ID.
 Report actual worker/provider counts and label accepted-work shares as estimates.
 Keep token counts, elapsed time, quota, and billing separate; unknown stays unknown.

@@ -47,7 +47,7 @@ class AdvisoryCoordinatorTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        self.run, _ = create_run(self.root, 'advisory-lead', 'Finish a synthetic project')
+        self.run, _ = create_run(self.root, 'advisory-lead', 'Finish a synthetic project', lead='astra')
         self.coordinator = Coordinator(self.run)
         self.initial = self.coordinator.read()
         self.checkpoint = deepcopy(self.initial['checkpoint'])

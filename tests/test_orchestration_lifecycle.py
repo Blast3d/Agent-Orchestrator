@@ -36,7 +36,7 @@ class LifecycleTests(unittest.TestCase):
         self.root = Path(temporary.name).resolve()
         (self.root / 'app/assets').mkdir(parents=True)
         shutil.copyfile(ROOT / 'app/assets/project-map.html', self.root / 'app/assets/project-map.html')
-        self.run, _ = create_run(self.root, 'lifecycle', 'Validate closeout evidence', project_id='alpha')
+        self.run, _ = create_run(self.root, 'lifecycle', 'Validate closeout evidence', project_id='alpha', lead='astra')
         state = Coordinator(self.run).read()
         self.identity = {key: state[key] for key in ('owner', 'session', 'generation')}
         self.store = TaskStore(self.root / 'runs/tasks')
@@ -54,7 +54,7 @@ class LifecycleTests(unittest.TestCase):
         with patch.dict(os.environ, {'CODEX_THREAD_ID': session}):
             packet = start_run(workspace=self.root, name='native-parent',
                                objective='Retain the active native session lineage',
-                               project='alpha', root=self.root)
+                               project='alpha', root=self.root, lead='astra')
         self.assertEqual(self.read(Path(packet['run']) / 'run.json')['native_parent_session_id'], session)
 
     def manifest(self, **changes):
@@ -166,7 +166,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_start_new_run_returns_established_identity_and_native_requirement(self):
         result = start_run(workspace=self.root, name='fresh', objective='Fresh start', project='alpha',
-                           root=self.root, context_loader=operating)
+                           root=self.root, context_loader=operating, lead='astra')
         run = Path(result['run'])
         self.assertTrue(result['created'])
         self.assertTrue(self.read(run / 'run.json')['native_work'])
@@ -203,6 +203,52 @@ class LifecycleTests(unittest.TestCase):
             self.audit(empty=empty, allocated=allocated)
             with patch('orchestration_lifecycle.ProjectLibrary', side_effect=AssertionError('No invalid views')):
                 self.held(self.close(), 'contribution_audit')
+
+    def test_final_report_notification_requires_verified_closeout_and_deduplicates(self):
+        from completion_notifications import Notifications
+        from unittest.mock import Mock
+        self.task()
+        self.audit()
+        report = self.root / 'final.txt'
+        report.write_text('Complete lead result, including limitations.\nNot raw worker output.', encoding='utf-8')
+        bridge = Mock()
+        bridge.submit.return_value = {'status': 'accepted', 'reason': 'durably_admitted_not_delivery_proof'}
+        client = Notifications(self.root / 'notifications.sqlite', bridge)
+        client.configure(True)
+        with patch('completion_notifications.Notifications', return_value=client):
+            first = closeout_run(self.run, root=self.root, final_report=report, **self.identity)
+            second = closeout_run(self.run, root=self.root, final_report=report, **self.identity)
+        self.assertEqual(first['status'], 'completed')
+        self.assertEqual(first['completion_notification']['status'], 'accepted')
+        self.assertTrue(second['completion_notification']['duplicate'])
+        bridge.submit.assert_called_once()
+        self.assertEqual(bridge.submit.call_args.args[0]['text'], report.read_bytes().decode('utf-8'))
+        self.assertEqual(self.read(self.run / 'closeout.json')['status'], 'completed')
+
+    def test_held_closeout_never_notifies(self):
+        self.task()
+        self.audit(empty=True)
+        with patch('completion_notifications.notify_verified_closeout') as notification:
+            result = closeout_run(self.run, root=self.root, final_report=self.root / 'missing.txt', **self.identity)
+        self.assertEqual(result['status'], 'held')
+        notification.assert_not_called()
+
+    def test_notification_failure_cannot_withdraw_completed_work(self):
+        self.task()
+        self.audit()
+        with patch('completion_notifications.notify_verified_closeout', side_effect=OSError('private path')):
+            result = closeout_run(self.run, root=self.root, final_report=self.root / 'final.txt', **self.identity)
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(result['completion_notification'], {'status': 'held', 'reason': 'OSError'})
+        self.assertEqual(self.read(self.run / 'run.json')['status'], 'completed')
+        self.assertEqual(self.read(self.run / 'closeout.json')['status'], 'completed')
+
+    def test_closeout_without_explicit_report_does_not_notify(self):
+        self.task()
+        self.audit()
+        with patch('completion_notifications.notify_verified_closeout') as notification:
+            self.assertEqual(self.close()['status'], 'completed')
+        notification.assert_not_called()
 
     def test_malformed_ad_hoc_and_stale_audits_hold(self):
         self.task()

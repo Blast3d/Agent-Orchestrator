@@ -158,6 +158,11 @@ operating guide and scoped Brain recall before assigning workers. The dispatcher
 includes the guide in every new worker request; project recall remains scoped to
 the assignment. **closeout** checks reviewed task captures and contribution maps
 before recording completion. See [startup and closeout](docs/startup-and-closeout.md).
+For optional Discord completion calls or Busy-mode messages through OpenWhispr,
+enable [completion notifications](docs/completion-notifications.md), select
+OpenWhispr's `project` trigger, and supply the full lead report to
+`closeout --final-report final.txt`. Delivery stays in OpenWhispr; individual
+worker completions do not call.
 You do not need to launch all providers yourself. Useful manual commands:
 
 ```powershell

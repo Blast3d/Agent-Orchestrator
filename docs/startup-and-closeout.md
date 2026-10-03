@@ -1,5 +1,10 @@
 # Startup and verified closeout
 
+Optional [OpenWhispr completion notifications](completion-notifications.md) accept
+the lead's full final report with `closeout --final-report final.txt`. The producer
+defaults off, only runs after every closeout check passes, and never turns a
+notification failure into failed project work. Worker completions do not call.
+
 Use `start` before new orchestration work. It always loads the maintained operating
 guide and prints the full bounded packet for the coordinator. It searches only the
 run's exact Brain project, with the objective as its default query. An empty search

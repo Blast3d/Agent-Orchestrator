@@ -188,7 +188,7 @@ class TransferTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        self.run, _ = create_run(self.root, 'transfer-test', 'Finish the synthetic task')
+        self.run, _ = create_run(self.root, 'transfer-test', 'Finish the synthetic task', lead='astra')
         self.coordinator = Coordinator(self.run)
         self.state = self.coordinator.read()
         self.checkpoint = deepcopy(self.state['checkpoint'])

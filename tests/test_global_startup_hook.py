@@ -10,6 +10,25 @@ SPEC.loader.exec_module(INSTALL)
 
 
 class StartupHookTests(unittest.TestCase):
+    def test_every_discovery_mirror_preserves_provider_identity_verbatim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, home = Path(directory) / 'app', Path(directory) / 'home'
+            source = root / 'skills/multi-model-orchestrator'
+            (source / 'references').mkdir(parents=True)
+            guide = 'Claude is an Anthropic model. Codex is an OpenAI model.\n'
+            (source / 'SKILL.md').write_text(guide, encoding='utf-8')
+            (source / 'references/provider-routing.md').write_text('Use authorized routes.\n', encoding='utf-8')
+            stale = home / '.agents/skills/multi-model-orchestrator/SKILL.md'
+            stale.parent.mkdir(parents=True)
+            stale.write_text('Codex is an Anthropic model.', encoding='utf-8')
+            for _ in range(2):
+                mirrors = INSTALL.install_orchestrator_skill_mirrors(root, home)
+                self.assertEqual(len(mirrors), 3)
+                for mirror in mirrors:
+                    self.assertEqual((mirror / 'SKILL.md').read_bytes(), (source / 'SKILL.md').read_bytes())
+                    self.assertEqual((mirror / 'references/provider-routing.md').read_bytes(),
+                                     (source / 'references/provider-routing.md').read_bytes())
+
     def test_preserves_personal_text_and_replaces_only_managed_block(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'AGENTS.md'

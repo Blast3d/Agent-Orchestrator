@@ -58,20 +58,30 @@ read it. The user should not have to remind the lead to load this workflow.
         path.write_text(updated, encoding='utf-8')
 
 
+def install_orchestrator_skill_mirrors(root=ROOT, home=None):
+    """All discoverable providers receive the same maintained guide, verbatim."""
+    home = Path(home) if home is not None else Path.home()
+    source = Path(root) / 'skills/multi-model-orchestrator'
+    destinations = [home / profile / 'skills/multi-model-orchestrator'
+                    for profile in ('.codex', '.claude', '.agents')]
+    for destination in destinations:
+        shutil.copytree(source, destination, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('__pycache__'))
+    return destinations
+
+
 def install():
-    source = ROOT / 'skills/multi-model-orchestrator'
-    destination = Path.home() / '.codex/skills/multi-model-orchestrator'
-    shutil.copytree(source, destination, dirs_exist_ok=True, ignore=shutil.ignore_patterns('__pycache__'))
+    install_orchestrator_skill_mirrors()
     claude_skills = Path.home() / '.claude/skills'
-    shutil.copytree(source, claude_skills / 'multi-model-orchestrator', dirs_exist_ok=True,
-                    ignore=shutil.ignore_patterns('__pycache__'))
     shutil.copytree(ROOT / 'skills/orchestrator-takeover', claude_skills / 'orchestrator-takeover',
                     dirs_exist_ok=True, ignore=shutil.ignore_patterns('__pycache__'))
+    # A connected ChatGPT dot (Relay) reaches this PC through local Codex threads.
+    shutil.copytree(ROOT / 'skills/relay-bridge', Path.home() / '.codex/skills/relay-bridge', dirs_exist_ok=True)
     registry = json.loads((ROOT / 'config/workers.json').read_text(encoding='utf-8'))
     (Path.home() / '.codex/model-workers.json').write_text(json.dumps(registry, indent=2) + '\n', encoding='utf-8')
     install_startup_hook(Path.home() / '.codex/AGENTS.md')
     install_startup_hook(Path.home() / '.claude/CLAUDE.md')
-    return {'global_skill_installed': True, 'claude_takeover_installed': True,
+    return {'global_skill_installed': True, 'agents_skill_installed': True, 'claude_takeover_installed': True,
             'registry_updated': True, 'codex_startup_hook': True, 'claude_startup_hook': True}
 
 if __name__ == '__main__':

@@ -483,8 +483,10 @@ class Guard:
         memberships = None
         if target == 'antigravity':
             exe = Path.home() / 'AppData/Local/agy/bin/agy.exe'
+            env = os.environ.copy()
+            env['AGY_CLI_DISABLE_AUTO_UPDATE'] = 'true'
             response = subprocess.run([str(exe), '-p', '/usage', '--output-format', 'json', '--print-timeout', '30s'],
-                cwd=WORKSPACES / 'google', capture_output=True, text=True, encoding='utf-8', timeout=40,
+                cwd=WORKSPACES / 'google', env=env, capture_output=True, text=True, encoding='utf-8', timeout=40,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
             if response.returncode:
                 raise RuntimeError('Quota command failed')

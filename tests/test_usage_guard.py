@@ -2,7 +2,9 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -150,6 +152,42 @@ class QuotaTests(unittest.TestCase):
             run.return_value.stdout = json.dumps(payload)
             self.assertTrue(self.guard.refresh('antigravity')['antigravity']['ok'])
         self.assertFalse(self.guard.check('gemini')['allowed'])
+
+    def test_antigravity_quota_reader_disables_updates_without_mutating_parent_environment(self):
+        payload = {'num_turns': 0, 'command': {'name': 'usage', 'data': {'groups': [
+            {'name': 'Gemini Models', 'buckets': [{'id': 'gemini-weekly', 'remaining_fraction': .9}]}]}}}
+        for initial_setting in (None, 'false'):
+            parent_environment = {'USERPROFILE': self.folder.name, 'UNRELATED_QUOTA_VALUE': 'retained'}
+            if initial_setting is not None:
+                parent_environment['AGY_CLI_DISABLE_AUTO_UPDATE'] = initial_setting
+
+            def quota_process(command, **kwargs):
+                return subprocess.CompletedProcess(command, 0, json.dumps(payload), '')
+
+            with self.subTest(initial_setting=initial_setting), \
+                    patch.dict('usage_guard.os.environ', parent_environment, clear=True), \
+                    patch('usage_guard.subprocess.run', side_effect=quota_process) as run:
+                self.assertTrue(self.guard.refresh('antigravity')['antigravity']['ok'])
+                self.assertEqual(run.call_count, 1)
+                child_environment = run.call_args.kwargs.get('env', os.environ)
+                self.assertEqual(child_environment.get('AGY_CLI_DISABLE_AUTO_UPDATE'), 'true')
+                self.assertEqual(child_environment.get('UNRELATED_QUOTA_VALUE'), 'retained')
+                self.assertEqual(dict(os.environ), parent_environment)
+
+    def test_other_provider_quota_reader_preserves_environment_values(self):
+        parent_environment = {'AGY_CLI_DISABLE_AUTO_UPDATE': 'false', 'UNRELATED_QUOTA_VALUE': 'retained'}
+        payload = {'windows': [{'id': 'grok-weekly', 'remaining_pct': 80,
+            'observed_at': stamp(), 'source': 'synthetic quota test'}]}
+
+        def quota_process(command, **kwargs):
+            self.assertEqual(dict(kwargs.get('env', os.environ)), parent_environment)
+            return subprocess.CompletedProcess(command, 0, json.dumps(payload), '')
+
+        with patch.dict('usage_guard.os.environ', parent_environment, clear=True), \
+                patch('usage_guard.subprocess.run', side_effect=quota_process) as run:
+            self.assertTrue(self.guard.refresh('grok')['grok']['ok'])
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(dict(os.environ), parent_environment)
 
     def test_snapshot_started_before_finish_keeps_reservation(self):
         self.observe(40)

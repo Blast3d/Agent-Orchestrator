@@ -35,7 +35,7 @@ class CoordinatorTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.workspace = Path(temp.name)
-        self.run, self.manifest = create_run(self.workspace, 'demo', 'Finish the synthetic project')
+        self.run, self.manifest = create_run(self.workspace, 'demo', 'Finish the synthetic project', lead='astra')
         self.coordinator = Coordinator(self.run)
         self.initial = self.coordinator.read()
         self.session = self.initial['session']
