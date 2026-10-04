@@ -25,6 +25,7 @@ SCHEMA = 1
 MAX_BODY = 32 * 1024
 MAX_ACTIVE = 2
 ID = re.compile(r'^[a-zA-Z0-9_-]{8,128}$')
+SKILL_PLAN_ID = re.compile(r'^[a-f0-9]{32}$')
 WORKERS = {'codex', 'claude', 'grok', 'gemini', 'local-chat', 'vscode-copilot'}
 
 
@@ -52,6 +53,23 @@ def write_private(path, content):
         temporary.unlink(missing_ok=True)
 
 
+def reviewed_skill_plan(text, project_id, plan_id):
+    """Check the existing reviewed plan without inference or permission changes."""
+    if project_id != 'openwhispr' or not isinstance(plan_id, str) or not SKILL_PLAN_ID.fullmatch(plan_id):
+        raise ValueError('Invalid reviewed skill plan ID.')
+    from skill_flow import delivery
+    try:
+        context = delivery(ROOT, project_id, plan_id)
+    except OSError as exc:
+        raise ValueError('Reviewed skill plan is unavailable; create and review a current plan.') from exc
+    if context.get('project_id') != project_id or context.get('plan_id') != plan_id:
+        raise ValueError('Reviewed skill plan does not belong to this OpenWhispr request.')
+    task = context.get('task')
+    if not isinstance(task, str) or ' '.join(text.split()) != ' '.join(task.split()):
+        raise ValueError('Voice request must match the reviewed skill plan task; use the exact prepared request.')
+    return context
+
+
 class Journal:
     def __init__(self, path):
         self.path = Path(path)
@@ -61,7 +79,10 @@ class Journal:
             db.execute('''CREATE TABLE IF NOT EXISTS requests (
                 id TEXT PRIMARY KEY, body_hash TEXT NOT NULL, text TEXT NOT NULL,
                 project_id TEXT NOT NULL, conversation_id TEXT, status TEXT NOT NULL,
-                question_id TEXT, answer TEXT, created_at TEXT NOT NULL)''')
+                question_id TEXT, answer TEXT, created_at TEXT NOT NULL, skill_plan_id TEXT)''')
+            columns = {row[1] for row in db.execute('PRAGMA table_info(requests)')}
+            if 'skill_plan_id' not in columns:
+                db.execute('ALTER TABLE requests ADD COLUMN skill_plan_id TEXT')
             db.execute('''CREATE TABLE IF NOT EXISTS events (
                 request_id TEXT NOT NULL, seq INTEGER NOT NULL, type TEXT NOT NULL,
                 payload TEXT NOT NULL, at TEXT NOT NULL,
@@ -101,6 +122,9 @@ class Journal:
         conversation = body.get('conversation_id')
         if conversation is not None and (not isinstance(conversation, str) or len(conversation) > 128):
             raise ValueError('Invalid conversation ID.')
+        plan_id = body.get('skill_plan_id')
+        if 'skill_plan_id' in body and (not isinstance(plan_id, str) or not SKILL_PLAN_ID.fullmatch(plan_id)):
+            raise ValueError('Invalid reviewed skill plan ID.')
         digest = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
         with self.lock, self.connect() as db:
             existing = db.execute('SELECT body_hash,status FROM requests WHERE id=?', (request_id,)).fetchone()
@@ -111,14 +135,18 @@ class Journal:
             active = db.execute("SELECT COUNT(*) FROM requests WHERE status IN ('accepted','started','question','answered')").fetchone()[0]
             if active >= MAX_ACTIVE:
                 raise Busy('Orchestrator already has two active voice requests.')
-            db.execute('INSERT INTO requests VALUES (?,?,?,?,?,?,?,?,?)',
-                       (request_id, digest, value.strip(), project, conversation, 'accepted', None, None, now()))
+            if plan_id is not None:
+                reviewed_skill_plan(value, project, plan_id)
+            db.execute('''INSERT INTO requests
+                (id,body_hash,text,project_id,conversation_id,status,question_id,answer,created_at,skill_plan_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                       (request_id, digest, value.strip(), project, conversation, 'accepted', None, None, now(), plan_id))
             self._event(db, request_id, 'accepted', {})
         return {'request_id': request_id, 'status': 'accepted', 'reused': False}
 
     def get(self, request_id):
         with self.connect() as db:
-            row = db.execute('SELECT id,status,project_id,conversation_id,question_id FROM requests WHERE id=?',
+            row = db.execute('SELECT id,status,project_id,conversation_id,question_id,skill_plan_id FROM requests WHERE id=?',
                              (request_id,)).fetchone()
             return dict(row) if row else None
 
@@ -186,7 +214,13 @@ class Dispatcher:
         if not self.journal.transition(request_id, 'started', 'started', {}):
             return
         with self.journal.connect() as db:
-            row = db.execute('SELECT text,project_id,answer,question_id FROM requests WHERE id=?', (request_id,)).fetchone()
+            row = db.execute('SELECT text,project_id,answer,question_id,skill_plan_id FROM requests WHERE id=?', (request_id,)).fetchone()
+        if row['skill_plan_id'] is not None:
+            try:
+                reviewed_skill_plan(row['text'], row['project_id'], row['skill_plan_id'])
+            except (ValueError, OSError) as exc:
+                self.journal.transition(request_id, 'failed', 'failed', {'reason': str(exc)})
+                return
         directory = home() / 'voice-jobs' / request_id
         directory.mkdir(parents=True, exist_ok=True)
         suffix = '-answer' if continuation else ''
@@ -209,6 +243,18 @@ class Dispatcher:
                    '--prompt-file', str(brief), '--output', str(output), '--task', 'Voice request',
                    '--size', 'small', '--project', row['project_id'], '--assignment-id', 'voice-' + request_id + suffix]
         try:
+            if row['skill_plan_id'] is not None:
+                from orchestration_lifecycle import start_run
+                from task_store import write_json
+                packet = start_run(workspace=ROOT, name='voice-skill', objective=row['text'],
+                                   query=row['text'][:500], project=row['project_id'],
+                                   no_memory=True, root=ROOT)
+                run = Path(packet['run'])
+                manifest = json.loads((run / 'run.json').read_text(encoding='utf-8'))
+                manifest.update(native_work=False, skill_plan_id=row['skill_plan_id'],
+                                voice_request_id=request_id)
+                write_json(run / 'run.json', manifest)
+                command.extend(['--run', str(run), '--skill-plan', row['skill_plan_id'], '--no-auto-fallback'])
             completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=1900)
             if not output.is_file():
                 self.journal.transition(request_id, 'outcome_unknown', 'outcome_unknown',
@@ -311,8 +357,10 @@ def handler(journal, dispatcher, token):
                 self.reply(429, {'error': str(exc)})
             except KeyError:
                 self.reply(404, {'error': 'Unknown request.'})
-            except (ValueError, json.JSONDecodeError):
-                self.reply(400, {'error': 'Invalid request.'})
+            except json.JSONDecodeError:
+                self.reply(400, {'error': 'Invalid request JSON.'})
+            except ValueError as exc:
+                self.reply(400, {'error': str(exc)})
 
     return Handler
 

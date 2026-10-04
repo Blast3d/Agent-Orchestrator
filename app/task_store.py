@@ -27,6 +27,16 @@ def timestamp():
     return datetime.now(timezone.utc).isoformat()
 
 
+def preflight_without_execution(result):
+    """Evidence required to review or reuse a task that never reached a provider."""
+    return (result.get('execution_status') == 'held'
+        and not any(result.get(key) for key in ('started_at', 'reservation_id',
+            'process_pid', 'response', 'provider_result', 'usage', 'modelUsage', 'model'))
+        and result.get('reservation_state') in (None, 'released')
+        and result.get('storage_reservation_state') in (None, 'released')
+        and (not result.get('storage_reservation_id') or result.get('storage_reservation_state') == 'released'))
+
+
 class OutputClaim:
     """Reserve an export path exclusively and detect replacement while a job runs."""
     def __init__(self, path, job_id):
@@ -126,11 +136,7 @@ class TaskStore:
             # or uncertain allowance/storage reservation to reconcile.
             rejected_preflight = (decision == 'rejected'
                 and result.get('status') == result.get('execution_status') == 'held'
-                and not any(result.get(key) for key in ('started_at', 'reservation_id',
-                    'process_pid', 'response', 'provider_result', 'usage', 'modelUsage', 'model'))
-                and result.get('reservation_state') in (None, 'released')
-                and result.get('storage_reservation_state') in (None, 'released')
-                and (not result.get('storage_reservation_id') or result.get('storage_reservation_state') == 'released'))
+                and preflight_without_execution(result))
             if (not result.get('finalized_at') or (not rejected_preflight and
                     (result.get('execution_status') != 'succeeded' or result.get('status') != 'awaiting_review'))):
                 raise ValueError('Only an unreviewed, successfully executed answer can be reviewed')

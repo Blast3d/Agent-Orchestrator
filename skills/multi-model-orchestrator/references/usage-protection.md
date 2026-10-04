@@ -8,8 +8,11 @@ and silent Windows notifications. The settings are user-editable in `policy.json
 This host explicitly enables `quota_admission_mode: advisory` and
 `worker_start_threshold_pct: 20`. Start from the last recorded reading without
 waiting for collection. At or below 20% available after pending reservations,
-prefer an eligible alternate. Stale, failed-refresh and missing readings are
-warnings, not holds. A reading whose exact reset has passed is historical;
+prefer an eligible alternate. Positive allowance permits direct bounded work or
+the last authorized worker in a frozen plan. Stale, failed-refresh and missing
+readings alone are warnings, not holds. Fresh zero available allowance, pending
+reservations consuming all available allowance, and known zero before its exact
+reset still hold that provider. A reading whose exact reset has passed is historical;
 current allowance is unknown until measured again. Unknown is neither zero nor
 100%. Confirmed current rejection cooldowns still hold that provider.
 
@@ -46,8 +49,10 @@ For direct CLI, native, or MCP handoffs outside the helper:
    that pool. Preserve partial output and consider a verified available worker
    within the authorized cost/data scope. Never silently downgrade or spend more.
 
-The CLI automatically tries the configured Claude/Grok alternate once after a
-confirmed, safely finalized quota rejection or recorded low allowance. Explicit
+The CLI follows a frozen ordered Codex/Claude/Grok plan after a confirmed, safely
+finalized quota rejection or a low-allowance preference. It skips a low primary
+before reservation when an authorized alternate remains, and permits bounded
+work on a positive terminal allowance instead of holding every low provider. Explicit
 `--fallback-worker` order takes precedence; `--no-auto-fallback` disables defaults.
 Use stable project/assignment IDs for deliberate retries. Unkeyed requests get a
 new receipt identity; outside the maintained workspace they use an unscoped

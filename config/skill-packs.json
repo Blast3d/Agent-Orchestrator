@@ -1,0 +1,385 @@
+{
+  "schema_version": 1,
+  "roots": {
+    "codex": "~/.codex/skills",
+    "agents": "~/.agents/skills",
+    "orchestrator": "${orchestrator}/.agents/skills",
+    "openwhispr": "${openwhispr}/.agents/skills",
+    "civil3d": "${civil3d}/.codex/skills",
+    "vibe": "${library}/dormant/vibe-skills/bundled/skills",
+    "video": "${library}/dormant/video-hyperframes"
+  },
+  "packs": [
+    {
+      "id": "core",
+      "label": "Shared core",
+      "description": "Find skills, recall workspace locations, reuse project lessons, and communicate through the Relay bridge.",
+      "skills": [
+        {
+          "id": "find-local-agent-skills",
+          "root": "codex",
+          "path": "find-local-agent-skills/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "project-lessons",
+          "root": "codex",
+          "path": "project-lessons/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "workspace-locations",
+          "root": "codex",
+          "path": "workspace-locations/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "relay-bridge",
+          "root": "codex",
+          "path": "relay-bridge/SKILL.md",
+          "availability": "installed"
+        }
+      ]
+    },
+    {
+      "id": "engineering",
+      "label": "Engineering",
+      "description": "Debug, test, review, verify, and assess performance using the maintained engineering skills.",
+      "skills": [
+        {
+          "id": "systematic-debugging",
+          "root": "agents",
+          "path": "systematic-debugging/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "tdd-guide",
+          "root": "agents",
+          "path": "tdd-guide/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "property-based-testing",
+          "root": "agents",
+          "path": "property-based-testing/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "verification-before-completion",
+          "root": "agents",
+          "path": "verification-before-completion/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "gh-address-comments",
+          "root": "agents",
+          "path": "gh-address-comments/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "gh-fix-ci",
+          "root": "agents",
+          "path": "gh-fix-ci/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "deslop",
+          "root": "agents",
+          "path": "deslop/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "detecting-performance-regressions",
+          "root": "agents",
+          "path": "detecting-performance-regressions/SKILL.md",
+          "availability": "installed"
+        }
+      ]
+    },
+    {
+      "id": "orchestrator",
+      "label": "Orchestrator",
+      "description": "Coordinate bounded workers and handoffs while preserving exact run identity and authorization.",
+      "skills": [
+        {
+          "id": "multi-model-orchestrator",
+          "root": "codex",
+          "path": "multi-model-orchestrator/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "orchestrator-takeover",
+          "root": "agents",
+          "path": "orchestrator-takeover/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "orchestrator-relay-triage",
+          "root": "orchestrator",
+          "path": "relay-request-triage/SKILL.md",
+          "availability": "installed"
+        }
+      ]
+    },
+    {
+      "id": "openwhispr",
+      "label": "OpenWhispr",
+      "description": "Integrate OpenWhispr APIs and CLI, maintain hands-free voice control and Windows hooks, and keep project skills consistent.",
+      "skills": [
+        {
+          "id": "openwhispr-api",
+          "root": "openwhispr",
+          "path": "openwhispr-api/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "openwhispr-cli",
+          "root": "openwhispr",
+          "path": "openwhispr-cli/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "openwhispr-hands-free-maintenance",
+          "root": "openwhispr",
+          "path": "openwhispr-hands-free-maintenance/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "lean-skill-authoring",
+          "root": "openwhispr",
+          "path": "lean-skill-authoring/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "openwhispr-relay-triage",
+          "root": "openwhispr",
+          "path": "relay-request-triage/SKILL.md",
+          "availability": "installed"
+        },
+        {
+          "id": "windows-hook-debugging",
+          "root": "agents",
+          "path": "windows-hook-debugging/SKILL.md",
+          "availability": "installed"
+        }
+      ]
+    },
+    {
+      "id": "civil3d",
+      "label": "Civil 3D and survey",
+      "description": "Project DWG, traverse, survey-data, and edit-protection skills require the maintained Civil3D skill root. No unverified skill names are exposed.",
+      "roots": [
+        "civil3d"
+      ],
+      "skills": []
+    },
+    {
+      "id": "mcp",
+      "label": "MCP integration",
+      "description": "Optional Claude Code plugin guidance for configuring and integrating MCP servers. Named tools and host must exist; selection grants no permissions.",
+      "optional": true,
+      "skills": [
+        {
+          "id": "mcp-integration",
+          "root": "vibe",
+          "path": "mcp-integration/SKILL.md",
+          "availability": "dormant"
+        }
+      ]
+    },
+    {
+      "id": "documents",
+      "label": "Documents",
+      "description": "Optional Word, PDF, and spreadsheet creation, editing, rendering, and validation from the dormant library.",
+      "optional": true,
+      "skills": [
+        {
+          "id": "vibe-docx",
+          "root": "vibe",
+          "path": "docx/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "vibe-pdf",
+          "root": "vibe",
+          "path": "pdf/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "vibe-xlsx",
+          "root": "vibe",
+          "path": "xlsx/SKILL.md",
+          "availability": "dormant"
+        }
+      ]
+    },
+    {
+      "id": "design",
+      "label": "Design",
+      "description": "Optional user research and design validation, plus Figma implementation when the required MCP server is connected.",
+      "optional": true,
+      "skills": [
+        {
+          "id": "ux-researcher-designer",
+          "root": "vibe",
+          "path": "ux-researcher-designer/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "figma-implement-design",
+          "root": "vibe",
+          "path": "figma-implement-design/SKILL.md",
+          "availability": "dormant"
+        }
+      ]
+    },
+    {
+      "id": "research",
+      "label": "Research",
+      "description": "Optional current documentation lookup and research validation. Provider-specific research tools need existing task authorization and available routes.",
+      "optional": true,
+      "skills": [
+        {
+          "id": "documentation-lookup",
+          "root": "vibe",
+          "path": "documentation-lookup/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "comprehensive-research-agent",
+          "root": "vibe",
+          "path": "comprehensive-research-agent/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "research-lookup",
+          "root": "vibe",
+          "path": "research-lookup/SKILL.md",
+          "availability": "dormant"
+        }
+      ]
+    },
+    {
+      "id": "video",
+      "label": "Video and HyperFrames",
+      "description": "Optional dormant video tooling. Load only reviewed instructions for this task; do not reactivate global discovery or assume missing tools are installed.",
+      "optional": true,
+      "skills": [
+        {
+          "id": "hyperframes",
+          "root": "video",
+          "path": "hyperframes/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "hyperframes-animation",
+          "root": "video",
+          "path": "hyperframes-animation/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "hyperframes-audio",
+          "root": "video",
+          "path": "hyperframes-audio/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "hyperframes-cli",
+          "root": "video",
+          "path": "hyperframes-cli/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "hyperframes-core",
+          "root": "video",
+          "path": "hyperframes-core/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "hyperframes-creative",
+          "root": "video",
+          "path": "hyperframes-creative/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "hyperframes-keyframes",
+          "root": "video",
+          "path": "hyperframes-keyframes/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "hyperframes-registry",
+          "root": "video",
+          "path": "hyperframes-registry/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "hyperframes-studio",
+          "root": "video",
+          "path": "hyperframes-studio/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "media-use",
+          "root": "video",
+          "path": "media-use/SKILL.md",
+          "availability": "dormant"
+        },
+        {
+          "id": "general-video",
+          "root": "video",
+          "path": "general-video/SKILL.md",
+          "availability": "dormant"
+        }
+      ]
+    }
+  ],
+  "projects": {
+    "agent-orchestrator": [
+      "core",
+      "engineering",
+      "orchestrator",
+      "mcp",
+      "documents",
+      "design",
+      "research",
+      "video"
+    ],
+    "openwhispr": [
+      "core",
+      "engineering",
+      "openwhispr",
+      "mcp",
+      "documents",
+      "design",
+      "research",
+      "video"
+    ],
+    "civil3d": [
+      "core",
+      "engineering",
+      "civil3d"
+    ],
+    "mcp-building": [
+      "core",
+      "engineering",
+      "mcp"
+    ],
+    "documents": [
+      "core",
+      "documents"
+    ],
+    "design": [
+      "core",
+      "design"
+    ],
+    "research": [
+      "core",
+      "research"
+    ],
+    "video": [
+      "core",
+      "video"
+    ]
+  }
+}

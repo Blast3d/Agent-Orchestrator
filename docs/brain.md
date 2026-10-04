@@ -1,5 +1,9 @@
 # Orchestrator memory
 
+The **Skill packs** page connects project-scoped JEV recommendations, lead review,
+complete worker context and accepted-answer usefulness feedback. See
+[task skill packs](skill-packs.md) for the dashboard and OpenWhispr workflow.
+
 Open **Open Brain Dashboard.cmd** from the application folder. It opens or reuses
 one small Python server on this computer. It does not start a model, install a
 graph server or register a new startup task. When Jev is enabled for a project in

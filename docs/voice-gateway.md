@@ -32,6 +32,15 @@ can choose to replay them. The gateway accepts at most two active voice requests
 
 ## Contract
 
+For an explicitly reviewed OpenWhispr skill plan, `POST /v1/requests` also accepts
+`skill_plan_id`. The desktop client recognizes the deliberate prefix
+`use skill plan <id>: <exact reviewed task>`, or a caller can supply
+`submit(text, requestId, { skillPlanId })`. The gateway validates the plan's scope,
+task and current instruction hashes before accepting and again before dispatch.
+Planned requests start an isolated hosted run and use `--skill-plan` with
+`--no-auto-fallback`; they cannot claim an existing run. The dashboard provides a
+copy button. See [task skill packs](skill-packs.md) for review and Brain feedback.
+
 - `POST /v1/requests`: `{schema_version:1, request_id, text, project_id}`. The
   request ID is idempotent; the same ID with changed content returns 409.
 - `GET /v1/requests/{id}`: current status.

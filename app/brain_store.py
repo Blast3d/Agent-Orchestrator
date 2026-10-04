@@ -287,6 +287,8 @@ class BrainStore:
         proof['review_sha256'] = review_hash
         from task_performance import snapshot
         return {'plain':plain_hash, 'reviewed':digest(proof), 'review_sha256':review_hash,
+                'skill_feedback_sha256':digest(result['skill_feedback']) if isinstance(result.get('skill_feedback'), dict) else None,
+                'skill_context_sha256':digest(result['skill_context']) if isinstance(result.get('skill_context'), dict) else None,
                 'performance_sha256':digest(snapshot(result))}
 
     @staticmethod
@@ -310,6 +312,14 @@ class BrainStore:
                 raise ValueError('Canonical task performance changed; review the memory separately')
             normalized['performance_sha256'] = value
             source_hash = digest([source_hash,value])
+        for name in ('skill_context_sha256', 'skill_feedback_sha256'):
+            if name in source:
+                value = source[name]
+                if (not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{64}', value)
+                        or value != proofs.get(name)):
+                    raise ValueError('Canonical skill evidence changed; review the memory separately')
+                normalized[name] = value
+                source_hash = digest([source_hash, value])
         return normalized, source_hash
 
     @staticmethod

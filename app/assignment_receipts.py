@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 import uuid
 
-from task_store import timestamp, write_json
+from task_store import timestamp, write_json, preflight_without_execution
 from usage_guard import file_lock
 
 
@@ -57,8 +57,14 @@ def _read_json(path):
 
 
 def _contract(value):
-    if not isinstance(value, dict) or not _CONTRACT_KEYS <= set(value) or set(value)-_CONTRACT_KEYS-{'memory_query','memory_policy','memory_profile','memory_depth','timeout_seconds','codex_model','codex_effort'}:
+    if not isinstance(value, dict) or not _CONTRACT_KEYS <= set(value) or set(value)-_CONTRACT_KEYS-{'memory_query','memory_policy','memory_profile','memory_depth','timeout_seconds','codex_model','codex_effort','skill_plan_binding'}:
         raise ValueError('Assignment contract must contain declared identity fields and supported optional settings')
+    if 'skill_plan_binding' in value:
+        binding = value['skill_plan_binding']
+        if (not isinstance(binding, dict) or set(binding) != {'plan_id', 'context_sha256'}
+                or not isinstance(binding['plan_id'], str) or not _JOB.fullmatch(binding['plan_id'])
+                or not isinstance(binding['context_sha256'], str) or not _SHA.fullmatch(binding['context_sha256'])):
+            raise ValueError('Reviewed skill identity requires an exact plan and context fingerprint')
     if ('codex_model' in value or 'codex_effort' in value) and (
             value.get('worker') != 'codex' or value.get('codex_model') not in ('gpt-6-astra', 'gpt-6-sol')
             or value.get('codex_effort') not in ('low', 'medium', 'high')):
@@ -249,8 +255,9 @@ class AssignmentReceipts:
                                                                'held', 'failed', 'uncertain')
                     or document.get('review_status') not in ('pending', 'accepted', 'rejected')):
                 raise AssignmentIncomplete('Canonical task lifecycle evidence is invalid')
+            reviewed_preflight = document['status'] == 'rejected' and preflight_without_execution(document)
             if (document['status'] in ('accepted', 'rejected') and
-                    (document['execution_status'] != 'succeeded' or not document.get('finalized_at')
+                    ((document['execution_status'] != 'succeeded' and not reviewed_preflight) or not document.get('finalized_at')
                      or document['review_status'] != document['status'])):
                 raise AssignmentIncomplete('Canonical review evidence is inconsistent')
             errors = document.get('cleanup_errors', [])

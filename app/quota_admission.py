@@ -192,6 +192,7 @@ def evaluate_advisory(policy, data, worker, size, current_time):
         'warnings': [],
         'admission_mode': 'advisory',
         'threshold_pct': threshold,
+        'prefer_alternate': False,
         'reading_status': 'unknown' if not keys else 'fresh',
         'provider_refresh_errors': {},
         'cooldown_active_pools': {},
@@ -306,9 +307,17 @@ def evaluate_advisory(policy, data, worker, size, current_time):
         })
         statuses.append('unknown' if reset_passed else freshness)
         if not reset_passed and available <= threshold:
-            result['reasons'].append(
-                f'{key}: available allowance is at or below the worker start threshold'
+            result['prefer_alternate'] = True
+            result['warnings'].append(
+                f'{key}: {available:g}% available; prefer an authorized alternate at or below {threshold:g}%'
             )
+            # A failed collector cannot release a known exhausted period or an
+            # unfinished reservation. Cached readings alone are advisory.
+            if available == 0 and (freshness == 'fresh' or pending > 0
+                                   or (remaining == 0 and reset_moment is not None)):
+                result['reasons'].append(f'{key}: available allowance is exhausted after reservations')
+        if not reset_passed and 0 < available < estimate:
+            result['warnings'].append(f'{key}: task estimate exceeds the last known available allowance')
 
     extra_cooldowns = [key for key in cooldown_targets if key not in keys]
     for key in extra_cooldowns:

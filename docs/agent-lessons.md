@@ -1,5 +1,23 @@
 # Verified project lessons
 
+## Keep advisory quota preference separate from admission
+
+When an advisory worker stays held below 20%, trace both admission and alternate
+routing. `evaluate_advisory` formerly converted the preference into a blocking
+reason, while Codex lacked automatic alternates. Positive allowance now remains
+ready with a warning; a frozen plan defers before reservation only while another
+authorized worker remains. Its positive terminal worker can continue. Preserve
+known zero before its exact reset, exhausted pending reservations, provider
+cooldowns and uncertain assignment reuse; a collector timeout cannot release a
+confirmed exhausted period. Strict admission and the 5% lead boundary are separate.
+On 2026-10-03, 373 focused checks passed; a real Codex task at 15% continued to
+Grok, and repeating it reused the same job without inference. The live viewer
+reported Codex ready at 14%. Evidence: `.orchestration/quota-advisory-continuity-20261004T031734Z-935f2ed8/`.
+A reviewed rejected preflight still needs to reuse its exact assignment and reach
+the accepted saved alternate; share the no-execution proof between task review
+and assignment validation. Next time, test admission, frozen routing and repeat identity together, and update
+the effective runtime policy as well as registry and installed guidance.
+
 ## Drain a modestly oversized POST before returning 413 on Windows
 
 When a loopback client sends just over the dashboard's 64 KiB request limit,

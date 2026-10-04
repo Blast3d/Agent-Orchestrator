@@ -75,6 +75,13 @@ def _payload(result, curated_payload, *, include_performance=False):
         'source': {'type': 'task', 'job_id': result['job_id'],
                    'review_sha256': digest(review)},
     }
+    skills = result.get('skill_context')
+    if isinstance(skills, dict) and skills.get('execution_requested') is True:
+        names = ', '.join(s.get('name', s.get('id', 'skill')) for s in skills.get('skills', []))
+        payload['content'] += '\nSupplied reviewed skills: ' + _compact(names, 600, 'Recorded task-specific instructions') + \
+            '\nSupplied context is recorded; usefulness has not been evaluated.'
+        payload['tags'].append('skills')
+        payload['source']['skill_context_sha256'] = digest(skills)
     if include_performance:
         from task_performance import snapshot, measured, describe
         performance = snapshot(result)

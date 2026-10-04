@@ -48,15 +48,18 @@ planned waves, total roles, quota state, and provider timing sample counts.
 Planning reads the saved policy and quota snapshot and evaluates it without
 writing a reservation. It simulates competing assignments in a discarded copy,
 so workers sharing an allowance pool cannot each spend the same remaining quota.
-Active and not-yet-reconciled estimates still reduce available capacity. Low
-readings at or below the policy warning threshold hold new planning slots.
+Active and not-yet-reconciled estimates still reduce available capacity. Advisory
+low positive readings at or below 20% prefer another eligible provider and allow
+bounded slots. Confirmed zero allowance, exhausted reservations and active
+rejection cooldowns still hold that provider. Strict policy retains its holds.
 
-**Unknown** means absent, stale, failed or malformed quota evidence; it does not
-mean a measured zero allowance. **Held** means the available evidence permits no
-new planning slots. Either can produce a zero-slot recommendation. **Ready** is
-quota eligibility only: the existing dispatcher must still collect fresh
-evidence, reserve actual work, validate its route, and honor the authorized model
-and billing scope. No paid fallback or local-model startup is part of this tool.
+Missing, stale or failed advisory readings are reported with their warnings and
+do not prevent bounded slots. Malformed evidence cannot authorize a plan.
+**Held** means the available evidence permits no new planning slots. **Ready** is
+quota eligibility only: the dispatcher must still reserve actual work, validate
+its route, and honor the authorized model and billing scope. Usage collection
+runs in the background in advisory mode. No paid fallback or local-model startup
+is part of this tool.
 
 ## What the timing records show
 

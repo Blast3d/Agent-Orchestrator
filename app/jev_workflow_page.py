@@ -10,7 +10,7 @@ PAGE = r'''<!doctype html>
 
 __WORKSPACE_NAV_STYLE__</style></head><body><main>
 __WORKSPACE_NAV__
-<header class="top"><div><span class="pill">Orchestrator Brain</span><h1>Jev memory workflows</h1><p class="muted">Check evidence, recall useful fixes, and prepare recommendations for your agents.</p></div><a id="back" href="/">Back to Memory overview</a></header>
+<header class="top"><div><span class="pill">Orchestrator Brain</span><h1>Jev memory workflows</h1><p class="muted">Check evidence, recall useful fixes, and prepare recommendations for your agents.</p></div><div><a id="skill-packs" href="/skills">Skill packs</a> &nbsp; <a id="back" href="/">Back to Memory overview</a></div></header>
 <div class="scope"><label for="project">Project<input id="project" maxlength="100" value="agent-orchestrator" autocomplete="off"></label><label for="run">Run context <span class="muted">(optional)</span><input id="run" maxlength="160" autocomplete="off"></label></div>
 <p id="configuration" class="status muted" role="status">Loading available workflows…</p>
 <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
@@ -27,7 +27,7 @@ const fieldLabels={query:'What are you trying to find out?',claim:'Claim or prop
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;}
 function notice(text,error=false){$('notice').textContent=text;$('notice').classList.toggle('error',error);$('notice').hidden=!text;}
 function currentWorkflow(){return state.workflows.find(row=>row.workflow===$('workflow').value);}
-function saveScope(){const hash=new URLSearchParams({project:state.project});if(state.run)hash.set('run',state.run);history.replaceState(null,'','#'+hash.toString());$('back').href='/#'+hash.toString();}
+function saveScope(){const hash=new URLSearchParams({project:state.project});if(state.run)hash.set('run',state.run);history.replaceState(null,'','#'+hash.toString());$('back').href='/#'+hash.toString();$('skill-packs').href='/skills'+$('back').href.slice(1);}
 function requestStatus(text,error=false){$('request-status').textContent=text;$('request-status').classList.toggle('warning',error);$('request-status').hidden=!text;}
 function showAdvice(){if($('result').hidden)return;$('result').focus({preventScroll:true});$('result').scrollIntoView({block:'start',behavior:'auto'});}
 function clearResult(){$('result').hidden=true;$('result-body').replaceChildren();$('view-result').hidden=true;requestStatus('');}

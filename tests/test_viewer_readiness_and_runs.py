@@ -122,7 +122,7 @@ class StoreTests(unittest.TestCase):
         self.assertTrue(value['available'])
         self.assertEqual(value['counts']['held'], 1)
         self.assertEqual(value['bots'][0]['age_text'], 'reading 32 h old')
-        self.assertTrue(value['bots'][0]['sentence'].startswith('Held: only 18% is free'))
+        self.assertTrue(value['bots'][0]['sentence'].startswith('Held: 18% is free'))
         self.assertEqual((runtime / 'usage-status.json').stat().st_mtime_ns, before)
         self.assertEqual(sorted(p.name for p in runtime.iterdir()), ['usage-status.json'])
 

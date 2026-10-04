@@ -9,10 +9,27 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 from usage_guard import Guard, DEFAULT_POLICY, now, stamp
-from usage_report import render_usage
+from usage_report import render_usage, bot_summary
 
 
 class AdvisoryUsageReportTests(unittest.TestCase):
+    def test_low_positive_reading_is_ready_and_explains_preference(self):
+        worker = {'worker': 'codex', 'allowed': True, 'status': 'ready', 'prefer_alternate': True,
+            'reading_status': 'cached', 'windows': [{'id': 'codex-weekly', 'remaining_pct': 16,
+                'available_pct': 16, 'reserved_pct': 0, 'pending_pct': 0,
+                'unsettled_finished_pct': 0, 'max_age_seconds': 600, 'source': 'synthetic fixture',
+                'reset_at': None, 'reset_display': None, 'freshness': 'cached',
+                'observed_at': stamp(), 'reset_passed': False}],
+            'reasons': [], 'warnings': ['codex-weekly: low allowance']}
+        summary = bot_summary(worker)
+        self.assertEqual(summary['state'], 'ready')
+        self.assertFalse(summary['blocking'])
+        self.assertIn('bounded work can still start', summary['sentence'])
+        html = render_usage({'worker_start_threshold_pct': 20, 'workers': [worker],
+                            'active_reservations': 0, 'updated_at': stamp()})
+        self.assertIn('prefer an authorized alternate', html)
+        self.assertNotIn('new work needs more than 20%', html)
+
     def test_current_labels_and_split_reservation_evidence(self):
         observed = stamp(now() - timedelta(hours=40))
         window = {'id': 'codex-weekly', 'remaining_pct': 99, 'reserved_pct': 0, 'pending_pct': 0,

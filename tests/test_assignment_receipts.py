@@ -63,6 +63,23 @@ class AssignmentReceiptTests(unittest.TestCase):
         self.assertFalse(reused)
         self.assertEqual(self.read_index()['assignments']['review-1']['job_id'], record['job_id'])
 
+    def test_reviewed_preflight_reuses_identity_but_provider_evidence_still_holds(self):
+        record, _ = self.claim()
+        self.finalize(record, status='held', execution='held')
+        self.store.review(record['job_id'], 'rejected', 'Sol',
+                          'Terminal preflight produced no answer or provider execution.')
+        repeated, reused = self.claim()
+        self.assertTrue(reused)
+        self.assertEqual(repeated['job_id'], record['job_id'])
+        original = dict(repeated)
+        for change in ({'started_at': timestamp()}, {'reservation_id': 'uncertain'},
+                       {'reservation_state': 'held_for_reconciliation'}, {'response': 'answer'},
+                       {'storage_reservation_id': 'unresolved'}, {'execution_status': 'uncertain'}):
+            with self.subTest(change=change):
+                self.store.save(record['job_id'], dict(original, **change))
+                with self.assertRaises(receipts.AssignmentIncomplete):
+                    self.claim()
+
     def imported_seed(self, **updates):
         record = self.store.create(worker='native-review', task='Reviewed seed',
             category='memory-curation', assignment_project_id='sample',

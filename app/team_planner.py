@@ -227,6 +227,9 @@ def quota_capacity(policy, data, providers=PROVIDERS, size='small', cap=4):
             elif any('refresh failed' in reason for reason in reasons):
                 status = 'refresh_failed'
             return result, {'status': status, 'eligible': eligible,
+                            'reading_status': result.get('reading_status'),
+                            'prefer_alternate': result.get('prefer_alternate', False),
+                            'warnings': result.get('warnings', []),
                             'available_pct': min((w['available_pct'] for w in result['windows']), default=None),
                             'estimate_pct': result['estimate_pct']}
 
@@ -234,7 +237,7 @@ def quota_capacity(policy, data, providers=PROVIDERS, size='small', cap=4):
         allocations = []
         while len(allocations) < cap:
             changed = False
-            for worker in providers:
+            for worker in sorted(providers, key=lambda w: evaluate(w)[1]['prefer_alternate']):
                 result, info = evaluate(worker)
                 if not info['eligible']:
                     continue

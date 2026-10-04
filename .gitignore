@@ -16,7 +16,8 @@ python/
 *.vsix
 .claude/
 config/antigravity-boundary.json
-config/
+config/*
+!config/skill-packs.json
 docs/validation.json
 *.zip
 *.sqlite*

@@ -29,7 +29,7 @@ all participating sessions must follow it. A quota reset never returns leadershi
 
 ## Current-lead command at 5 percent
 
-The 20% worker-start threshold does not change the 5% lead-transfer trigger.
+The 20% worker-routing preference does not change the 5% lead-transfer trigger.
 On this host, readiness/transfer/claim use advisory cached allowance and queue
 collection in the background. A collection timeout cannot block otherwise
 eligible receiving admission. Missing/partial/past-reset readings cannot prove

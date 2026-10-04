@@ -287,6 +287,17 @@ class DashboardHandler(BaseHTTPRequestHandler):
         try:
             if self._workspace_page(address):
                 return
+            if address.path == '/skills' and not address.query:
+                from skill_pack_page import PAGE as skills_page
+                from workspace_navigation import static_markup, THEME, STYLE
+                page = skills_page.replace('__WORKSPACE_NAV__', static_markup('brain', 'brain', '__WORKSPACE_LEAD__'))
+                page = page.replace('</head>', '<style nonce="__NONCE__">' + THEME + STYLE + '</style></head>')
+                page = page.replace('</body>', '<script src="/workspace-navigation.js" defer></script></body>')
+                return self._reply(200, with_lead(page).replace('__NONCE__', self.server.nonce)
+                    .replace('__TOKEN__', self.server.brain_token), 'text/html; charset=utf-8')
+            if address.path.startswith('/api/skills/'):
+                from skill_http import get
+                return get(self, address)
             if address.path == '/system-map' and not address.query:
                 return self._system_map()
             if address.path == '/jev' and not address.query:
@@ -391,12 +402,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._gate(mutation=True):
             return
-        if self.path not in ('/api/search', '/api/memories', '/api/approve', '/api/forget', '/api/supersede', '/api/relate', '/api/links', '/api/open', '/api/feedback', '/api/jev/workflow'):
+        if self.path not in ('/api/search', '/api/memories', '/api/approve', '/api/forget', '/api/supersede', '/api/relate', '/api/links', '/api/open', '/api/feedback', '/api/jev/workflow') and not self.path.startswith('/api/skills/'):
             return self._error(404, 'This action is not available.')
         try:
             data = self._body()
             if data is None:
                 return
+            if self.path.startswith('/api/skills/'):
+                from skill_http import post
+                return post(self, data)
             if self.path == '/api/open':
                 return self._reply(200, self._open_service(data))
             project = self._project(data.get('project_id'))
@@ -567,7 +581,7 @@ __WORKSPACE_NAV_STYLE__</style></head><body>
 <div class="project-block"><label for="project">PROJECT</label><select id="project" aria-label="Current project"><option value="general">General</option></select></div>
 <nav class="nav" aria-label="Memory navigation"><button data-view="overview" aria-current="page"><span class="nav-symbol">◈</span>Overview</button><button data-view="library"><span class="nav-symbol">▤</span>Memory library</button><button data-view="graph"><span class="nav-symbol">⌘</span>Relationships</button><button data-view="review"><span class="nav-symbol">◷</span>Review queue<span id="nav-pending" class="pending-count">0</span></button><button data-view="activity"><span class="nav-symbol">↗</span>Recall activity</button></nav>
 <div class="side-note"><p><span class="local-dot"></span>Shared by Claude, ASTRA &amp; Sol</p><p>Evidence stays attached.<br>Every update has a history.</p><span>Runs on this computer.</span></div></aside>
-<main class="main">__WORKSPACE_NAV__<div class="topbar"><div><div class="breadcrumb section-crumb" id="crumb">Overview</div></div><div class="top-actions"><a id="open-jev" href="/jev" class="map-link">Jev workflows</a><button id="refresh" title="Apply pending updates or retry a failed refresh" hidden>↻ &nbsp;Refresh</button><button id="add" class="primary">+ &nbsp;Add memory</button></div></div>
+<main class="main">__WORKSPACE_NAV__<div class="topbar"><div><div class="breadcrumb section-crumb" id="crumb">Overview</div></div><div class="top-actions"><a id="open-jev" href="/jev" class="map-link">Jev workflows</a><a id="open-skills" href="/skills" class="map-link">Skill packs</a><button id="refresh" title="Apply pending updates or retry a failed refresh" hidden>↻ &nbsp;Refresh</button><button id="add" class="primary">+ &nbsp;Add memory</button></div></div>
 <div id="notice" class="notice" role="status" aria-live="polite" hidden></div><p id="memory-connection" class="muted" role="status">Connecting to memory…</p>
 <div class="heading"><div><h1 id="page-title">Memory, with context.</h1><p id="page-description">Keep useful knowledge close, with the evidence and relationships that make it trustworthy.</p></div><span class="pill active"><span class="local-dot"></span>Local workspace</span></div>
 <section class="stats" aria-label="Memory statistics"><div class="stat"><div class="stat-label">Reviewed memories</div><div class="stat-number" id="stat-active">—</div><div class="stat-caption">Approved memories in this project</div></div><div class="stat"><div class="stat-label">Awaiting your review</div><div class="stat-number" id="stat-pending">—</div><div class="stat-caption">Proposals stay out of recall</div></div><div class="stat"><div class="stat-label">Memory storage · all projects</div><div class="stat-number" id="stat-storage">—</div><div class="stat-caption" id="stat-storage-caption">Loading storage limits</div><div class="meter"><div class="meter-fill" id="storage-fill"></div></div></div><div class="stat"><div class="stat-label">Latest lookup</div><div class="stat-number" id="stat-speed">—</div><div class="stat-caption" id="stat-speed-caption">No searches yet in this project</div></div></section>
@@ -601,7 +615,7 @@ function projectQuery(){return '?project_id='+encodeURIComponent(state.project);
 function renderRefreshButton(){const n=state.pending;$('refresh').hidden=!n&&!state.connectionError;$('refresh').textContent=n?'Apply pending updates':'Retry now';$('refresh').title=n?'Changes are waiting while you read or edit. Apply them when ready.':'Retry the interrupted connection';}
 function viewerRow(){return state.services.find(s=>s.id==='viewer')||null;}
 function viewerTarget(){const viewer=viewerRow();if(!viewer||!viewer.origin)return '';const query=new URLSearchParams({project:state.project});if(viewer.run)query.set('run',viewer.run);return viewer.origin+'/?'+query;}
-function renderCrumbs(){ $('open-jev').href='/jev#'+new URLSearchParams({project:state.project,run:state.run}).toString();const scope=new URLSearchParams(),incoming=new URLSearchParams(location.hash.slice(1)).get('project');const project=state.projectInitialized?state.project:(incoming&&incoming.trim()&&incoming.length<=160?incoming.trim():'');if(project)scope.set('project',project);if(state.run)scope.set('run',state.run);for(const page of ['usage','tasks','contributions'])$('crumb-'+page).href='/'+page+(scope.size?'?'+scope:'');const target=viewerTarget(),viewer=viewerRow();$('crumb-viewer').href=target||'#';$('crumb-viewer').title=target?'Open the Orchestrator viewer'+(viewer&&viewer.run?' for this run':''):'Start the Orchestrator viewer';$('crumb-experiments').href=viewer&&viewer.origin?viewer.origin+'/experiments':'#';$('crumb-lead').href=target?target+'#lead':'#';}
+function renderCrumbs(){ $('open-jev').href='/jev#'+new URLSearchParams({project:state.project,run:state.run}).toString();$('open-skills').href=$('open-jev').href.replace('/jev','/skills');const scope=new URLSearchParams(),incoming=new URLSearchParams(location.hash.slice(1)).get('project');const project=state.projectInitialized?state.project:(incoming&&incoming.trim()&&incoming.length<=160?incoming.trim():'');if(project)scope.set('project',project);if(state.run)scope.set('run',state.run);for(const page of ['usage','tasks','contributions'])$('crumb-'+page).href='/'+page+(scope.size?'?'+scope:'');const target=viewerTarget(),viewer=viewerRow();$('crumb-viewer').href=target||'#';$('crumb-viewer').title=target?'Open the Orchestrator viewer'+(viewer&&viewer.run?' for this run':''):'Start the Orchestrator viewer';$('crumb-experiments').href=viewer&&viewer.origin?viewer.origin+'/experiments':'#';$('crumb-lead').href=target?target+'#lead':'#';}
 function safeToApply(){const selection=window.getSelection();return !$('detail').open&&!$('editor').open&&!$('action').open&&!$('feedback').open&&!state.searchResults&&state.view!=='graph'&&!document.activeElement?.matches('input,textarea')&&(!selection||selection.isCollapsed);}
 function saveScope(){const hash=new URLSearchParams({project:state.project});if(state.run)hash.set('run',state.run);history.replaceState(null,'','#'+hash);}
 async function loadServices(){const project=state.project,run=state.run;try{const data=await api('/api/services'+projectQuery()+(run?'&run='+encodeURIComponent(run):''));if(project!==state.project||run!==state.run)return;state.services=data.services||[];renderCrumbs();}catch(e){if(project===state.project&&run===state.run){state.services=[];renderCrumbs();}}}

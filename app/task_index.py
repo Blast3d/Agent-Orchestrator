@@ -10,6 +10,9 @@ _EXCLUDED = ('response', 'provider_result', 'quota_before', 'quota_refresh', 'co
 def project_task_index(result):
     """Keep identity/status/usage intact; full supplied brief text stays canonical."""
     record = {key: value for key, value in result.items() if key not in _EXCLUDED}
+    skills = record.get('skill_context')
+    if isinstance(skills, dict):
+        record['skill_context'] = {key: value for key, value in skills.items() if key != 'text'}
     brief = record.get('brief_check')
     if isinstance(brief, dict):
         record['brief_check'] = {key: value for key, value in brief.items() if key != 'sections'}

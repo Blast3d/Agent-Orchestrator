@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import uuid
 
-from task_store import timestamp, write_json
+from task_store import timestamp, write_json, preflight_without_execution
 from usage_guard import file_lock
 from claude_models import select_model
 
@@ -19,6 +19,7 @@ _ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,159}')
 _JOB = re.compile(r'[a-f0-9]{32}')
 _LOW = ': task plus safety buffer exceeds available quota'
 _ADVISORY_LOW = ': available allowance is at or below the worker start threshold'
+_ADVISORY_EMPTY = ': available allowance is exhausted after reservations'
 _BLOCKED = ': provider rejected work; cooldown active'
 _AUTOMATIC_WORKERS = frozenset(('claude', 'codex', 'grok'))
 
@@ -93,6 +94,22 @@ def apply_automatic_fallbacks(args, policy, *, project_default=None):
     return args
 
 
+def prefer_alternate_decision(quota):
+    """Defer low allowance only while an authorized frozen alternate remains."""
+    if (quota.get('admission_mode') != 'advisory' or not quota.get('allowed')
+            or quota.get('prefer_alternate') is not True or not _number(quota.get('threshold_pct'))):
+        return None
+    reasons = [w['id'] + _ADVISORY_LOW for w in quota.get('windows', [])
+               if isinstance(w, dict) and isinstance(w.get('id'), str)
+               and _number(w.get('available_pct')) and w['available_pct'] <= quota['threshold_pct']
+               and w.get('reset_passed') is False]
+    if not reasons or not _advisory_handoff_reason(quota, reasons, quota['windows']):
+        return None
+    decision = dict(quota, allowed=False, status='held', reasons=reasons, route_preference=True)
+    decision.pop('reservation_id', None)
+    return decision
+
+
 def _advisory_handoff_reason(quota, reasons, windows):
     """Allow cached low readings, but never reinterpret unknown as exhausted."""
     known = {}
@@ -105,18 +122,27 @@ def _advisory_handoff_reason(quota, reasons, windows):
     for reason in reasons:
         if not isinstance(reason, str):
             return None
-        ending = next((suffix for suffix in (_ADVISORY_LOW, _BLOCKED) if reason.endswith(suffix)), None)
+        ending = next((suffix for suffix in (_ADVISORY_LOW, _ADVISORY_EMPTY, _BLOCKED) if reason.endswith(suffix)), None)
         if ending is None:
             return None
         pool = reason[:-len(ending)]
         window = known.get(pool)
-        if ending == _ADVISORY_LOW:
+        if ending in (_ADVISORY_LOW, _ADVISORY_EMPTY):
             if (window is None or not _number(threshold) or not _number(window.get('remaining_pct'))
                     or not _number(window.get('available_pct'))
                     or window['available_pct'] > threshold
                     or not _finalized(window.get('observed_at'))
                     or window.get('reset_passed') is not False):
                 return None
+            if ending == _ADVISORY_EMPTY:
+                reset = window.get('reset_at')
+                known_period = (_finalized(reset) and
+                                datetime.fromisoformat(reset.replace('Z', '+00:00')) > datetime.now(timezone.utc))
+                pending = window.get('pending_pct', 0)
+                if (window['available_pct'] != 0 or not (window.get('freshness') == 'fresh'
+                        or (_number(pending) and pending > 0)
+                        or (window['remaining_pct'] == 0 and known_period))):
+                    return None
         else:
             cooldowns = quota.get('cooldown_active_pools', {})
             until = cooldowns.get(pool) if isinstance(cooldowns, dict) else None
@@ -125,7 +151,9 @@ def _advisory_handoff_reason(quota, reasons, windows):
             if not confirmed:
                 return None
     if any(reason.endswith(_ADVISORY_LOW) for reason in reasons):
-        return f'The last known allowance is at or below the {threshold:g}% worker start threshold.'
+        return f'The last known allowance is at or below the {threshold:g}% preference; trying an authorized alternate.'
+    if any(reason.endswith(_ADVISORY_EMPTY) for reason in reasons):
+        return 'No allowance is available after reservations; trying an authorized alternate.'
     return 'The provider has a confirmed active usage cooldown.'
 
 
@@ -146,7 +174,9 @@ def quota_handoff_reason(result):
         if result.get('failure_kind') == 'quota_exhausted':
             return 'The worker exited with a confirmed usage-limit rejection.'
         return None
-    if (result.get('status') != 'held' or result.get('execution_status') != 'held'
+    reviewed_preflight = (result.get('status') == result.get('review_status') == 'rejected'
+                          and preflight_without_execution(result))
+    if ((result.get('status') != 'held' and not reviewed_preflight) or result.get('execution_status') != 'held'
             or result.get('started_at')):
         return None
     quota = result.get('quota_before')
@@ -333,6 +363,7 @@ def _run_locked(args, dispatch_fn, store, path, snapshot, workflow_id, project, 
                                          if option['model'] == contract['codex_model'])
             step_args.codex_effort = contract['codex_effort']
         step_args.fallback_worker = []
+        step_args.handoff_has_alternate = index < len(contract['workers']) - 1
         step_args.prompt_file = snapshot
         step_args.revision_of = predecessor
         step_args.handoff_from_job_id = predecessor if index else None

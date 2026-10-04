@@ -43,8 +43,10 @@ The quota value is the lowest usable account reading, without subtracting worker
 reservations. In this host's advisory mode, the lead uses cached readings and
 queues collection without waiting for it. Missing, partial or past-reset usage
 cannot prove that the lead has reached 5%. Receiving Claude admission also uses
-the saved reading; collection timeouts do not block it. The **20% worker-start
-threshold** remains separate from the **5% leadership-transfer threshold**.
+the saved reading; collection timeouts alone do not block it. Positive allowance
+at or below the **20% worker-routing preference** permits bounded work and remains
+separate from the **5% leadership-transfer threshold**. Confirmed zero allowance,
+exhausted reservations and active rejection cooldowns still hold admission.
 
 ## What happens
 

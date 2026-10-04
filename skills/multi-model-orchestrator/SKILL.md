@@ -238,9 +238,13 @@ to reassign the unfinished work to a suitable approved worker with enough quota.
 Carry the objective, approved inputs, accepted progress, remaining steps and
 acceptance checks into the handoff. Keep both task IDs and credit each worker only
 for accepted work. Use explicit project/assignment IDs and the application's
-configured Claude/Grok alternates or ordered `--fallback-worker` routes (claude, codex, grok) for
+configured Codex/Claude/Grok alternates or ordered `--fallback-worker` routes (claude, codex, grok) for
 automatic supplied-text quota handoffs. `--no-auto-fallback` disables configured
 alternates when a task's content authorization is narrower.
+Low positive allowance permits direct bounded work or the last authorized worker
+in a frozen plan. The 20% preference alone must not stall every worker. Fresh zero
+available allowance, exhausted pending reservations, known zero before its exact
+reset and confirmed rejection cooldowns still hold that provider.
 Select alternates by capability and existing content authorization before dispatch;
 reserve each alternate using the same cached admission policy. No local models
 for this Orchestrator/Brain work. Never introduce a paid fallback or upload to an

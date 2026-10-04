@@ -114,32 +114,35 @@ def bot_summary(worker, threshold=20, mode='advisory', current=None):
         parts = []
         cooling = any('cooldown active' in reason for reason in reasons)
         low = any('worker start threshold' in reason for reason in reasons) and limiting is not None
+        exhausted = any('allowance is exhausted' in reason for reason in reasons) and limiting is not None
         if cooling:
             ends = [t for t in (_instant(v) for v in (worker.get('cooldown_active_pools') or {}).values()) if t]
             parts.append('the provider rejected recent work, so new work waits '
                          + ('until ' + _local(max(ends)) if ends else 'for a cooldown to end'))
         if low:
-            parts.append(f'only {free:g}% is free to start work, and new work needs more than {threshold:g}%')
+            parts.append(f'{free:g}% is free; this assignment prefers an authorized alternate')
+        if exhausted:
+            parts.append('no allowance is available after reservations')
         for fragment, plain in PLAIN_REASONS:
             if any(fragment in reason for reason in reasons) and plain not in parts:
                 parts.append(plain)
         if not parts:
             parts.append('the last usage check did not allow new work')
         sentence = 'Held: ' + '; '.join(parts) + '.'
-        if low and pending:
+        if (low or exhausted) and pending:
             count = worker.get('active_reservation_count')
             task_label = (f'{count} unfinished task' + ('' if count == 1 else 's')
                           if isinstance(count, int) and count > 0 else 'Unfinished tasks')
             verb = 'reserves' if count == 1 else 'reserve'
             sentence += f' {task_label} {verb} {pending:g}% of the {remaining:g}% left.'
-        if low and settled:
+        if (low or exhausted) and settled:
             sentence += f' Finished tasks not yet in a reading hold another {settled:g}%.'
         if cooling:
             next_step = 'Wait for the cooldown to end, or give the work to another bot.'
-        elif low and pending:
+        elif (low or exhausted) and pending:
             next_step = ('Ask your lead to close tasks that have finished so their reservations are released, or '
                          + refresh + ' for a fresh reading.')
-        elif low:
+        elif low or exhausted:
             next_step = 'Wait for the allowance to reset, or give the work to another bot.'
         else:
             next_step = refresh[0].upper() + refresh[1:] + ' for a fresh reading, or give the work to another bot.'
@@ -147,6 +150,8 @@ def bot_summary(worker, threshold=20, mode='advisory', current=None):
         sentence = 'No usage reading yet. Work can start; usage is collected in the background.'
     else:
         sentence = f'{free:g}% is free to start work after reservations.'
+        if mode == 'advisory' and worker.get('prefer_alternate'):
+            sentence += ' Low allowance: prefer an authorized alternate; bounded work can still start.'
         if age is not None and age >= AGING_SECONDS:
             next_step = refresh[0].upper() + refresh[1:] + ' when you want a current reading.'
     if state == 'held':
@@ -308,8 +313,9 @@ def render_usage(report):
     summary = readiness(report, current)
     rows = ''.join(_row(by_id[bot['id']], bot, current) for bot in summary['bots'])
     generated = _instant(report.get('updated_at')) or current
-    rule = (f'New work for a bot is held when {threshold:g}% or less of its allowance is free after reservations, '
-            'or after a confirmed quota rejection. Other readings are advisory: stale or missing readings do not block work.'
+    rule = (f'At {threshold:g}% or less, prefer an authorized alternate. Positive allowance still permits bounded work. '
+            'Confirmed exhaustion, unavailable reserved allowance, or a provider rejection holds that bot. '
+            'Stale or missing readings alone do not block work; usage updates in the background.'
             if mode == 'advisory' else
             f'New work for a bot is held when {threshold:g}% or less is free, or when its reading is missing or stale.')
     return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="30">'

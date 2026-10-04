@@ -106,6 +106,25 @@ class TeamPlanningTests(unittest.TestCase):
         self.assertEqual(result['capacity'], 0)
         self.assertEqual(result['status'], 'held')
 
+    def test_advisory_low_positive_capacity_prefers_healthy_provider(self):
+        policy, data = quota_fixture(16)
+        policy.update(quota_admission_mode='advisory', worker_start_threshold_pct=20)
+        data['windows']['grok-main']['remaining_pct'] = 70
+        before = deepcopy(data)
+        result = planner.quota_capacity(policy, data, ('claude', 'grok'), 'small', 2)
+        self.assertEqual(result['allocations'][0], 'grok')
+        self.assertTrue(result['workers']['claude']['eligible'])
+        self.assertTrue(result['workers']['claude']['prefer_alternate'])
+        self.assertEqual(data, before)
+
+    def test_advisory_missing_or_stale_reading_does_not_hold_bounded_slots(self):
+        policy, data = quota_fixture(16)
+        policy.update(quota_admission_mode='advisory', worker_start_threshold_pct=20)
+        for sample in ({**data, 'windows': {}}, data):
+            result = planner.quota_capacity(policy, sample, ('claude',), 'small', 1)
+            self.assertEqual(result['capacity'], 1)
+            self.assertTrue(result['workers']['claude']['eligible'])
+
     def test_local_models_and_unknown_workers_are_never_planned(self):
         for workers in (('local-chat',), ('anything',), ()):
             with self.assertRaises(ValueError):

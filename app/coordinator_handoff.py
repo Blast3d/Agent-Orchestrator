@@ -316,7 +316,8 @@ class Coordinator:
         reasons = quota.get('reasons', [])
         permitted = (': task plus safety buffer exceeds available quota',)
         if advisory:
-            permitted += (': available allowance is at or below the worker start threshold',)
+            permitted += (': available allowance is at or below the worker start threshold',
+                          ': available allowance is exhausted after reservations')
         if (not isinstance(reasons, list) or any(not isinstance(reason, str)
                 or not reason.endswith(permitted) for reason in reasons)):
             return dict(result, status='unknown', reason='Current-lead allowance is stale, incomplete or held for inspection')

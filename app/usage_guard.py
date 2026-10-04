@@ -95,10 +95,10 @@ def validate_policy(policy):
     if not isinstance(fallbacks, dict):
         raise ValueError('Automatic fallbacks must map hosted workers to alternatives')
     for primary, alternates in fallbacks.items():
-        if (primary not in ('claude', 'grok') or not isinstance(alternates, list)
-                or any(w not in ('claude', 'grok') or w == primary for w in alternates)
+        if (primary not in ('claude', 'codex', 'grok') or not isinstance(alternates, list)
+                or any(w not in ('claude', 'codex', 'grok') or w == primary for w in alternates)
                 or len(alternates) != len(set(alternates))):
-            raise ValueError('Automatic fallbacks require distinct hosted Claude/Grok routes')
+            raise ValueError('Automatic fallbacks require distinct hosted Claude/Codex/Grok routes')
     if policy['floor_pct'] > policy['warning_pct']:
         raise ValueError('Quota warning percentage must be at least the safety floor')
     estimates = policy.get('estimates_pct')

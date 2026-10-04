@@ -35,7 +35,9 @@ class CachedGuard(Guard):
     def cache(self, provider, remaining, *, reset_passed=False):
         keys = ['codex-weekly'] if provider == 'codex' else ['claude-five-hour', 'claude-seven-day']
         windows = [{'id': key, 'remaining_pct': remaining, 'observed_at': stamp(self.observed),
-                    'source': 'synthetic cached fixture', 'max_age_seconds': 300} for key in keys]
+                    'source': 'synthetic cached fixture', 'max_age_seconds': 300,
+                    'reset_at': stamp(now() + timedelta(hours=3) if 'five-hour' in key else now() + timedelta(days=3))}
+                   for key in keys]
         if reset_passed:
             for window in windows:
                 window['reset_at'] = stamp(now() - timedelta(minutes=1))
@@ -70,12 +72,12 @@ class AdvisoryCoordinatorTests(unittest.TestCase):
         return transfer(self.coordinator, self.checkpoint, 'astra', self.initial['session'], 1,
                         guard=self.guard, executable=self.executable, launcher=launcher or self.launch)
 
-    def test_known_twenty_percent_is_worker_hold_but_only_five_percent_yields_lead(self):
+    def test_positive_twenty_percent_is_advisory_but_only_five_percent_yields_lead(self):
         for remaining, expected in ((20, 'continue_astra'), (5.01, 'continue_astra'),
                                     (5, 'handoff_due'), (0, 'handoff_due')):
             with self.subTest(remaining=remaining):
                 self.guard.cache('codex', remaining)
-                self.assertFalse(self.guard.check('codex')['allowed'])
+                self.assertEqual(self.guard.check('codex')['allowed'], remaining > 0)
                 result = self.coordinator.readiness(guard=self.guard)
                 self.assertEqual(result['status'], expected)
                 self.assertEqual(result['threshold_pct'], 5)
@@ -87,7 +89,8 @@ class AdvisoryCoordinatorTests(unittest.TestCase):
         self.guard.cache('codex', 25)
         reserved = self.guard.check('codex', 'large', reserve=True, task='Synthetic reserved worker')
         self.assertTrue(reserved['allowed'])
-        self.assertFalse(self.guard.check('codex')['allowed'])
+        self.assertTrue(self.guard.check('codex')['allowed'])
+        self.assertTrue(self.guard.check('codex')['prefer_alternate'])
         result = self.coordinator.readiness(guard=self.guard)
         self.assertEqual(result['status'], 'continue_astra')
         self.assertEqual(result['remaining_pct'], 25)
@@ -138,8 +141,8 @@ class AdvisoryCoordinatorTests(unittest.TestCase):
         self.assertEqual(self.guard.queued, ['codex', 'claude'])
         self.assertEqual(len(self.started), 1)
 
-    def test_low_recipient_refuses_transfer_without_yield_or_new_reservation(self):
-        self.guard.cache('claude', 20)
+    def test_exhausted_recipient_refuses_transfer_without_yield_or_new_reservation(self):
+        self.guard.cache('claude', 0)
         self.guard.queue_error = True
         result = self.transfer()
         self.assertTrue(result['transfer_held'])
@@ -149,6 +152,15 @@ class AdvisoryCoordinatorTests(unittest.TestCase):
         with self.guard.state() as data:
             self.assertEqual(data['reservations'], {})
         self.assertEqual(self.started, [])
+
+    def test_positive_low_recipient_can_receive_five_percent_lead_handoff(self):
+        self.guard.cache('claude', 16)
+        result = self.transfer()
+        self.assertEqual(result['status'], 'handoff_ready')
+        admission = result['handoff']['launch']['quota_at_launch']
+        self.assertTrue(admission['allowed'])
+        self.assertTrue(admission['prefer_alternate'])
+        self.assertEqual(len(self.started), 1)
 
     def test_unknown_recipient_is_admitted_without_inventing_remaining_percentage(self):
         with self.guard.state() as data:
@@ -176,7 +188,8 @@ class AdvisoryCoordinatorTests(unittest.TestCase):
         self.guard.cache('claude', 22)
         pending = self.transfer()
         launch = pending['handoff']['launch']
-        self.assertFalse(self.guard.check('claude')['allowed'])
+        self.assertTrue(self.guard.check('claude')['allowed'])
+        self.assertTrue(self.guard.check('claude')['prefer_alternate'])
         self.guard.queue_error = True
         claimed = self.coordinator.claim(pending['handoff']['id'], launch['session'], 2, self.guard)
         self.assertEqual(claimed['owner'], 'fable')
@@ -187,13 +200,13 @@ class AdvisoryCoordinatorTests(unittest.TestCase):
             self.assertIsNone(data['reservations'][launch['reservation_id']]['finished_at'])
         self.assertTrue(self.coordinator.role('astra', self.initial['session'])['may_continue_assigned_work'])
 
-    def test_low_claim_stays_pending_and_pinned_session_is_required(self):
+    def test_exhausted_claim_stays_pending_and_pinned_session_is_required(self):
         pending = self.transfer()
         launch = pending['handoff']['launch']
         before = self.coordinator.path.read_bytes()
         with self.assertRaises(ValueError):
             self.coordinator.claim(pending['handoff']['id'], 'wrong-session', 2, self.guard)
-        self.guard.cache('claude', 20)
+        self.guard.cache('claude', 0)
         with self.assertRaises(ValueError):
             self.coordinator.claim(pending['handoff']['id'], launch['session'], 2, self.guard)
         self.assertEqual(self.coordinator.path.read_bytes(), before)

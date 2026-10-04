@@ -267,6 +267,15 @@ def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
     project_id = getattr(args, 'project', None)
     assignment_id = getattr(args, 'assignment_id', None)
     revision_of = getattr(args, 'revision_of', None)
+    skill_plan = getattr(args, 'skill_plan', None)
+    if skill_plan:
+        if not project_id or not assignment_id:
+            raise ValueError('Reviewed skill delivery needs a project and assignment identity.')
+        from skill_flow import get_plan
+        plan = get_plan(store.root.parent.parent if store.root.parent.name == 'runs' else store.root.parent,
+                        project_id, skill_plan)
+        metadata['skill_plan_binding'] = {'plan_id': skill_plan,
+            'context_sha256': (plan.get('review') or {}).get('context_sha256')}
     memory_plan = recall_plan(args)
     memory_query = memory_plan['query']
     metadata.update(memory_lookup_requested=memory_plan['enabled'],
@@ -288,6 +297,8 @@ def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
         if args.worker == 'codex':
             contract.update(codex_model=codex_model, codex_effort=codex_effort)
         contract.update(contract_fields(memory_plan))
+        if skill_plan:
+            contract['skill_plan_binding'] = metadata['skill_plan_binding']
         if override is not None:
             contract['timeout_seconds']=override
         try:
@@ -370,6 +381,11 @@ def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
             if binding:
                 result.update(run_id=binding['run_id'], orchestration_startup=binding)
             prompt = operating['context'] + '\n\n## Assigned task\n' + prompt
+            if skill_plan:
+                from skill_flow import delivery
+                selected = delivery(storage_root, project_id, skill_plan)
+                result['skill_context'] = selected
+                prompt += '\n\n## Lead-reviewed task skills\n' + selected['text']
             from memory_delivery import BYTE_LIMITS, fit as fit_memory, heading as memory_heading
             byte_limit = BYTE_LIMITS.get(args.worker)
             if byte_limit and len(((PREFIX if provider else '') + prompt).encode('utf-8')) > byte_limit:
@@ -435,8 +451,14 @@ def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                         reason='A fresh official quota reading is required', quota_refresh=refreshed)
             if result['execution_status'] != 'held':
                 activity.set('quota_reservation')
-                decision = guard.check(args.worker, args.size, reserve=True,
-                                       task=f'{args.task} [job:{job_id}]')
+                decision = None
+                if advisory_mode(guard) and getattr(args, 'handoff_has_alternate', False):
+                    from task_handoff import prefer_alternate_decision
+                    checked = guard.check(args.worker, args.size)
+                    decision = checked if not checked['allowed'] else prefer_alternate_decision(checked)
+                if decision is None:
+                    decision = guard.check(args.worker, args.size, reserve=True,
+                                           task=f'{args.task} [job:{job_id}]')
                 result['quota_before'] = decision
                 if provider and advisory_mode(guard):
                     queue_usage_refresh(guard, provider, result, 'before')
@@ -445,6 +467,10 @@ def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                 else:
                     result['reservation_id'] = decision['reservation_id']
                     verify_request_context(args, operating, binding)
+                    if skill_plan:
+                        fresh_skills = delivery(storage_root, project_id, skill_plan)
+                        if fresh_skills != result['skill_context']:
+                            raise BoundaryHeld('Reviewed skills changed during preparation; nothing was sent.')
                     if recalled is not None:
                         _, validation = delivery_evidence_check(brain, recalled, memory_fingerprints)
                         result['memory_context']['delivery_validation'] = validation
@@ -472,6 +498,8 @@ def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                     result['orchestration_context']['execution_requested'] = True
                     if 'memory_context' in result:
                         result['memory_context']['execution_requested'] = True
+                    if 'skill_context' in result:
+                        result['skill_context']['execution_requested'] = True
                     store.save(job_id, result)
                     activity.set('provider_execution')
                     execution_started = True
@@ -667,6 +695,7 @@ def main(argv=None):
     parser.add_argument('--run', type=Path, help='Exact orchestration run; requires current startup context (also inferred from an output inside a run)')
     parser.add_argument('--assignment-id', help='Stable assignment key; repeated requests reuse the original task')
     parser.add_argument('--revision-of', help='Previous job ID for a deliberate revision under a new assignment key')
+    parser.add_argument('--skill-plan', help='Exact project-scoped, lead-reviewed skill plan; loads instructions only for this task')
     memory = parser.add_mutually_exclusive_group()
     memory.add_argument('--memory-query', help='Override task-label recall with this bounded query in --project')
     memory.add_argument('--no-memory', action='store_true', help='Disable default reviewed-memory recall for this assignment')

@@ -48,18 +48,17 @@ def _data(windows=None, reservations=None, cooldowns=None, refresh_errors=None, 
 
 
 class AdvisoryAdmissionTests(unittest.TestCase):
-    def test_boundary_exactly_20_holds_2001_allows(self):
+    def test_boundary_exactly_20_prefers_alternate_2001_does_not(self):
         data = _data({'openai-codex': _window(20.0), 'agy:pro': _window(50)})
         held = evaluate_advisory(_policy(), data, 'coder', 'small', NOW)
-        self.assertFalse(held['allowed'])
-        self.assertEqual(held['status'], 'held')
-        self.assertIn(
-            'openai-codex: available allowance is at or below the worker start threshold',
-            held['reasons'],
-        )
+        self.assertTrue(held['allowed'])
+        self.assertEqual(held['status'], 'ready')
+        self.assertTrue(held['prefer_alternate'])
+        self.assertEqual(held['reasons'], [])
         data_ok = _data({'openai-codex': _window(20.01), 'agy:pro': _window(50)})
         allowed = evaluate_advisory(_policy(), data_ok, 'coder', 'small', NOW)
         self.assertTrue(allowed['allowed'])
+        self.assertFalse(allowed['prefer_alternate'])
         self.assertEqual(allowed['status'], 'ready')
         self.assertEqual(allowed['reasons'], [])
         self.assertEqual(allowed['admission_mode'], 'advisory')
@@ -84,16 +83,14 @@ class AdvisoryAdmissionTests(unittest.TestCase):
         self.assertEqual(by_id['openai-codex']['freshness'], 'fresh')
         self.assertEqual(by_id['agy:pro']['freshness'], 'cached')
 
-    def test_mixed_pools_one_below_threshold_holds_but_returns_windows(self):
+    def test_mixed_pools_one_below_threshold_warns_and_returns_windows(self):
         data = _data({'openai-codex': _window(70), 'agy:pro': _window(10)})
         result = evaluate_advisory(_policy(), data, 'coder', 'small', NOW)
-        self.assertFalse(result['allowed'])
-        self.assertEqual(result['status'], 'held')
+        self.assertTrue(result['allowed'])
+        self.assertEqual(result['status'], 'ready')
         self.assertEqual(len(result['windows']), 2)
-        self.assertIn(
-            'agy:pro: available allowance is at or below the worker start threshold',
-            result['reasons'],
-        )
+        self.assertTrue(result['prefer_alternate'])
+        self.assertTrue(any('agy:pro:' in w for w in result['warnings']))
 
     def test_missing_pool_unknown_allows_without_fabricated_percent(self):
         data = _data({'openai-codex': _window(80)})
@@ -155,7 +152,7 @@ class AdvisoryAdmissionTests(unittest.TestCase):
         self.assertIn('openai-codex', held['cooldown_active_pools'])
         self.assertTrue(evaluate_advisory(policy, data, 'local-chat', 'small', NOW)['allowed'])
 
-    def test_reservation_reduces_available_and_can_hold(self):
+    def test_reservation_reduces_available_and_prefers_alternate(self):
         data = _data(
             {'openai-codex': _window(30), 'agy:pro': _window(90)},
             reservations={'r1': {'pools': ['openai-codex'], 'estimate_pct': 15}},
@@ -164,11 +161,8 @@ class AdvisoryAdmissionTests(unittest.TestCase):
         by_id = {row['id']: row for row in result['windows']}
         self.assertEqual(by_id['openai-codex']['reserved_pct'], 15.0)
         self.assertEqual(by_id['openai-codex']['available_pct'], 15.0)
-        self.assertFalse(result['allowed'])
-        self.assertIn(
-            'openai-codex: available allowance is at or below the worker start threshold',
-            result['reasons'],
-        )
+        self.assertTrue(result['allowed'])
+        self.assertTrue(result['prefer_alternate'])
 
     def test_negative_availability_clamped_to_zero(self):
         data = _data(
@@ -305,13 +299,14 @@ class ReservationPeriodTests(unittest.TestCase):
         self.assertEqual(window['available_pct'], 99)
         self.assertTrue(any('not counted' in warning for warning in result['warnings']))
 
-    def test_pending_work_still_holds_on_a_stale_reading(self):
+    def test_pending_work_still_counts_on_a_stale_reading(self):
         stale = _window(99, NOW - timedelta(hours=40), max_age=600, reset_at=_ts(NOW + timedelta(days=5)))
         pending = {'r1': {'pools': ['codex-weekly'], 'estimate_pct': 81,
                           'created_at': _ts(NOW - timedelta(hours=1)), 'finished_at': None}}
         result = evaluate_advisory(_period_policy(['codex-weekly']), _data({'codex-weekly': stale}, pending),
                                    'coder', 'small', NOW)
-        self.assertFalse(result['allowed'])
+        self.assertTrue(result['allowed'])
+        self.assertTrue(result['prefer_alternate'])
         self.assertEqual(result['windows'][0]['pending_pct'], 81)
 
     def test_finished_work_after_a_fresh_reading_still_counts(self):
@@ -320,7 +315,8 @@ class ReservationPeriodTests(unittest.TestCase):
                            'created_at': _ts(NOW - timedelta(minutes=5)), 'finished_at': _ts(NOW - timedelta(seconds=10))}}
         result = evaluate_advisory(_period_policy(['codex-weekly']), _data({'codex-weekly': fresh}, finished),
                                    'coder', 'small', NOW)
-        self.assertFalse(result['allowed'])
+        self.assertTrue(result['allowed'])
+        self.assertTrue(result['prefer_alternate'])
         self.assertEqual(result['windows'][0]['reserved_pct'], 15)
 
     def test_reservations_created_before_the_current_window_do_not_count(self):
@@ -334,7 +330,9 @@ class ReservationPeriodTests(unittest.TestCase):
         current = {'r1': dict(old['r1'], created_at=_ts(NOW - timedelta(hours=1)))}
         held = evaluate_advisory(_period_policy(['claude-five-hour']), _data({'claude-five-hour': window}, current),
                                  'coder', 'small', NOW)
-        self.assertFalse(held['allowed'])
+        self.assertTrue(held['allowed'])
+        self.assertEqual(held['windows'][0]['reserved_pct'], 45)
+        self.assertTrue(held['prefer_alternate'])
 
     def test_window_period_bounds_reservations_without_a_reset_time(self):
         for key, old_age, recent_age in (('grok-weekly', timedelta(days=8), timedelta(days=2)),
@@ -346,7 +344,10 @@ class ReservationPeriodTests(unittest.TestCase):
                                                           'created_at': _ts(NOW - old_age), 'finished_at': None}})
                 self.assertTrue(evaluate_advisory(_period_policy([key]), data, 'coder', 'small', NOW)['allowed'])
                 data['reservations']['r1']['created_at'] = _ts(NOW - recent_age)
-                self.assertFalse(evaluate_advisory(_period_policy([key]), data, 'coder', 'small', NOW)['allowed'])
+                result = evaluate_advisory(_period_policy([key]), data, 'coder', 'small', NOW)
+                self.assertTrue(result['allowed'])
+                self.assertEqual(result['windows'][0]['reserved_pct'], 16)
+                self.assertTrue(result['prefer_alternate'])
 
     def test_passed_reset_drops_earlier_reservations_and_keeps_later_ones(self):
         window = _window(10, NOW - timedelta(hours=3), max_age=600, reset_at=_ts(NOW - timedelta(hours=1)))

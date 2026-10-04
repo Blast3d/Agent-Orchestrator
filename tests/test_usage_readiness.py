@@ -63,7 +63,7 @@ class ReadinessTests(unittest.TestCase):
         summary = bot_summary(HELD_CODEX, 20, 'advisory', NOW)
         self.assertEqual(summary['state'], 'held')
         self.assertEqual(summary['blocking_text'], 'Blocking new work')
-        self.assertEqual(summary['sentence'], 'Held: only 18% is free to start work, and new work needs more than 20%. '
+        self.assertEqual(summary['sentence'], 'Held: 18% is free; this assignment prefers an authorized alternate. '
                                               'Unfinished tasks reserve 81% of the 99% left.')
         self.assertEqual((summary['age_text'], summary['age_class']), ('reading 32 h old', 'stale'))
         self.assertIn('close tasks that have finished', summary['next_step'])
@@ -123,7 +123,7 @@ class ReadinessTests(unittest.TestCase):
         parsed = TechnicalText()
         parsed.feed(page)
         outside, inside = ' '.join(parsed.outside), ' '.join(parsed.inside)
-        self.assertIn('Held: only 18% is free to start work', outside)
+        self.assertIn('Held: 18% is free; this assignment prefers an authorized alternate', outside)
         self.assertIn('Blocking new work', outside)
         self.assertIn('81% reserved', outside)
         self.assertNotIn('codex-bucket', outside)
