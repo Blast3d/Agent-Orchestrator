@@ -1,9 +1,26 @@
 ---
 name: multi-model-orchestrator
-description: "Coordinate multiple LLMs, coding agents, and creative tools on substantial projects: split bounded tasks, route approved context, integrate outputs, review claims, and package verified deliverables. Use for multi-model orchestration or large projects with useful independent research, implementation, design, or review work. Keep small self-contained tasks local."
+description: "Coordinate multiple LLMs, coding agents, and creative tools on substantial projects: split bounded tasks, route approved context, integrate outputs, review claims, and package verified deliverables. Use for multi-model orchestration or large projects with useful independent research, implementation, design, or review work. Keep small self-contained questions local."
 ---
 
 # Multi-Model Orchestrator
+
+## Automatic startup switch
+
+Routine questions, Git pulls, merges, commits, pushes and other small tasks stay
+with the current agent unless the user explicitly requests orchestration.
+Before automatically starting substantial work, run
+`python "C:\Users\jacob\Documents\Agent-Orchestrator\orchestrator.py" automatic status`.
+The persistent **Automatic orchestration** switch defaults **Off**. If `enabled`
+is false, unreadable or unavailable, work directly: do not create a run, dispatch
+workers or perform orchestration bookkeeping. User-requested manual runs remain
+available with the switch Off. Automatic startups use `start --automatic` to
+recheck the switch; a `disabled` result means continue directly. Explicit manual
+startups omit `--automatic`. Turning the switch Off does not cancel existing runs
+or change their ownership, provider permissions or closeout requirements.
+
+The remaining instructions apply when an orchestration run is actually requested
+or an eligible automatic startup is enabled.
 
 Turn several tools' contributions into one coherent deliverable. The user's
 lead-orchestrator switch selects who leads new runs: Claude (Opus 5.5,
@@ -27,15 +44,16 @@ required. Availability across projects does not mean every request needs a team.
 
 ## Choose a useful team
 
-This user wants substantial projects distributed across actual providers:
-OpenAI/ASTRA, Anthropic/Claude and xAI/Grok. Before choosing native subagents,
-plan that provider mix. With ASTRA leading and two suitable independent worker
-assignments, prefer a Claude worker and a Grok worker when both routes are ready
-and the task context is authorized. Give them concrete work that can be kept in
-the result. Apply [provider balance](references/provider-balance.md) for model
-tiers, additional workers, exceptions and measurement. Several named OpenAI
-workers still count as one provider. This applies equally when Claude leads;
-neither lead should default to filling the team from its own provider.
+Every orchestration run requires accepted, retained work from at least **two AI
+families** before completion. Aim for **three** when useful authorized assignments
+exist. Count the lead only when its retained work has verified evidence. Use
+OpenAI/Codex, Anthropic/Claude, xAI/Grok and Google/Gemini through Antigravity as
+appropriate. Before choosing native subagents, plan a useful assignment for a
+different family. Several OpenAI agents still count as one family; Copilot's
+family comes from its actual model, not the GitHub brand. JEV routing advice is
+not worker participation. Apply [provider balance](references/provider-balance.md)
+for evidence, model tiers and measurement. The same requirement applies when
+Claude leads.
 
 Start from the user's outcome, audience, existing decisions, deliverable formats,
 and accepted budget. Infer these from the conversation where possible; ask only
@@ -82,12 +100,15 @@ binary, handler, or effective configuration holds work for revalidation. This
 route returns text/code for Codex to review and apply; it does not directly edit
 project files. See provider-routing.md for the scope and legacy bridge reload.
 
-Choose the smallest team that improves the result. A common starting point is
-one maker plus an independent reviewer, with a research or design specialist
-where the project benefits. Prefer tools the user named and working local or
-included-plan access. Treat Cursor as optional. Add agents for a concrete role,
-not merely to increase the count. The user will acquire additional models as
-needed; discover new arrivals without treating the roster as an install queue.
+Choose the smallest useful team that meets the two-family requirement. A small
+edit performed as a run can use one lead plus a later reviewer from another
+family; a self-contained question need not start a run. Add a third family for
+concrete research, implementation or review work when useful. Prefer tools the
+user named and working local or included-plan access. Treat Cursor as optional.
+Do not create filler jobs or credit discarded work to meet a count. The user
+will acquire additional models as needed; discover new arrivals without treating
+the roster as an install queue. If no authorized alternate is usable, record the
+blocker and keep closeout held; do not waive the requirement.
 
 Before substantial delegation, use the maintained app's read-only
 `python orchestrator.py team --type TYPE --independent-workstreams N --cap C`.
@@ -109,8 +130,8 @@ in the maintained app for task-type defaults and a controlled calibration plan.
 These roles are examples, not fixed assignments to brands. Claude is an Anthropic
 model; NotebookLM and Antigravity are tools, not distinct model identities. Log
 the actual provider/model when returned; otherwise record `unknown`. Different
-apps can use the same underlying model. Prefer a different model family for a
-second perspective when accessible, but verify conclusions against evidence.
+apps can use the same underlying model. Verify model identity and conclusions
+against evidence; an interface name does not establish a second family.
 
 ## Establish shared context and ownership
 
@@ -126,9 +147,11 @@ Do not silently switch to the newest run. See `docs/startup-and-closeout.md`.
 The operating guide is a maintained required input, separate from task-specific
 memory. The dispatcher includes it in every new request, including `--no-memory`
 tasks, and records the request hash. Run-linked requests require matching startup
-identity and guide hash. Use `--run EXACT_RUN` when the output is not inside the
-run. Missing or stale startup holds new execution before inference; reusing an
-existing assignment preserves its original context and result.
+identity, guide hash and recorded `provider_policy` with minimum two and preferred
+three families. This policy remains required with `--no-memory`. Use
+`--run EXACT_RUN` when the output is not inside the run. Missing, stale or weakened
+startup holds new execution before inference; reusing an existing assignment
+preserves its original context and result.
 
 For native assignments, include the operating guide and relevant authorized
 recall in the actual prompt and retain that prompt/packet as evidence. A packet
@@ -347,8 +370,14 @@ work; do not credit rejected drafts or providers that were not used.
 Use the maintained `orchestrator.py closeout --run EXACT_RUN --owner OWNER
 --session SESSION --generation N` before final delivery. It verifies current
 ownership, linked task reviews and capture receipts, native capture when
-required, and the standard contribution audit/map. Resolve its missing evidence
-instead of writing an ad hoc summary or setting the run complete manually.
+required, and the standard contribution audit/map. Its `provider_family_coverage`
+check requires positive accepted work from at least two actual families and
+encourages three. Hosted credit must match canonical task/model evidence; native
+lead credit requires a genuine reviewed capture from this run. Arbitrary foreign
+native provider labels, JEV advice and synthetic checks do not satisfy coverage.
+Resolve missing evidence instead of setting the run complete manually. Native
+tools remain outside the dispatcher; the app enforces closeout and startup
+bindings rather than automatically scheduling every native assignment.
 
 Finish with the requested deliverables, a concise account of actual contributors,
 validation performed, and material remaining limits. Include useful local files

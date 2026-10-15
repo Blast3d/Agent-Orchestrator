@@ -109,6 +109,9 @@ class LifecycleTests(unittest.TestCase):
         write_json(self.run / 'contributions-ledger.json', ledger)
         return write_report(self.run, ledger)
 
+    def other_family_task(self):
+        return self.task(worker='grok', model='grok-4.6-build')
+
     def close(self):
         return closeout_run(self.run, root=self.root, **self.identity)
 
@@ -190,6 +193,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_accepted_capture_and_valid_audit_complete_and_render_real_map(self):
         task, receipt = self.task()
+        self.other_family_task()
         self.audit()
         result = self.close()
         self.assertEqual(result['status'], 'completed', result)
@@ -208,6 +212,7 @@ class LifecycleTests(unittest.TestCase):
         from completion_notifications import Notifications
         from unittest.mock import Mock
         self.task()
+        self.other_family_task()
         self.audit()
         report = self.root / 'final.txt'
         report.write_text('Complete lead result, including limitations.\nNot raw worker output.', encoding='utf-8')
@@ -235,6 +240,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_notification_failure_cannot_withdraw_completed_work(self):
         self.task()
+        self.other_family_task()
         self.audit()
         with patch('completion_notifications.notify_verified_closeout', side_effect=OSError('private path')):
             result = closeout_run(self.run, root=self.root, final_report=self.root / 'final.txt', **self.identity)
@@ -245,6 +251,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_closeout_without_explicit_report_does_not_notify(self):
         self.task()
+        self.other_family_task()
         self.audit()
         with patch('completion_notifications.notify_verified_closeout') as notification:
             self.assertEqual(self.close()['status'], 'completed')
@@ -323,12 +330,14 @@ class LifecycleTests(unittest.TestCase):
     def test_actor_can_have_different_observed_model_sets_across_tasks(self):
         self.task(model='opus', modelUsage={'opus': {}, 'haiku': {}})
         self.task(model='opus', modelUsage={'opus': {}})
+        self.other_family_task()
         self.audit()
         result = self.close()
         self.assertEqual(result['status'], 'completed', result)
 
     def test_nonaccepted_canonical_tasks_cannot_receive_accepted_credit(self):
         self.task()
+        self.other_family_task()
         cases = (
             ('failed', 'pending', 'failed', '2026-09-13T00:00:00+00:00'),
             ('rejected', 'rejected', 'succeeded', '2026-09-13T00:00:00+00:00'),
@@ -373,6 +382,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_failed_revalidation_withdraws_previous_completion(self):
         task, receipt = self.task()
+        self.other_family_task()
         self.audit()
         self.assertEqual(self.close()['status'], 'completed')
         completed_at = self.read(self.run / 'run.json')['completed_utc']
@@ -382,6 +392,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_forgotten_memory_is_historical_capture_and_never_resurrected(self):
         task, receipt = self.task()
+        self.other_family_task()
         self.audit()
         brain = BrainStore(self.root)
         brain.forget(receipt['memory_id'], 'Tester', 'Explicit forgetting after successful capture for retention testing.')
@@ -401,16 +412,18 @@ class LifecycleTests(unittest.TestCase):
 
     def test_other_run_same_project_pending_task_is_excluded(self):
         self.task()
+        self.other_family_task()
         self.task(capture=False, run_id='another-run', status='running', review_status='pending')
         self.audit()
         result = self.close()
         self.assertEqual(result['status'], 'completed', result)
-        self.assertEqual(len([row for row in result['checks'] if row['check'].startswith('task:')]), 1)
+        self.assertEqual(len([row for row in result['checks'] if row['check'].startswith('task:')]), 2)
 
     def test_output_and_manifest_links_find_tasks_without_run_id(self):
         output, _ = self.task(run_id=None, requested_output=str(self.run / 'answer.json'))
         explicit, _ = self.task(run_id=None)
-        self.manifest(tasks=[{'job_id': explicit['job_id']}])
+        partner, _ = self.other_family_task()
+        self.manifest(tasks=[{'job_id': explicit['job_id']}, {'job_id': partner['job_id']}])
         self.audit()
         result = self.close()
         self.assertEqual(result['status'], 'completed', result)
@@ -425,6 +438,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_native_work_requires_real_imported_capture(self):
         self.task()
+        self.other_family_task()
         self.audit()
         self.manifest(native_work=True)
         self.held(self.close(), 'native_memory_capture')
@@ -443,6 +457,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_changed_generation_during_render_cannot_mark_complete(self):
         self.task()
+        self.other_family_task()
         self.audit()
         original = Coordinator.require_owner
         calls = [0]

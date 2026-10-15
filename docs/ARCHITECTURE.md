@@ -2,10 +2,10 @@
 
 ```mermaid
 flowchart TD
-  U[User brief] --> C[Codex: lead and integrator]
+  U[User brief] --> C[Recorded lead and integrator]
   C --> B[Check brief and look up assignment receipt]
   B --> D[Dispatcher: claim output and create task record]
-  D --> Q[Fresh quota and atomic reservation]
+  D --> Q[Configured quota admission and atomic reservation]
   Q --> W[One bounded specialist worker]
   Q -->|Confirmed allowance limit| F[Frozen handoff plan]
   F -->|Next suitable approved worker| D
@@ -54,7 +54,9 @@ interrupted claim stays held, and revisions require a known, finalized predecess
 `task_handoff.py` freezes explicitly selected routes and brief bytes under one
 workflow lock. Confirmed quota stops may advance to the next distinct worker;
 every step still goes through the dispatcher, receipt store and allowance guard.
-Missing/stale readings, unknown completion and permission failures stop the chain.
+Unknown completion and permission failures stop the chain. In advisory mode,
+missing or stale quota collection alone does not block the original attempt or
+prove exhaustion; an alternate still needs a confirmed safe handoff reason.
 Local alternatives have an additional small-task capability gate. These are bounded
 supplied-text continuations; Codex prepares accepted progress and remaining steps
 when a larger task needs a new continuation brief.
@@ -77,9 +79,13 @@ Intent precedes index replacement; success evidence follows verification. An
 interrupted evidence write stays visible for inspection, rather than claiming an
 atomic multi-file transaction. No repair occurs during inbox generation.
 
-Integration validation for these additions is pending. The user workflow is in
+Current audit and regression evidence is recorded in the
+[October 14 audit](orchestrator-audit-2026-10-14.md). The user workflow is in
 [Task progress and summary repair](task-progress-and-repair.md).
 
-No scheduler daemon assigns tasks itself. Codex chooses tasks and providers. The only persistent background process introduced here monitors quota. Manual provider chat shortcuts operate under the user's direct control and bypass orchestrated task reservations.
+No scheduler daemon assigns tasks itself. The recorded lead chooses tasks and
+providers. Quota monitoring, optional loopback dashboards and the opt-in voice
+gateway are separate local services. Manual provider chat shortcuts operate
+under the user's direct control and bypass orchestrated task reservations.
 
 Read-only health checks do not validate current login or spend quota. The quota refresh command calls official account interfaces without inference. A real bounded worker task plus independent review validates the dispatch path.

@@ -4,6 +4,14 @@ Double-click **Open Orchestrator Viewer.cmd**, or run `python orchestrator.py vi
 The launcher reuses one local server per workspace. It opens a browser page; it
 does not attach a console, resume a conversation or call a model.
 
+The **Automatic orchestration** switch controls automatic startup for substantial
+work and defaults **Off**. Its setting survives restarts and is shared with the
+CLI (`python orchestrator.py automatic status|on|off`). Manual runs remain
+available, and existing runs keep their state. Routine questions, Git operations
+and other small tasks stay with the current agent even when automatic startup is
+On, unless you explicitly request orchestration. This switch does not control
+the separate background usage checks.
+
 The shared navigation at the top (**Orchestrator · Usage · Tasks · Memory ·
 Contributions · Experiments · System map**) is the same on every page. Its
 **Memory** link opens the memory dashboard on the selected project and run,
@@ -146,6 +154,85 @@ binding to their original parent; unlinked runs retain explained missing values.
 For another project, use `--root C:\path\to\PROJECT --run RUN_NAME`. The run
 must be inside that project's `.orchestration` directory. Bookmark the selected
 run's URL, or reopen it using the command; the port can change after a restart.
+
+## Run review and acceptance
+
+The **Run review and acceptance** panel uses the selected run's saved records.
+**Refresh saved evidence** reloads that panel; ordinary conversation refreshes
+preserve its unsaved checklist and review input.
+
+**Family coverage preview** derives families from accepted canonical tasks,
+their observed models and retained contribution allocations. Native lead credit
+requires the exact run's reviewed capture evidence. An actor name alone adds no
+credit. This preview makes no provider calls and does not perform closeout;
+closeout still verifies reviews, memory receipts, source proofs and audits.
+
+**Recovery evidence** shows uncertain tasks' saved PID, local termination,
+bounded progress and reservation state, followed by the evidence to check before
+another attempt. A saved local stop cannot establish whether remote provider
+execution stopped. This panel cannot release a reservation or retry a task.
+
+Use **Ranked acceptance checklist** to add outcomes, move them into priority
+order and choose pending, working or verified. **Save checklist** persists that
+exact order. Verified requires at least one existing evidence file inside the
+selected run, such as `review/test-report.json`. Each saved reference records its
+file hash; changed or missing evidence displays as pending on the next read.
+Checklist progress leaves coordinator status, memory and family credit alone.
+
+**Accept task with curated knowledge** lists successfully executed tasks awaiting
+review. Open **Saved task answer**, check its brief and evidence, then enter your
+name, a substantive review explanation, and supported candidate or bundle JSON.
+The answer preview is limited to 12,000 characters; use the scoped Task Inbox to
+read a longer answer before reviewing. A candidate example is:
+
+```json
+{"kind":"fact","title":"Reviewed finding","content":"The specific verified knowledge to retain."}
+```
+
+A bundle uses `memories` with unique `key` values and may include the supported
+relations described in [Brain](brain.md). Validation preserves the task's project
+and local user. Invalid fields leave the task unaccepted. A changed canonical
+answer requires a reload. Acceptance and memory capture have separate outcomes:
+read the actual memory receipt shown after review, including any capture error.
+This form never starts a model.
+
+**Dispatch invocation receipts** shows assignment reuse only when an actual
+dispatch invocation saved that receipt. It includes the original job and creation
+time, the new invocation time and the fact that no new inference was sent.
+Original task bytes and timing remain authoritative; old task labels alone are
+not treated as reuse receipts.
+
+**Attach existing voice request** lists up to 100 recent metadata rows from the
+selected run's project. Select the exact request ID and attach it deliberately.
+Attachments persist for that run and remain visible after refresh. This action
+copies metadata only; it neither copies transcripts nor sends or replays a request.
+
+Checklist saves, curated reviews and voice attachments require the current
+run's owner, session and integer generation. A handoff or stale browser tab is
+rejected. Every action retains the viewer's loopback, token and same-origin checks.
+If a write times out, inspect saved evidence before deciding whether to try again.
+
+The **Tasks** navigation link carries the selected project and run into Inbox.
+Its search and comparison operate only on that scoped dataset; the scope appears
+above the tasks. **Show all tasks** deliberately opens the global saved-task view.
+Shared navigation keeps project and run selection across pages.
+
+The local adapter API is `GET /api/operator?run=RUN_ID` and authenticated,
+same-origin `POST /api/checklist`, `/api/task-review`, `/api/voice-attach`.
+All mutations include `run_id`, `owner`, `session` and `generation`.
+Checklist items are `{id,title,state,evidence}` in rank order: up to 100 unique
+IDs (60 characters), 160-character titles, and twelve run-relative evidence
+files per item, each at most 2 MiB. The whole saved checklist is at most 64 KiB.
+Task reviews additionally include `job_id`, the displayed `source_sha256`,
+`reviewer`, `note` and `curated_payload`. Voice attachments include `project_id`
+and an existing `request_id` from that project's journal metadata.
+
+For a disposable browser check, run `python tests/operator_viewer_fixture.py`.
+It prints a viewer URL backed entirely by temporary synthetic runs, tasks and
+voice metadata, with one local proof file at `review/browser-proof.txt`.
+Closing the fixture removes its temporary data. Automated HTTP and storage
+checks live in `tests/test_run_operations.py`; synthetic evidence does not
+establish live provider participation or audibility.
 
 ## Storage and privacy
 

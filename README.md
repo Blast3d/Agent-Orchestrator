@@ -156,12 +156,28 @@ Provider authentication remains in each provider's normal account folders. Model
 
 ## Daily use
 
-After global registration, Codex and Claude receive startup instructions for
-substantial project work automatically. The lead uses **start** to load the
+**Automatic orchestration** defaults **Off**. Use the switch in the viewer or
+`python orchestrator.py automatic on|off`; read it with
+`python orchestrator.py automatic status`. It is shared across projects and saved
+across restarts. Routine questions, Git pulls, merges, commits, pushes and small
+tasks stay with the current agent even when automatic startup is On, unless you
+explicitly request orchestration. Manual runs remain available, and switching Off
+does not cancel existing runs.
+
+After global registration, Codex and Claude check this switch before automatically
+starting substantial project work with **start --automatic**. When it is Off or
+unreadable, automatic startup returns `disabled` without creating a run or loading
+memory. Manual runs use **start** without that flag. The lead uses **start** to load the
 operating guide and scoped Brain recall before assigning workers. The dispatcher
 includes the guide in every new worker request; project recall remains scoped to
-the assignment. **closeout** checks reviewed task captures and contribution maps
-before recording completion. See [startup and closeout](docs/startup-and-closeout.md).
+the assignment. Startup records a provider policy requiring **two contributing AI
+families**, with **three preferred**; run-linked dispatch verifies it. **closeout**
+checks reviewed task captures, contribution maps and actual family coverage before
+recording completion. Same-family native agents and JEV routing advice cannot fill
+the minimum; Copilot counts by its actual model. A small edit run can use the lead
+plus a later cross-family reviewer. If no authorized alternate is usable, closeout
+stays held. These checks do not schedule or intercept native workers. See
+[startup and closeout](docs/startup-and-closeout.md).
 For optional Discord completion calls or Busy-mode messages through OpenWhispr,
 enable [completion notifications](docs/completion-notifications.md), select
 OpenWhispr's `project` trigger, and supply the full lead report to

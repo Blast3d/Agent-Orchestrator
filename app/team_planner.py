@@ -16,11 +16,12 @@ import statistics
 
 from execution_limits import timeout_for_task
 from paths import ROOT
+from provider_policy import MINIMUM_FAMILIES, PREFERRED_FAMILIES
 from usage_guard import Guard, validate_policy
 
 
 TASK_TYPES = {
-    'simple': (0, 0, 'The lead handles a small command or edit directly.'),
+    'simple': (0, 1, 'The lead implements the change, then another AI family reviews it.'),
     'debug': (1, 1, 'One diagnostic worker, then an independent check of the fix.'),
     'implementation': (2, 1, 'Separate file ownership for makers, then independent review.'),
     'research': (4, 1, 'Separate questions or sources, then a synthesis and evidence review.'),
@@ -274,6 +275,8 @@ def recommend(task_type, independent_workstreams=1, cap=4, quota=None):
     status = 'solo' if not peak else 'held' if not admitted else 'limited' if admitted < peak else 'ready'
     return {
         'task_type': task_type, 'advisory_only': True, 'status': status,
+        'family_policy': {'minimum_families': MINIMUM_FAMILIES,
+                          'preferred_families': PREFERRED_FAMILIES},
         'lead_count': 1, 'independent_workstreams': independent_workstreams,
         'producer_assignments': producers, 'reviewer_assignments': reviewers,
         'total_worker_assignments': producers + reviewers,
@@ -285,9 +288,8 @@ def recommend(task_type, independent_workstreams=1, cap=4, quota=None):
         'planned_waves': math.ceil(producers / cap) + math.ceil(reviewers / cap),
         'explanation': explanation,
         'review_order': 'Review follows completed work; reviewers are included in worker totals, not added to the concurrent cap.',
-        'next_step': ('The lead can complete this without new worker dispatch.' if not peak else
-                      'Check the recorded admission reasons and choose an eligible provider.' if not admitted else
-                      'The lead assigns bounded scopes; each dispatch checks the configured quota policy and route authorization.'),
+        'next_step': ('Check admission reasons and choose an authorized worker from another AI family.' if not admitted else
+                      'Assign bounded scopes across at least two AI families; prefer three. Each dispatch checks quota and authorization.'),
     }
 
 

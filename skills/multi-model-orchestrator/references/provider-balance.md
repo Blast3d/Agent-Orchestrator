@@ -1,38 +1,42 @@
 # Distribute useful work across providers
 
-The user's September 9, 2026 correction concerns provider allocation. Earlier
-projects had different worker names but still assigned nearly all work to
-OpenAI. A role such as voice auditor or memory worker does not establish a
-different provider. The requested change is more real work for Claude and Grok,
-with shared guidance for ASTRA and Fable.
+The user's October 5, 2026 requirement is a hard minimum of **two contributing AI
+families** per orchestration run, with **three preferred**. Different worker
+names, roles or interfaces do not establish different families. OpenAI/Codex,
+Anthropic/Claude, xAI/Grok and Google/Gemini through Antigravity are distinct
+families. Copilot counts by its observed model. JEV is advisory routing and does
+not count as a contributing worker family.
 
-Count the lead in the mix: ASTRA is the OpenAI lead; Fable is a Claude lead and
-already contributes Anthropic participation. Fable and Claude are not separate
-providers. Use actual execution metadata for each worker's model identity.
+Count the lead only for positively credited, retained work backed by a genuine
+reviewed native capture from the exact run. ASTRA and Sol share OpenAI; Claude
+uses Anthropic. The legacy `fable` owner key denotes the Claude slot; the Fable
+model remains paused. Use actual execution metadata for hosted model identity.
 
 ## Build the roster before dispatch
 
-For substantial work with at least two suitable independent worker assignments,
-prefer useful participation from OpenAI, Anthropic and xAI when all three are
-ready and the supplied context is authorized. With ASTRA leading, start with a
-Claude producer and a Grok producer or independent reviewer. When Fable leads,
-prefer Grok and an available OpenAI worker for suitable assignments. Record each
-assignment's provider, role, deliverable and acceptance check before launch.
+Plan useful work from another family before assigning same-family native
+workers. With an OpenAI lead, Claude, Grok or Gemini can provide that assignment;
+with Claude leading, use Codex, Grok or Gemini as appropriate. Target a third
+family when there is concrete research, production or review work it can retain.
+Record each assignment's provider, role, deliverable and acceptance check before
+launch.
 Assign review responsibility at the same time. The lead owns acceptance and
 integration; a producer never accepts its own deliverable. Schedule an
 independent review for work whose complexity or risk warrants it.
 For larger teams, distribute additional jobs across the ready providers rather
 than filling every remaining seat with native workers from the lead's provider.
 
-Use the smallest team that helps. A single edit, lookup, or tightly coupled local
-fix need not involve three providers. Local-access requirements, current quota,
-route availability, demonstrated suitability, deadlines and content authorization
-can justify a different mix. Record the concrete reason and use the ready routes
-for the work they can do. Do not silently substitute same-provider agents for a
-planned Claude or Grok assignment. A timed-out or stale allowance check is not
+Use the smallest team that meets the minimum and helps. A self-contained question
+need not start orchestration. A small edit performed as a run can use the lead
+plus a later cross-family reviewer. Local access, quota, route availability,
+suitability, deadlines and authorization can change which families participate;
+they do not waive the two-family threshold. If no authorized alternate is usable,
+save the blocker and keep the run held. Do not silently substitute same-family
+agents for cross-family work. A timed-out or stale allowance check is not
 provider unavailability: start from saved evidence and refresh in the background.
-Prefer another provider only at or below the configured 20% available threshold
-or a confirmed quota rejection. All reservation and uncertain-job rules apply.
+For quota-based rerouting, prefer another provider at or below the configured 20%
+available threshold or after a confirmed rejection. Family policy applies
+independently. All reservation and uncertain-job rules apply.
 
 ## Match the model and worker count to the work
 
@@ -57,6 +61,16 @@ constraint for the Orchestrator/Brain workflow. A desire for provider balance
 does not authorize additional usage credits, unrelated exports or model installs.
 
 ## Measure what actually happened
+
+Startup records `provider_policy` with minimum two and preferred three families.
+Run-linked dispatch verifies that binding even with `--no-memory`. The
+`provider_family_coverage` closeout check counts only positively credited accepted
+work: hosted jobs must match canonical successful task/model evidence, and native
+lead work must have a reviewed capture from the exact run. Arbitrary foreign
+native labels, in-progress work, rejected outputs, zero credit, synthetic checks,
+JEV advice and imported memories do not establish another family. Two families
+pass with an encouragement to use three; three satisfy the preferred target.
+The app does not intercept native tools or schedule workers automatically.
 
 Keep planned, started, completed and accepted work distinct. Report named worker
 count and distinct provider count separately, including the lead consistently.

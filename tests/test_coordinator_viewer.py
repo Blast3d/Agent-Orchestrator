@@ -672,6 +672,30 @@ class HTTPTests(unittest.TestCase):
             self.assertEqual(self.request('POST', '/api/usage-monitor', payload={'enabled': False})[0], 200)
             self.assertEqual(change.call_args.args, (False,))
 
+    def test_automatic_switch_persists_only_valid_authorized_intent(self):
+        from unittest.mock import patch
+        settings_root = self.server.root / 'shared-application'
+        setting = patch('automatic_startup.ROOT', settings_root)
+        setting.start()
+        self.addCleanup(setting.stop)
+        path = settings_root / 'runtime/automatic-startup.json'
+        status, _, body = self.request(path='/api/automatic-startup')
+        self.assertEqual(status, 200)
+        self.assertFalse(json.loads(body)['enabled'])
+        self.assertFalse(path.exists())
+        for payload in ({}, {'enabled': 'false'}, {'enabled': 1}, {'enabled': True, 'extra': 0}):
+            self.assertEqual(self.request('POST', '/api/automatic-startup', payload=payload)[0], 400)
+        for headers, authorized in (({}, False), ({'Origin': 'http://foreign.example'}, True)):
+            self.assertEqual(self.request('POST', '/api/automatic-startup', payload={'enabled': True},
+                                          headers=headers, authorized=authorized)[0], 403)
+        self.assertFalse(path.exists())
+        for enabled in (True, False):
+            status, _, body = self.request('POST', '/api/automatic-startup', payload={'enabled': enabled})
+            self.assertEqual((status, json.loads(body)['enabled']), (200, enabled))
+            self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['enabled'], enabled)
+            self.assertEqual(json.loads(self.request(path='/api/automatic-startup')[2])['enabled'], enabled)
+        self.assertEqual(self.store.opened, [])
+
     def test_memory_port_can_navigate_to_exact_viewer_run_without_api_access(self):
         navigation = {'Sec-Fetch-Site': 'same-site', 'Sec-Fetch-Mode': 'navigate',
                       'Sec-Fetch-Dest': 'document'}

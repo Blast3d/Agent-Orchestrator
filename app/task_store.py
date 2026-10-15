@@ -1,5 +1,6 @@
 """Durable task evidence and explicit review, separate from model execution."""
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -121,7 +122,7 @@ class TaskStore:
                 raise RuntimeError('Contribution audit could not be saved; inspect the task result')
             return result
 
-    def review(self, job_id, decision, reviewer, note, contributions=None, *, curated_payload=None):
+    def review(self, job_id, decision, reviewer, note, contributions=None, *, curated_payload=None, expected_source_sha256=None):
         if decision not in ('accepted', 'rejected'):
             raise ValueError('Review decision must be accepted or rejected')
         if not reviewer.strip() or len(note.strip()) < 20 or len(note.split()) < 4:
@@ -130,7 +131,10 @@ class TaskStore:
             raise ValueError('Only an accepted task can become a remembered solution')
         directory = self.directory(job_id)
         with file_lock(directory / 'review.lock'):
-            result = json.loads((directory / 'result.json').read_text(encoding='utf-8'))
+            raw = (directory / 'result.json').read_bytes()
+            if expected_source_sha256 is not None and hashlib.sha256(raw).hexdigest() != expected_source_sha256:
+                raise ValueError('Canonical task source changed; reload before reviewing')
+            result = json.loads(raw)
             # A terminal preflight hold has no answer to accept. Permit an
             # explicit rejection only when there is no provider-start evidence
             # or uncertain allowance/storage reservation to reconcile.

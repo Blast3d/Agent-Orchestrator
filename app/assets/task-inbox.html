@@ -21,6 +21,7 @@
 <main class="shell">
   <div class="intro"><div><p class="eyebrow">Tasks</p><h1>Your task inbox.</h1><p class="subtitle">See what came back, what needs a check, and where to pick up next.</p></div><div class="snapshot"><strong><span id="snapshot-kind">Saved view</span> · <time id="generated-time">Time unavailable</time></strong><span id="snapshot-note">Reopen Open Task Inbox.cmd, or open Tasks from the Orchestrator, for the latest saved results. This page is not a live connection.</span></div></div>
   <div class="groups" id="groups" role="group" aria-label="Filter tasks by progress"></div>
+  <p id="task-scope" class="muted"></p><p><a id="all-tasks" href="/tasks" hidden>Show all tasks</a></p>
   <div class="filters"><div class="field search-field"><label for="search">Find a task or something in its answer</label><input id="search" type="search" placeholder="Search your saved work…" autocomplete="off"></div><div class="field worker-field"><label for="worker">Who worked on it</label><select id="worker"><option value="">Every worker</option></select></div><p id="count-label" class="count-label" aria-live="polite"></p></div>
   <div class="workspace"><section aria-labelledby="tasks-heading"><h2 id="tasks-heading" class="sr-only" tabindex="-1">Saved tasks, newest first</h2><div class="task-list" id="task-list"></div></section><section id="detail" class="detail" aria-label="Selected task"></section></div>
   <footer class="footer"><span><strong>Your saved work, in one place.</strong> Reading this inbox makes no changes to tasks or allowances.</span><span id="warning-summary"></span></footer>
@@ -30,6 +31,8 @@
 'use strict';
 const data = JSON.parse(document.getElementById('inbox-data').textContent);
 const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+document.getElementById('task-scope').textContent = data.scope ? 'Project: ' + (data.scope.project || 'all projects') + ' · Run: ' + (data.scope.run_id || 'all runs in project') : 'All saved tasks across projects and runs';
+document.getElementById('all-tasks').hidden = !data.scope;
 const groupNames = ['All tasks','Needs attention','Ready to check','Working','Finished'];
 let activeGroup = 'All tasks', selectedId = null, filtered = [];
 const byId = id => document.getElementById(id);

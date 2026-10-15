@@ -34,11 +34,13 @@ def record(**updates):
 
 
 class TeamPlanningTests(unittest.TestCase):
-    def test_simple_keeps_lead_without_launch_or_quota_requirement(self):
-        plan = planner.recommend('simple', 9, 4)
-        self.assertEqual(plan['status'], 'solo')
-        self.assertEqual(plan['total_roles_including_lead'], 1)
+    def test_simple_run_requires_cross_family_review_without_launching_it(self):
+        plan = planner.recommend('simple', 9, 4, {'capacity': 1, 'status': 'ready'})
+        self.assertEqual(plan['status'], 'ready')
+        self.assertEqual(plan['total_roles_including_lead'], 2)
         self.assertEqual(plan['first_wave_workers'], 0)
+        self.assertEqual(plan['family_policy']['minimum_families'], 2)
+        self.assertEqual(plan['family_policy']['preferred_families'], 3)
 
     def test_large_audit_uses_waves_and_counts_reviewers_separately(self):
         plan = planner.recommend('audit', 6, 4, {'capacity': 4, 'status': 'ready'})

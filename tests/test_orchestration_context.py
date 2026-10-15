@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 from init_run import create_run
 from coordinator_handoff import Coordinator
 from orchestration_context import load_operating_context, verify_run_startup, OperatingContextError
+from orchestration_lifecycle import start_run
 
 
 class OperatingContextTests(unittest.TestCase):
@@ -19,13 +20,14 @@ class OperatingContextTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        self.run, _ = create_run(self.root, 'context-test', 'Verify startup scope', project_id='example')
+        self.run, _ = create_run(self.root, 'context-test', 'Verify startup scope', project_id='example', lead='astra')
         self.operating = load_operating_context()
         self.args = argparse.Namespace(output=self.run / 'drafts' / 'answer.json', project='example')
         state = Coordinator(self.run).read()
-        self.receipt = {'schema_version': 1, 'run_id': self.run.name, 'project_id': 'example',
-                        'operating_context': self.operating,
-                        'coordinator': {key: state[key] for key in ('owner', 'session', 'generation')}}
+        identity = {key: state[key] for key in ('owner', 'session', 'generation')}
+        self.receipt = start_run(run=self.run, root=self.root, no_memory=True,
+                                 context_loader=lambda: self.operating, **identity)
+        (self.run / 'startup-context.json').unlink()
 
     def save(self):
         (self.run / 'startup-context.json').write_text(json.dumps(self.receipt), encoding='utf-8')
@@ -46,6 +48,34 @@ class OperatingContextTests(unittest.TestCase):
         coordinator.checkpoint(state['checkpoint'], state['owner'], state['session'], state['generation'])
         with self.assertRaises(OperatingContextError):
             verify_run_startup(self.args, self.operating)
+
+    def test_missing_downgraded_or_foreign_family_policy_holds_dispatch(self):
+        policy = {'schema_version': 1, 'minimum_families': 2, 'preferred_families': 3,
+                  'lead_family': 'OpenAI', 'cross_family_workers': ['claude', 'grok', 'gemini']}
+        for value in (None, dict(policy, minimum_families=1),
+                      dict(policy, preferred_families=2), dict(policy, lead_family='Anthropic'),
+                      dict(policy, cross_family_workers=['codex']), dict(policy, disabled=True)):
+            with self.subTest(policy=value):
+                if value is None:
+                    self.receipt.pop('provider_policy', None)
+                else:
+                    self.receipt['provider_policy'] = value
+                self.save()
+                with self.assertRaises(OperatingContextError):
+                    verify_run_startup(self.args, self.operating)
+
+    def test_missing_changed_or_oversized_prepared_packet_holds_dispatch(self):
+        self.save()
+        packet = self.run / 'startup-context.md'
+        original = packet.read_bytes()
+        for raw in (None, original + b'\nChanged after preparation.', b'x' * (65536 + 1)):
+            with self.subTest(packet_size=None if raw is None else len(raw)):
+                if raw is None:
+                    packet.unlink()
+                else:
+                    packet.write_bytes(raw)
+                with self.assertRaises(OperatingContextError):
+                    verify_run_startup(self.args, self.operating)
 
     def test_corrupt_saved_context_is_not_a_valid_load_receipt(self):
         self.receipt['operating_context'] = dict(self.operating, context='different bytes')

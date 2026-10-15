@@ -214,7 +214,7 @@ def delivery_evidence_check(brain, recalled, fingerprints=None):
         'elapsed_ms': round((time.monotonic() - started) * 1000, 3)}
 
 
-def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
+def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
     """Return a summary; successful execution always requires a separate review."""
     claude_model = None
     if args.worker == 'claude':
@@ -638,6 +638,16 @@ def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
         # Otherwise a reviewer can accept a task while a late save restores pending.
         result['finalized_at'] = timestamp()
         persist()
+    return result
+
+
+def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
+    result = _dispatch(args, guard_factory=guard_factory, store=store, workspaces=workspaces)
+    from dispatch_invocations import record_invocation
+    try:
+        result['invocation_receipt'] = record_invocation(store or TaskStore(TASKS), result)
+    except (OSError, ValueError):
+        result['invocation_receipt_error'] = 'Invocation receipt could not be saved; inspect the original task before retrying.'
     return result
 
 

@@ -123,7 +123,7 @@ class InteractionStoreTests(unittest.TestCase):
         self.root.mkdir()
         self.home = Path(self.temp.name) / 'home'
         self.home.mkdir()
-        self.run, _ = create_run(self.root, 'interactive-test', 'Open only the selected existing conversation')
+        self.run, _ = create_run(self.root, 'interactive-test', 'Open only the selected existing conversation', lead='astra')
         self.coordinator = Coordinator(self.run)
         self.opened = Mock(return_value='opened')
         self.claude_opened = Mock(return_value='opened')

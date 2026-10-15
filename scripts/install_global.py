@@ -16,9 +16,27 @@ def install_startup_hook(path, root=ROOT):
     block = f'''{STARTUP_BEGIN}
 ## Automatic orchestration startup
 
-For substantial coding, research, or multi-agent project work, use the installed
-`multi-model-orchestrator` skill without waiting for the user to request it.
-Small self-contained questions and routine edits can stay with the current lead.
+Routine questions, git pull, merge, commit, push and other small tasks stay with
+the current agent. Do not start orchestration for these unless the user explicitly
+requests it. Apply the normal Git scope, publication and verification checks.
+
+Before automatically starting substantial coding, research or multi-agent project
+work, read `python "{root / 'orchestrator.py'}" automatic status`.
+The persistent Automatic orchestration switch defaults Off. If `enabled` is false,
+unreadable or unavailable, continue directly with the current agent; do not start
+a run, dispatch workers or perform orchestration bookkeeping. Manual orchestration
+requested by the user remains available regardless of this switch.
+Turning Off does not cancel existing runs or change their closeout requirements.
+If `enabled` is true and the work is substantial, use the installed
+`multi-model-orchestrator` skill and `python "{root / 'orchestrator.py'}" start --automatic`
+with the workspace, objective and short run name. If startup returns `disabled`,
+continue directly. For explicit manual runs, use `start` without `--automatic`.
+
+Every orchestration run, including a manually requested small edit run,
+needs accepted retained work from at least two AI
+families; prefer three when useful authorized scopes exist. Plan a cross-family
+assignment before adding same-family native workers. A small edit run can use the
+lead plus a later cross-family reviewer. JEV is advisory and does not count.
 
 Before new worker assignments, run `python "{root / 'orchestrator.py'}" start`
 with the workspace, objective and a short run name, or resume the exact existing
@@ -41,6 +59,14 @@ task scope; loading memory does not authorize broader access or extra spending.
 
 Before final orchestration delivery, review tasks, verify capture outcomes,
 complete the contribution ledger/map, and run `orchestrator.py closeout`.
+Startup records the provider policy and run-linked dispatch verifies it even with
+project recall disabled. The provider-family coverage check holds closeout until
+positive accepted work proves two actual families. Copilot counts by actual model,
+not brand; same-family agents and arbitrary foreign native labels cannot fill the
+minimum. Native lead credit requires a reviewed capture from the exact run.
+If no authorized alternate is usable, report the blocker and keep the run held.
+Do not waive the threshold, invent credit, broaden content access or add spending.
+Native tools remain outside the dispatcher; these checks are not a scheduler.
 Report any incomplete evidence explicitly. A saved packet is not proof a model
 read it. The user should not have to remind the lead to load this workflow.
 {STARTUP_END}'''

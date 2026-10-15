@@ -49,6 +49,29 @@ the query once, compares cosine similarity, and validates the sources and conten
 fingerprints again before returning candidates. The default similarity threshold
 is 0.65; that is a configurable starting point, not a demonstrated quality target.
 
+When usable vector results exist, Brain combines their ranks with the validated
+keyword ranking using reciprocal rank fusion (`1 / (60 + rank)` per list).
+A memory supported by both lists retains both signals. Complete query matches
+keep priority, including exact paths. Raw cosine scores are not added to keyword
+scores, and finding the same memory semantically cannot erase its lexical match.
+Graph expansion follows the fused seeds. With no usable semantic candidates,
+the existing keyword ordering is retained.
+
+Retrieval telemetry records the fusion method, rank constant, list sizes and
+overlap count; individual results expose their keyword and semantic ranks.
+These scores describe ordering, not confidence probabilities. Source validation,
+project/user isolation, deletion and expiry checks still precede fusion.
+
+Context packing also continues through the bounded candidate shortlist when a
+high-ranked record cannot fit its provenance and episode into the character
+budget. It stops at the requested delivered-result count. Omitted records remain
+identified in `context_omitted_ids`; provenance is never silently removed to make
+an oversized record fit.
+
+Run `python benchmarks/brain_hybrid.py --output output/brain-hybrid.json` for four
+offline regression cases. See the [October audit](orchestrator-audit-2026-10-14.md)
+for research sources, before/after evidence and the limits of that comparison.
+
 Missing or invalid configuration, unapproved projects, missing credentials,
 timeouts, changed sources, and invalid vectors return explicit safe status values.
 No provider error body or key is displayed. Telemetry reports request attempts,

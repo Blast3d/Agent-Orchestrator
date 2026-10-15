@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / 'app'))
 def main():
     actions = {'status': ('usage_guard.py', 'status'), 'refresh': ('usage_guard.py', 'refresh'),
                'start': ('orchestration_lifecycle.py', 'start'), 'closeout': ('orchestration_lifecycle.py', 'closeout'),
+               'automatic': ('automatic_startup.py', None),
                'run': ('dispatch_worker.py', None), 'review': ('dispatch_worker.py', 'review'),
                'monitor': ('start_usage_monitor.py', None), 'stop-monitor': ('start_usage_monitor.py', '--stop'),
                'local': ('manage_local.py', None), 'inventory': ('inventory_agents.py', None),
@@ -26,7 +27,7 @@ def main():
                'notifications': ('completion_notifications.py', None)}
     if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
         print('Agent Orchestrator: the lead switch picks Claude (Opus 5.5), ASTRA or Sol (see lead selected); the runner-up continues through an explicit handoff.\n'
-              'Commands: start, closeout, brain, jev, skills, lead, viewer, voice, relay, notifications, watch, team, remember, map, doctor, status, refresh, dashboard, inbox, summary, visuals, brief-check, run, review, contributions, tasks, monitor, stop-monitor, local, inventory, vscode-bots\n'
+              'Commands: automatic, start, closeout, brain, jev, skills, lead, viewer, voice, relay, notifications, watch, team, remember, map, doctor, status, refresh, dashboard, inbox, summary, visuals, brief-check, run, review, contributions, tasks, monitor, stop-monitor, local, inventory, vscode-bots\n'
               'Examples:\n  python orchestrator.py doctor\n  python orchestrator.py refresh --provider claude\n'
               '  python orchestrator.py run claude --prompt-file brief.txt --output answer.json --task review --size small\n'
               '  python orchestrator.py run codex --prompt-file brief.txt --output answer.json --task review --codex-model sol\n'

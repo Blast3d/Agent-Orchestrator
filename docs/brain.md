@@ -435,7 +435,13 @@ pretending a provider executed it:
 python orchestrator.py brain capture --run RUN --file RUN/review/knowledge.json --owner astra --session SESSION --generation GENERATION --reviewer NAME --note "Verified the implementation and its focused tests."
 ```
 
-This command accepts a file within the application root, at most 96 KiB. Add a
+`--run` accepts a run ID under the application `.orchestration` folder, or the
+absolute path to an exact workspace run directory, such as
+`X:/LandSurveySim/.orchestration/RUN_ID`. Use the directory path for external
+workspaces; the current owner, session and generation are still required.
+The bundle file must be inside that exact run, at most 96 KiB. Linked run,
+bundle and evidence paths are rejected. The Brain database and canonical task
+records remain in application storage. Add a
 stable `capture_id`, the exact manifest `project_id`, and `evidence` containing
 1-12 relative files within that run (each at most 2 MiB). The named reviewer
 curates knowledge; no model or transcript extractor runs. An imported canonical
@@ -447,3 +453,47 @@ stay held for inspection rather than risking duplicate or resurrected knowledge.
 Storage limits are unchanged. Sparse graphs should first be investigated as
 capture/scoping problems. Use small, independently useful nodes and justified
 connections; do not manufacture edges or fill the graph with raw chat.
+
+## Review sources and prepare selected context
+
+Open a pending memory to see its **Current source check**. The dashboard checks
+the canonical source without changing the proposal or its review. **Check source
+again** repeats that read. Changed or unavailable evidence keeps Approve disabled;
+matching evidence from an unaccepted task explains that an accepted task review
+is still required. The normal approval operation rechecks the proof independently.
+
+In **Add a memory**, choose **Finalized task evidence** as Source type. The task
+picker reads up to 200 canonical task files and lists up to 100 finalized successful
+tasks in the selected project, with their accepted/awaiting-review state. The list
+is explicitly bounded. Selecting a task proposes memory with its canonical job ID;
+it does not accept the task, approve memory, import answers automatically or call
+a provider. Running, missing and mismatched-project sources remain rejected by the
+existing store contract. User source notes remain available as the other option.
+
+After a saved search, **Selected recall context** lets you choose up to 24 returned
+memories. **Preview selected context** and **Copy freshly checked context** each
+make a new local validation request. The request binds the selected IDs to that
+project's saved recall receipt and checks current review, validity dates and source
+proofs. Stale or invalid records are excluded independently; healthy records stay.
+Context is bounded to 12,000 characters and reports excluded records. An unavailable
+or erased recall requires a new search. Copy never reuses an earlier preview and
+does not dispatch a worker or save new memory. Browser clipboard permission may
+be required; a failed clipboard operation is reported rather than claimed copied.
+
+The library also has **Tags (comma separated)** with **Match all tags** or **Match
+any tag**. Up to twelve tag selections combine with the selected status; Clear
+tags removes this filter. Counts describe the currently loaded window of up to
+200 records, not every memory in the project. Tag filtering stays local and does
+not search or call a provider. Search results keep their own recall scope.
+
+The API adapters are token/loopback protected: `GET /api/source-check` accepts
+`project_id` and `memory_id`; `GET /api/source-tasks` accepts `project_id`; and
+`POST /api/context` accepts `project_id`, `trace_id`, and `memory_ids`. Context
+requests also require the existing same-origin mutation gate even though they do
+not change memory. Other users, extra fields and invalid/bounded selections fail.
+
+For disposable browser acceptance, run `python tests/brain_features_fixture.py`.
+Its first JSON line identifies a temporary dashboard origin, synthetic IDs and
+canonical task paths. Open the origin with `/#project=alpha`; changing the returned
+synthetic accepted task's response demonstrates drift and fresh context exclusion.
+Stop with Ctrl+C. This fixture never opens the user's Brain database.

@@ -29,7 +29,7 @@ def main(argv=None):
     for command in ('semantic-status','semantic-index'):
         semantic=sub.add_parser(command);semantic.add_argument('--project',required=True)
         if command=='semantic-index':semantic.add_argument('--limit',type=int,default=100)
-    capture=sub.add_parser('capture');capture.add_argument('--run',required=True);capture.add_argument('--file',type=Path,required=True)
+    capture=sub.add_parser('capture');capture.add_argument('--run',required=True,help='Application run ID or absolute workspace run directory');capture.add_argument('--file',type=Path,required=True)
     capture.add_argument('--owner',required=True);capture.add_argument('--session',required=True);capture.add_argument('--generation',type=int,required=True)
     capture.add_argument('--reviewer',required=True);capture.add_argument('--note',required=True)
     usage=sub.add_parser('use');usage.add_argument('job_id')
@@ -44,7 +44,7 @@ def main(argv=None):
         if args.command=='dashboard':
             from brain_dashboard import main as dashboard_main
             return dashboard_main(['--root',str(args.root),'--port',str(args.port)]+(['--open'] if args.open else []))
-        brain=BrainStore(args.root)
+        brain=BrainStore(args.root) if args.command!='capture' else None
         if args.command in ('init','status'):result=brain.status()
         elif args.command=='propose':
             if args.file.stat().st_size>16384:raise ValueError('Candidate file exceeds 16 KiB')
@@ -52,8 +52,9 @@ def main(argv=None):
         elif args.command=='list':result=brain.list_memories(args.project,args.user,args.status,args.limit)
         elif args.command=='get':result=brain.get(args.memory_id)
         elif args.command=='capture':
-            from memory_bundle import capture_run, read_json
-            result=capture_run(args.root,args.run,read_json(args.file.resolve(),args.root.resolve()),owner=args.owner,
+            from memory_bundle import capture_run, read_json, resolve_capture_run
+            run=resolve_capture_run(args.root,args.run)
+            result=capture_run(args.root,run,read_json(args.file.absolute(),run),owner=args.owner,
                                session=args.session,generation=args.generation,reviewer=args.reviewer,note=args.note)
         elif args.command in ('use','feedback'):
             from task_store import TaskStore

@@ -1,6 +1,10 @@
 # Choosing a useful team
 
-Start with the smallest team that has distinct work to do. This application now
+Start with the smallest team that has distinct work to do and meets the hard
+minimum of **two contributing AI families**. Prefer **three** when useful
+authorized scopes exist. Same-family native workers are one family; JEV routing
+advice does not count. A self-contained question need not start orchestration,
+but a small edit performed as a run needs cross-family review. This application
 provides read-only advice through `python orchestrator.py team`; it does not
 start models, refresh quota, reserve allowances or change coordinator ownership.
 The counts below are starting points for this installation, not measured optimal
@@ -8,7 +12,7 @@ counts. Existing task records do not contain a controlled team-size comparison.
 
 | Task | Independent production scopes | Later review assignments | Total roles including one lead | Initial simultaneous worker cap |
 | --- | ---: | ---: | ---: | ---: |
-| Simple command or small edit | 0; lead does it | 0 | 1 | 0 |
+| Simple command or small edit run | 0; lead does it | 1 from another family | 2 | 0 |
 | Debugging | 1 diagnosis/fix | 1 | 3 | 1 |
 | Implementation | 2 disjoint areas | 1 | 4 | 2 |
 | Research or comparison | 4 separate questions | 1 | 6 | 4 |
@@ -21,6 +25,14 @@ follows completed production. These are assignment roles, not a requirement to
 keep that many model sessions alive. Preserve independent review when reusing a
 session. A shared file, dependency or single unanswered question is not several
 independent production scopes.
+
+The simple default uses one lead and one later cross-family reviewer, so its
+peak is one worker and its first wave has zero workers. Family policy is reported
+separately from role and concurrency counts: three named roles may all use one
+family. Choose families using actual model evidence, existing authorization and
+ready routes. If another authorized family is unavailable, report the blocker;
+the `provider_family_coverage` closeout check remains held until the minimum is
+proved by positive accepted retained work. Team advice does not dispatch models.
 
 The default planning cap is **4 simultaneous workers, excluding the lead**. This
 is conservative advice for mixed hosted routes, not a global scheduler limit or

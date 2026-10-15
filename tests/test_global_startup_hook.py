@@ -63,3 +63,12 @@ class StartupHookTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 INSTALL.install_startup_hook(path)
             self.assertEqual(path.read_text(encoding='utf-8'), original)
+
+    def test_hook_checks_automatic_switch_and_exempts_routine_work(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'AGENTS.md'
+            INSTALL.install_startup_hook(path, Path(directory) / 'app')
+            content = path.read_text(encoding='utf-8')
+            for instruction in ('automatic status', 'start --automatic', 'git pull', 'merge', 'commit',
+                                'small tasks', 'manual', 'Off'):
+                self.assertIn(instruction, content)

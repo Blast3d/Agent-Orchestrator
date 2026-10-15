@@ -211,7 +211,7 @@ def _held(args, reason, chain=None):
             'handoff_chain': chain or [], 'handoff_summary': reason}
 
 
-def _configuration(args):
+def _configuration(args, frozen_contract=None):
     fallback = getattr(args, 'fallback_worker', None) or []
     if not isinstance(fallback, (list, tuple)):
         raise HandoffHeld('Choose an ordered list of fallback workers.')
@@ -227,10 +227,22 @@ def _configuration(args):
         raise HandoffHeld('Give this handoff a project and assignment reference so repeated requests can find the same work.')
     brief = Path(args.prompt_file).read_bytes()
     try:
-        claude_model = select_model(requested=getattr(args, 'claude_model', None)) if 'claude' in order else None
+        frozen_contract = frozen_contract or {}
+        claude_request = getattr(args, 'claude_model', None)
+        if claude_request is None:
+            claude_request = frozen_contract.get('claude_model')
+        # Selection still checks today's paused-model policy for a saved model.
+        claude_model = select_model(requested=claude_request) if 'claude' in order else None
         if 'codex' in order:
             from codex_worker import select_codex_model
-            codex_model = select_codex_model(getattr(args, 'codex_model', None))
+            codex_request = getattr(args, 'codex_model', None)
+            if codex_request is None and frozen_contract.get('codex_model'):
+                from lead_selection import CODEX_LEADS, LEADS
+                codex_request = next((lead for lead in CODEX_LEADS
+                    if LEADS[lead]['model'] == frozen_contract['codex_model']), None)
+                if codex_request is None:
+                    raise HandoffHeld('The saved Codex model is no longer supported; preserve this plan for review.')
+            codex_model = select_codex_model(codex_request)
     except ValueError as exc:
         raise HandoffHeld(str(exc)) from exc
     contract = {'workers': order, 'prompt_sha256': hashlib.sha256(brief).hexdigest(),
@@ -421,7 +433,9 @@ def dispatch_with_handoff(args, *, dispatch_fn, store):
     if not getattr(args, 'fallback_worker', None):
         return dispatch_fn(args, store=store)
     try:
-        project, assignment, contract, brief = _configuration(args)
+        project, assignment = getattr(args, 'project', None), getattr(args, 'assignment_id', None)
+        if any(not isinstance(value, str) or not _ID.fullmatch(value) for value in (project, assignment)):
+            raise HandoffHeld('Give this handoff a project and assignment reference so repeated requests can find the same work.')
         workflow_id = _digest([project, assignment])
         parent = Path(store.root).parent.resolve()
         root = Path(store.root).parent / 'handoffs'
@@ -432,6 +446,10 @@ def dispatch_with_handoff(args, *, dispatch_fn, store):
             raise HandoffHeld('Saved handoff evidence was redirected; ask Codex to inspect it.')
         # Keep one owner across dispatch; a competing caller receives an immediate hold.
         with file_lock(lock, timeout=0):
+            saved = _read_plan(path).get('contract') if path.exists() else None
+            if saved is not None and not isinstance(saved, dict):
+                raise HandoffHeld('The saved handoff contract is invalid; preserve it for review.')
+            project, assignment, contract, brief = _configuration(args, saved)
             return _run_locked(args, dispatch_fn, store, path, snapshot, workflow_id, project, assignment, contract, brief)
     except TimeoutError:
         return _held(args, 'This assignment is already being handled. Wait for its saved result instead of starting another copy.')

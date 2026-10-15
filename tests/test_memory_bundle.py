@@ -367,7 +367,7 @@ class RunCaptureTests(unittest.TestCase):
 
     def setUp(self):
         MemoryBundleTests.setUp(self)
-        self.run, self.manifest = create_run(self.root, 'bundle-test', 'Review the synthetic system', project_id='alpha')
+        self.run, self.manifest = create_run(self.root, 'bundle-test', 'Review the synthetic system', project_id='alpha', lead='astra')
         self.state = Coordinator(self.run).read()
         self.proof = self.run / 'review/evidence.md'
         self.proof.write_text('Synthetic checks verify recovery and saved output.\n', encoding='utf-8')

@@ -1,5 +1,17 @@
 # Startup and verified closeout
 
+**Automatic orchestration** defaults **Off** and is saved across restarts. Change
+it in the Orchestrator viewer or with `python orchestrator.py automatic on|off`;
+read it with `python orchestrator.py automatic status`. Routine questions, Git
+pulls, merges, commits, pushes and other small tasks stay with the current agent
+even when automatic startup is On, unless the user explicitly requests a run.
+
+Automatic startup for substantial work uses `start --automatic` with the usual
+creation arguments. If the switch is Off or unreadable, this returns `disabled`
+before creating a run, loading memory or calling a provider. A missing setting
+also means Off. Manual `start` commands omit `--automatic` and remain available.
+Switching Off does not stop existing runs or change their closeout requirements.
+
 Optional [OpenWhispr completion notifications](completion-notifications.md) accept
 the lead's full final report with `closeout --final-report final.txt`. The producer
 defaults off, only runs after every closeout check passes, and never turns a
@@ -9,6 +21,13 @@ Use `start` before new orchestration work. It always loads the maintained operat
 guide and prints the full bounded packet for the coordinator. It searches only the
 run's exact Brain project, with the objective as its default query. An empty search
 is valid. Operating guidance does not depend on a relevance match.
+
+Every run requires accepted, retained work from at least **two AI families** to
+complete; **three are preferred** when useful authorized scopes exist. Plan a
+cross-family assignment before adding same-family native workers. Small edits
+performed as runs can use the lead plus a later cross-family review. A
+self-contained question need not start a run. JEV is routing advice and does not
+count as a worker family. This policy grants no new content access or spending.
 
 ```powershell
 python orchestrator.py start --workspace C:\path\to\workspace --name feature-review --objective "Review the feature" --project my-project
@@ -28,6 +47,12 @@ python orchestrator.py start --run <exact-run-directory> --owner astra --session
 ```
 
 Use `--query` to narrow recall to at most 500 characters.
+Use the same exact resume command with `--dry-run` to check only its
+owner/session/generation and manifest without rewriting startup files, loading
+recall or requesting quotas. It reports `ready` with zero provider calls when
+the tuple matches, and `held` for a stale tuple. This is a snapshot; query,
+memory options and service readiness are checked during the real startup.
+
 `--memory-depth compact|balanced|deep` selects up to 6, 12 or 24
 memories; startup defaults to balanced. Wider or Unicode-heavy packets may need
 fewer delivered records to fit the existing 64 KiB receipt bound. This is recorded
@@ -35,8 +60,11 @@ in `project_memory.startup_delivery`, separate from the original retrieval trace
 Source/scan warnings remain in the delivered evidence. `--no-memory` explicitly
 omits project recall while keeping shared operating guidance. `startup-context.md`
 contains the packet; `startup-context.json` binds its hash, guide revision, recalled
-evidence and current coordinator identity. Files are replaced individually and
-atomically, with JSON last. The JSON receipt stays within 64 KiB, including actual
+evidence, current coordinator identity and `provider_policy`. Run-linked dispatch
+verifies minimum two, preferred three and the current lead family, including with
+`--no-memory`. Missing, stale or weakened policy holds new execution. Files are
+replaced individually and atomically, with JSON last. The JSON receipt stays
+within 64 KiB, including actual
 serialized escaping and platform newlines; the packet hash covers the Markdown's
 exact UTF-8 bytes. After a checkpoint or handoff changes the generation,
 run `start` again before new dispatch.
@@ -83,9 +111,21 @@ bytes. It discovers tasks through exact `run_id`, manifest job IDs, or requested
 output paths inside the run. A task belonging only to the same project does not
 qualify. It holds completion for missing/unfinished canonical results, unreviewed
 work, bad capture identities or source hashes, missing native capture, empty or
-malformed audits, incomplete attribution, and pending ledger work. Historical
-remembered receipts remain evidence of a past write after Forget; closeout never
+malformed audits, incomplete attribution, pending ledger work, and insufficient
+`provider_family_coverage`. Historical remembered receipts remain evidence of a
+past write after Forget; closeout never
 resurrects memories or accepts tasks itself.
+
+Family coverage counts positively credited accepted work. Hosted credit must
+match canonical successful task/model evidence. OpenAI/Codex, Anthropic/Claude,
+xAI/Grok and Google/Gemini via Antigravity are distinct families; Copilot counts
+by its actual model. Verified native lead work can count with a genuine reviewed
+capture from this exact run. An arbitrary foreign native provider label cannot
+establish another family. Same-family agents, in-progress work, zero credit,
+synthetic checks, JEV advice and imported memories cannot fill the minimum.
+Two families pass with a warning encouraging three; three meet the preferred
+target. If no authorized alternate is usable, keep the run held and report the
+blocker. These checks do not intercept native tools or schedule workers.
 
 The current ledger must reproduce the complete canonical audit. Only then does
 `ProjectLibrary` regenerate the map; closeout verifies the generated run entry

@@ -198,17 +198,36 @@ def record_accepted_bundle(task_store, job_id, bundle):
         return receipt
 
 
+def resolve_capture_run(root, selection):
+    """Select an application run ID or an explicit workspace run directory."""
+    if not isinstance(selection, (str, Path)):
+        raise ValueError('Select an exact orchestration run')
+    if re.fullmatch(r'[A-Za-z0-9_-]{1,160}', str(selection)):
+        run = Path(root).resolve() / '.orchestration' / str(selection)
+    else:
+        run = Path(selection)
+        if not run.is_absolute():
+            raise ValueError('External capture needs an absolute run directory')
+    if (run.parent.name != '.orchestration' or '..' in run.parts
+            or not re.fullmatch(r'[A-Za-z0-9_-]{1,160}', run.name)):
+        raise ValueError('Select an exact orchestration run')
+    # Check the supplied path before resolving it, so links cannot disappear.
+    return safe_path(run.parent.parent, run).resolve(strict=True)
+
+
 def capture_run(root, run_id, bundle, *, owner, session, generation, reviewer, note):
     """Import reviewed closeout knowledge as an artifact, without pretending to run a worker."""
     from coordinator_handoff import Coordinator
     root = Path(root).resolve()
-    if not isinstance(run_id,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,160}',run_id):
-        raise ValueError('Select an exact orchestration run')
-    run = safe_path(root,root / '.orchestration' / run_id)
+    run = resolve_capture_run(root, run_id)
+    run_id = run.name
     coordinator = Coordinator(run)
     with file_lock(coordinator.lock):
         state = coordinator.read(); coordinator.require_owner(state,owner,session,generation)
-        manifest = read_json(run / 'run.json',root)
+        manifest = read_json(run / 'run.json',run)
+        if (not isinstance(manifest,dict) or manifest.get('schema_version') != 1
+                or manifest.get('run_id') != run_id or not isinstance(manifest.get('tasks'),list)):
+            raise ValueError('Manifest does not identify the exact selected run')
         project = scope(manifest.get('project_id'))
         validate_bundle(bundle,project)
         capture_id = bundle.get('capture_id')
@@ -231,10 +250,11 @@ def capture_run(root, run_id, bundle, *, owner, session, generation, reviewer, n
                 raise ValueError('Closeout evidence file exceeds 2 MiB')
             proof.append({'path':relative,'sha256':hashlib.sha256(raw).hexdigest()})
         identity = digest({'bundle':bundle,'proof':proof,'reviewer':reviewer,'note':note})
-        journal = run / 'review' / ('memory-capture-' + capture_id + '.json')
+        journal = safe_path(run, run / 'review' / ('memory-capture-' + capture_id + '.json'))
         store = TaskStore(root / 'runs/tasks')
-        old = read_json(journal,root) if journal.exists() else None
+        old = read_json(journal,run) if journal.exists() else None
         if journal.exists() and (not isinstance(old,dict) or old.get('request_sha256') != identity
+                or old.get('run_directory',str(run)) != str(run)
                 or old.get('status') not in ('importing','remembered','error','writing')):
             raise ValueError('This closeout changed or its journal is invalid; preserve its evidence')
         if journal.exists():
@@ -246,6 +266,7 @@ def capture_run(root, run_id, bundle, *, owner, session, generation, reviewer, n
                 # Finish the same deterministic import rather than failing every retry.
                 record = read_json(store.directory(job_id) / 'record.json',root)
                 if (not isinstance(record,dict) or record.get('job_id') != job_id
+                        or record.get('run_directory',str(root / '.orchestration' / run_id)) != str(run)
                         or record.get('status') != 'preparing' or record.get('finalized_at')):
                     raise ValueError('Closeout journal does not match its canonical imported evidence')
                 record.update(status='awaiting_review',execution_status='succeeded',review_status='pending',
@@ -256,6 +277,7 @@ def capture_run(root, run_id, bundle, *, owner, session, generation, reviewer, n
             result = read_json(store.directory(job_id) / 'result.json',root,8*1024**2)
             if (not isinstance(result,dict) or result.get('job_id') != job_id
                     or result.get('run_id') != run_id or result.get('assignment_project_id') != project
+                    or result.get('run_directory',str(root / '.orchestration' / run_id)) != str(run)
                     or result.get('imported_completed_artifact') is not True
                     or result.get('artifact_origin') != 'reviewed-run-closeout'
                     or type(result.get('provider_calls')) is not int or result.get('provider_calls') != 0
@@ -266,9 +288,11 @@ def capture_run(root, run_id, bundle, *, owner, session, generation, reviewer, n
             with BrainStore(root).budget.allocation(2*1024**2,kind='task'):
                 result = store.create(worker='native-review',task='Reviewed project closeout: '+capture_id,
                                       category='memory-curation',assignment_project_id=project,run_id=run_id,
+                                      run_directory=str(run),
                                       imported_completed_artifact=True)
                 job_id = result['job_id']
-                write_json(journal,{'job_id':job_id,'request_sha256':identity,'status':'importing'})
+                write_json(journal,{'job_id':job_id,'request_sha256':identity,'status':'importing',
+                                    'run_directory':str(run)})
                 result.update(status='awaiting_review',execution_status='succeeded',review_status='pending',
                               response=json.dumps({'knowledge':bundle,'evidence':proof},ensure_ascii=False),
                               finalized_at=timestamp(),ended_at=timestamp(),provider_calls=0,
@@ -280,6 +304,7 @@ def capture_run(root, run_id, bundle, *, owner, session, generation, reviewer, n
         else:
             outcome = record_accepted_bundle(store,job_id,bundle)
         write_json(journal,{'job_id':job_id,'request_sha256':identity,'status':outcome.get('status','error'),
+                            'run_directory':str(run),
                             'memory_outcome':outcome})
         if not any(task.get('job_id') == job_id for task in manifest.get('tasks',[]) if isinstance(task,dict)):
             manifest.setdefault('tasks',[]).append({'job_id':job_id,'status':'accepted','kind':'reviewed-closeout'})

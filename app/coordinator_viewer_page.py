@@ -37,6 +37,12 @@ __WORKSPACE_NAV_STYLE__</style>
       <p id="monitor-note" class="muted smalltext" role="status">Checking whether background checks are on…</p>
     </div>
   </section>
+  <section class="panel session" aria-labelledby="automatic-label">
+    <div class="session-grid">
+      <div><h2 id="automatic-label">Automatic orchestration</h2><p id="automatic-note" class="muted smalltext spaced" role="status">Checking automatic startup...</p></div>
+      <div><button id="automatic-toggle" class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="automatic-label automatic-state" aria-describedby="automatic-note" disabled><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span><span id="automatic-state">Checking...</span></button></div>
+    </div>
+  </section>
   <section id="lead" class="panel session" aria-labelledby="lead-title">
     <div class="session-grid">
       <div><h2 id="lead-title">Lead for new runs</h2><p id="lead-help" class="muted smalltext spaced">Choose who coordinates new runs, then save. When the lead's usage runs low, the runner-up takes over. ASTRA and Sol share one Codex allowance.</p><p id="lead-note" class="muted smalltext spaced" role="status">Checking the lead switch...</p></div>
@@ -135,7 +141,7 @@ __WORKSPACE_NAV_STYLE__</style>
       let data; try { data = await response.json(); } catch (_) { throw new Error('The viewer returned an unreadable response. Try refreshing.'); }
       if (!response.ok) throw new Error(data.error || 'The viewer could not complete that request.');
       return data;
-    } catch (error) { if (error.name === 'AbortError') throw new Error('The viewer took too long to respond. It will retry.'); throw error; }
+    } catch (error) { if (error.name === 'AbortError') throw new Error(body === undefined ? 'The viewer took too long to respond. Refresh to read the saved state.' : 'The request took too long. Its outcome is unknown; inspect saved evidence before trying again.'); throw error; }
     finally { clearTimeout(timeout); }
   }
   function showError(error) { lastFailure = error.message || 'The local viewer is unavailable.'; $('error').textContent = lastFailure; $('error').hidden = false; connection(); }
@@ -200,6 +206,33 @@ __WORKSPACE_NAV_STYLE__</style>
     try { monitorState = await api('/api/usage-monitor', {enabled}); }
     catch (error) { monitorState = null; $('monitor-note').textContent = error.message; }
     finally { monitorBusy = false; renderMonitor(); }
+  });
+  let automaticState = null, automaticBusy = false, automaticReading = false, automaticEpoch = 0;
+  function renderAutomatic() {
+    const available = typeof automaticState?.enabled === 'boolean', on = automaticState?.enabled === true;
+    $('automatic-toggle').setAttribute('aria-checked', String(on));
+    $('automatic-toggle').disabled = automaticBusy || !available;
+    $('automatic-state').textContent = automaticBusy ? 'Updating...' : available ? (on ? 'On' : 'Off') : 'Unavailable';
+    if (available) $('automatic-note').textContent = (on ? 'Substantial work can start orchestration automatically. ' : 'Work stays with the current agent until you request orchestration. ') + 'Manual runs remain available. Routine questions, Git operations and small tasks stay with the current agent.' + (automaticState.reason ? ' ' + automaticState.reason : '');
+  }
+  async function loadAutomatic() {
+    if (automaticBusy || automaticReading) return;
+    automaticReading = true;
+    const revision = automaticEpoch;
+    try {
+      const state = await api('/api/automatic-startup');
+      if (revision === automaticEpoch) { automaticState = state; renderAutomatic(); }
+    } catch (error) {
+      if (revision === automaticEpoch) { automaticState = null; renderAutomatic(); $('automatic-note').textContent = 'Automatic startup status unavailable. ' + error.message; }
+    } finally { automaticReading = false; }
+  }
+  $('automatic-toggle').addEventListener('click', async () => {
+    if (automaticBusy || typeof automaticState?.enabled !== 'boolean') return;
+    const enabled = !automaticState.enabled;
+    automaticEpoch++; automaticBusy = true; renderAutomatic();
+    try { automaticState = await api('/api/automatic-startup', {enabled}); }
+    catch (error) { automaticState = null; $('automatic-note').textContent = error.message; }
+    finally { automaticBusy = false; renderAutomatic(); }
   });
   let leadState = null, leadStaged = null, leadBusy = false, leadError = '';
   const LEAD_NAMES = {claude: 'Claude', astra: 'ASTRA', sol: 'Sol'};
@@ -313,6 +346,7 @@ __WORKSPACE_NAV_STYLE__</style>
     const nextKey = JSON.stringify([data.id, data.owner, data.session, provider.background_id, provider.session_id]);
     if (nextKey !== sessionKey) { sessionKey = nextKey; resetHistory(); $('attach-status').textContent = ''; }
     detail = data;
+    showOperations(data);
     const projects = Array.isArray(data.memory_projects) ? data.memory_projects : [];
     if (!projects.includes(memoryProject)) memoryProject = projects[0] || '';
     $('memory-project').replaceChildren(...projects.map(project => { const option = document.createElement('option'); option.value = project; option.textContent = project; return option; }));
@@ -551,7 +585,7 @@ __WORKSPACE_NAV_STYLE__</style>
     refresh();
   });
   $('memory-project').addEventListener('change', () => { memoryProject = $('memory-project').value; const address = new URL(location.href); address.searchParams.set('project', memoryProject); if (selected) address.searchParams.set('run', selected); history.replaceState(null, '', address); renderCrumb(); });
-  $('refresh').addEventListener('click', () => { loadServices(); loadMonitor(); loadReadiness(); loadLead(); refresh(); });
+  $('refresh').addEventListener('click', () => { loadServices(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh(); });
   $('older').addEventListener('click', async () => {
     if (olderBusy || !hasMore || !selected) return;
     olderBusy = true; $('older').disabled = true; $('older').textContent = 'Loading older messages…';
@@ -578,10 +612,10 @@ __WORKSPACE_NAV_STYLE__</style>
     } catch (error) { if (capturedEpoch === epoch) { $('attach-status').textContent = error.message; showError(error); } }
     finally { attaching = false; attachEnabled(); }
   });
-  document.addEventListener('visibilitychange', () => { connection(); if (!document.hidden) { loadMonitor(); loadReadiness(); refresh(); } });
-  setInterval(() => { connection(); if (!document.hidden) { loadMonitor(); refresh(); } }, 5000);
+  document.addEventListener('visibilitychange', () => { connection(); if (!document.hidden) { loadAutomatic(); loadMonitor(); loadReadiness(); refresh(); } });
+  setInterval(() => { connection(); if (!document.hidden) { loadAutomatic(); loadMonitor(); refresh(); } }, 5000);
   setInterval(() => { if (!document.hidden) loadReadiness(); }, 30000);
-  renderCrumb(); loadServices(); loadMonitor(); loadReadiness(); loadLead(); refresh();
+  renderCrumb(); loadServices(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh();
 })();
 </script>
 </body>
@@ -589,6 +623,9 @@ __WORKSPACE_NAV_STYLE__</style>
 '''
 
 from workspace_navigation import STYLE, THEME, static_markup  # noqa: E402
+from run_operations_page import HTML as OPERATIONS_HTML, JS as OPERATIONS_JS, STYLE as OPERATIONS_STYLE  # noqa: E402
 
 # The shared navigation; the server fills in the current lead for the chip.
-PAGE = PAGE.replace('__WORKSPACE_NAV__', static_markup('viewer', 'viewer', '__WORKSPACE_LEAD__')).replace('__WORKSPACE_NAV_STYLE__', THEME + STYLE)
+PAGE = PAGE.replace('__WORKSPACE_NAV__', static_markup('viewer', 'viewer', '__WORKSPACE_LEAD__')).replace('__WORKSPACE_NAV_STYLE__', THEME + STYLE + OPERATIONS_STYLE)
+PAGE = PAGE.replace('  <footer>', OPERATIONS_HTML + '\n  <footer>', 1)
+PAGE = PAGE.replace('  renderCrumb(); loadServices(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh();', OPERATIONS_JS + '\n  renderCrumb(); loadServices(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh();', 1)

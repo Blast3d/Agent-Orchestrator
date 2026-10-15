@@ -143,9 +143,13 @@ class RepeatSafetyTests(unittest.TestCase):
         self.invoke.assert_not_called()
 
     def test_original_output_is_not_written_again(self):
-        self.finalize(self.claim())
+        record = self.claim()
+        self.finalize(record)
         self.output.write_text('original marker', encoding='utf-8')
         repeated = self.dispatch()
+        self.assertTrue(repeated['invocation_receipt']['reused'])
+        self.assertEqual(repeated['invocation_receipt']['job_id'],record['job_id'])
+        self.assertEqual(repeated['invocation_receipt']['provider_calls'],0)
         self.assertEqual(repeated['export_status'], 'original')
         self.assertEqual(self.output.read_text(encoding='utf-8'), 'original marker')
         self.invoke.assert_not_called()

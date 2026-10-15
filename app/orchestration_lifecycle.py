@@ -18,6 +18,7 @@ from init_run import create_run
 from memory_bundle import read_json, validate_bundle
 from paths import ROOT
 from project_visuals import ProjectLibrary, project_from_report
+from provider_policy import plan, require_coverage
 from task_store import timestamp, write_json
 from usage_guard import file_lock
 
@@ -111,11 +112,32 @@ def _relay_section(relay):
     return '\n\n' + '\n'.join(lines)
 
 
+def resume_preflight(*, run, owner, session, generation):
+    """Check an exact resume tuple without changing the run or requesting context."""
+    if run is None or any(value is None for value in (owner, session, generation)):
+        raise ValueError('Dry-run requires an existing --run and explicit --owner, --session and --generation')
+    coordinator = Coordinator(run)
+    state = coordinator.read()
+    coordinator.require_owner(state, owner, session, generation)
+    manifest = _manifest(coordinator)
+    return {'status': 'ready', 'read_only': True, 'run': str(coordinator.run),
+            'run_id': manifest['run_id'], 'project_id': scope(manifest.get('project_id') or manifest['run_id']),
+            'coordinator': _identity(state), 'provider_calls': 0,
+            'evidence_limit': 'Resume tuple snapshot only. Query, memory options and service readiness are not checked; startup revalidates before preparing context.'}
+
+
 def start_run(*, run=None, workspace=None, name=None, objective=None, project=None, lead=None,
               owner=None, session=None, generation=None, query=None, no_memory=False,
-              memory_depth='balanced',
+              memory_depth='balanced', dry_run=False, automatic=False,
               root=ROOT, brain_factory=BrainStore, context_loader=None):
     """Prepare a bounded packet; existing runs require explicit lead authority."""
+    if automatic:
+        from automatic_startup import describe
+        setting = describe(root)
+        if not setting['enabled']:
+            return {'status': 'disabled', 'created': False, 'provider_calls': 0,
+                    'manual_available': True,
+                    'reason': setting.get('reason', 'Automatic orchestration is Off; continue with the current agent.')}
     if run is not None and any(value is not None for value in (workspace, name, objective, project, lead)):
         raise ValueError('Choose an existing --run or new-run creation options')
     if run is not None and any(value is None for value in (owner, session, generation)):
@@ -124,6 +146,8 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
         raise ValueError('Creating a run needs --workspace, --name and --objective')
     if run is None and any(value is not None for value in (owner, session, generation)):
         raise ValueError('New run identity is established by create_run')
+    if dry_run:
+        return resume_preflight(run=run, owner=owner, session=session, generation=generation)
     operating = (context_loader or load_operating_context)()
     from brain_recall_budget import resolve
     budget = resolve(memory_depth)
@@ -151,12 +175,16 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
         calls = 0 if no_memory else (recalled.get('retrieval') or {}).get('provider_calls')
         calls = calls if type(calls) is int and calls >= 0 else None
         selection = _lead_summary(state['owner'])
+        provider_policy = plan(state['owner'])
+        policy_text = json.dumps(provider_policy, sort_keys=True)
         relay = _relay_inbox(root, manifest['run_id'])
         relay_text = _relay_section(relay)
         packet = {'schema_version': 1, 'status': 'prepared', 'created': created,
                   'prepared_at': timestamp(), 'run': str(coordinator.run),
                   'run_id': manifest['run_id'], 'project_id': project_id,
                   'coordinator': _identity(state), 'lead_selection': selection, 'operating_context': operating,
+                  'provider_policy': provider_policy,
+                  'provider_policy_sha256': hashlib.sha256(policy_text.encode('utf-8')).hexdigest(),
                   'project_memory': recalled, 'provider_calls': calls,
                   'evidence_limit': 'Prepared for the lead; this is not proof of reading, obedience or native-worker delivery.'}
         if relay_text:
@@ -169,6 +197,10 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
                             else 'No current project evidence fit this startup packet.')
             rendered = ('# Orchestration startup packet\n\n' + packet['evidence_limit'] + '\n\n'
                         + selection['line'] + '\n\n'
+                        + '## Provider family policy\n\n'
+                        + 'Require at least two contributing AI families; prefer three. Assign a bounded task '
+                        + 'to an authorized worker from another family. JEV advice does not count as worker participation.\n\n'
+                        + '```json\n' + policy_text + '\n```\n\n'
                         + operating['context'] + relay_text + '\n\n## Project recall\n\n'
                         + (recalled['context'] or empty_reason) + '\n')
             packet['packet_sha256'] = hashlib.sha256(rendered.encode('utf-8')).hexdigest()
@@ -196,8 +228,10 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
 
 
 def _linked(record, run, explicit):
-    if record.get('job_id') in explicit or record.get('run_id') == run.name:
+    if record.get('job_id') in explicit:
         return True
+    if record.get('run_id') == run.name:
+        return record.get('run_directory', str(run)) == str(run)
     output = record.get('requested_output')
     if not isinstance(output, str) or not output:
         return False
@@ -305,6 +339,8 @@ def _native_capture(root, run, result, receipt):
             and type(result.get('provider_calls')) is int and result['provider_calls'] == 0
             and receipt['mode'] == 'curated_bundle'):
         return False
+    if result.get('run_directory', str(root / '.orchestration' / run.name)) != str(run):
+        raise ValueError('Native capture belongs to a different run directory')
     payload = json.loads(result['response'])
     bundle, proof = payload['knowledge'], payload['evidence']
     validate_bundle(bundle, result['assignment_project_id'])
@@ -375,7 +411,8 @@ def closeout_run(run, *, owner, session, generation, root=ROOT, final_report=Non
             if len(raw) > 64 * 1024 or hashlib.sha256(raw).hexdigest() != receipt.get('packet_sha256'):
                 raise ValueError('Startup packet bytes do not match their prepared receipt')
             return {'operating_sha256': operating['sha256'], 'packet_sha256': receipt['packet_sha256'],
-                    'coordinator': binding['coordinator'], 'status': 'prepared_only'}
+                    'coordinator': binding['coordinator'], 'provider_policy': binding['provider_policy'],
+                    'status': 'prepared_only'}
         startup_proof = check('startup_context', startup)
         check('native_task_status', native_status)
         jobs = check('task_discovery', lambda: _discover(root, coordinator.run, manifest))
@@ -410,7 +447,9 @@ def closeout_run(run, *, owner, session, generation, root=ROOT, final_report=Non
                     events = [row for row in observed['activity'] if row['agent_id'] == worker and row['kind'] == 'delegation']
                     if len(events) != 1:
                         raise ValueError('Accepted hosted task lacks observed delegation evidence')
-                    hosted[job] = {'actor': actor, 'event': events[0]}
+                    hosted[job] = {'actor': actor, 'event': events[0],
+                                   'synthetic': canonical.get('synthetic_input') is True
+                                       or canonical.get('count_as_build_worker') is False}
                 return dict(receipt, decision='accepted')
             check('task:' + job, validate_task)
         native_required = manifest.get('native_work') is True or any(
@@ -472,6 +511,14 @@ def closeout_run(run, *, owner, session, generation, root=ROOT, final_report=Non
                 raise ValueError('Native work needs an explicit run-linked reviewed brain capture')
             return {'required': required, 'capture_jobs': native}
         check('native_memory_capture', require_native)
+        def family_coverage():
+            if not audit:
+                raise ValueError('Family coverage needs a verified contribution audit')
+            ledger = _object(ledger_path, coordinator.run, 2 * 1024**2)
+            if digest(ledger) != audit['ledger_sha256']:
+                raise ValueError('Contribution evidence changed before family coverage verification')
+            return require_coverage(owner, ledger, hosted, native_capture=bool(native))
+        check('provider_family_coverage', family_coverage)
         def still_current():
             coordinator.require_owner(coordinator.read(), owner, session, generation)
             if startup() != startup_proof:
@@ -554,6 +601,10 @@ def main(argv=None):
                        help='Lead for a new run; defaults to the lead-orchestrator switch')
     start.add_argument('--query')
     start.add_argument('--no-memory', action='store_true')
+    start.add_argument('--automatic', action='store_true',
+                       help='Honor the automatic-startup switch; manual starts omit this flag')
+    start.add_argument('--dry-run', action='store_true',
+                       help='Read-only check of an existing exact resume tuple; no context or quota requests')
     start.add_argument('--memory-depth', choices=['compact','balanced','deep'], default='balanced')
     closeout = commands.add_parser('closeout')
     closeout.add_argument('--run', type=Path, required=True)
@@ -568,7 +619,7 @@ def main(argv=None):
     try:
         result = start_run(**args) if command == 'start' else closeout_run(**args)
         print(json.dumps(result, ensure_ascii=True))
-        return 0 if result['status'] in ('prepared', 'completed') else 2
+        return 0 if result['status'] in ('prepared', 'completed', 'ready', 'disabled') else 2
     except (OSError, ValueError, RuntimeError) as exc:
         print(json.dumps({'status': 'held', 'provider_calls': 0,
                           'reason': str(exc) if isinstance(exc, ValueError) else type(exc).__name__}))

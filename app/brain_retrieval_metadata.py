@@ -16,6 +16,10 @@ def public_retrieval(value):
                         'quality':('exact','strong','weak','none')}.items():
         result[key]=value.get(key) if value.get(key) in choices else None
     result['reason']=short(value.get('reason'))
+    fusion=value.get('fusion')
+    if isinstance(fusion,dict) and fusion.get('method')=='reciprocal_rank':
+        result['fusion']={'method':'reciprocal_rank',**{key:number(fusion.get(key))
+            for key in ('rank_constant','keyword_count','semantic_count','overlap_count')}}
     for key in ('graph_hops','graph_added','lexical_candidates','semantic_added','context_tokens','provider_calls','input_tokens','candidate_count'):
         result[key]=number(value.get(key))
     budget=value.get('budget')

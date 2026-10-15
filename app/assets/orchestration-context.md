@@ -20,7 +20,18 @@ records prepared or requested input; it cannot prove a model read or obeyed it.
 
 ## Coordinator duties
 
-Plan bounded assignments and suitable real providers before launching workers.
+Every run needs accepted, retained work from at least two AI families before
+completion; prefer three when useful authorized scopes exist. Plan a bounded
+assignment for another family before adding same-family native workers. OpenAI,
+Anthropic, xAI and Google are families; Copilot counts by its actual model. JEV
+advice is not worker participation. A small edit run can use the lead plus a later
+cross-family review. Do not create filler jobs or fabricated credit. If no
+authorized alternate is usable, record the blocker and keep the run held.
+
+Startup records this provider policy and run-linked dispatch verifies it, even
+with project recall disabled. This requirement grants no provider access, content
+permission or extra spending. Plan bounded assignments and suitable real providers
+before launching workers.
 Use configured models and existing authorized routes. Honor paused models and
 billing limits. Unknown or stale allowance readings remain advisory; preserve
 reservations for uncertain execution. Provider access and content authorization
@@ -66,6 +77,13 @@ Keep missing measurements unknown and do not infer efficiency from one sample.
 Complete the contribution ledger, generate the standard audit and project map,
 then run `orchestrator.py closeout`. Resolve missing receipts, pending work,
 unattributed accepted work, or invalid reports before claiming completion.
+The `provider_family_coverage` check requires positive accepted work from at least
+two actual families and encourages three. Hosted credit must match canonical
+successful task/model evidence. Native lead credit requires a genuine reviewed
+capture from this exact run; arbitrary foreign native labels do not count.
+Synthetic checks, JEV advice and imported memories do not satisfy coverage.
+Native tools remain outside the dispatcher; closeout enforcement and recorded
+startup guidance do not constitute an automatic worker scheduler.
 For the lead's final delivery, check `orchestrator.py notifications status`.
 When the user has enabled completion notifications, save the complete final answer
 as UTF-8 and pass it to closeout with `--final-report PATH`. OpenWhispr then applies

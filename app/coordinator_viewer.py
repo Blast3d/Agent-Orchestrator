@@ -615,12 +615,14 @@ class ViewerStore:
 
 
 class ViewerServer(DashboardServer):
-    def __init__(self, root, port=0, store=None):
+    def __init__(self, root, port=0, store=None, *, voice_path=None):
         super().__init__(root, port)
         self.RequestHandlerClass = ViewerHandler
         self.viewer_token = self.brain_token
         self.page_id = 'viewer'
         self.store = store or ViewerStore(root)
+        from run_operations import RunOperations
+        self.operations = RunOperations(self.root, voice_path=voice_path)
 
 
 class ViewerHandler(DashboardHandler):
@@ -685,8 +687,16 @@ class ViewerHandler(DashboardHandler):
             if address.path == '/api/lead' and not address.query:
                 from lead_selection import describe
                 return self._reply(200, describe())
+            if address.path == '/api/automatic-startup' and not address.query:
+                from automatic_startup import describe
+                return self._reply(200, describe())
             if address.path == '/api/readiness' and not address.query:
                 return self._reply(200, self.server.store.readiness())
+            if address.path == '/api/operator':
+                params = parse_qs(address.query, max_num_fields=1, keep_blank_values=True)
+                if set(params) != {'run'} or len(params['run']) != 1:
+                    raise ValueError('Choose one exact run for operator tools')
+                return self._reply(200, self.server.operations.detail(params['run'][0]))
             if address.path not in ('/api/runs', '/api/run', '/api/history', '/api/services', '/api/usage-monitor'):
                 return self._error(404, 'This page is not available.')
             params = parse_qs(address.query, max_num_fields=3)
@@ -709,15 +719,27 @@ class ViewerHandler(DashboardHandler):
 
     def do_POST(self):
         if not self._gate(mutation=True): return
-        if self.path not in ('/api/attach', '/api/interact', '/api/open', '/api/usage-monitor', '/api/lead'):
+        if self.path not in ('/api/attach', '/api/interact', '/api/open', '/api/usage-monitor', '/api/automatic-startup', '/api/lead', '/api/checklist', '/api/task-review', '/api/voice-attach'):
             return self._error(404, 'This action is not available.')
         try:
             body = self._body()
             if body is not None:
-                if self.path == '/api/usage-monitor':
+                if self.path in ('/api/checklist','/api/task-review','/api/voice-attach'):
+                    if not isinstance(body, dict):
+                        raise ValueError('Operator action must be an object')
+                    operations = self.server.operations
+                    action = {'/api/checklist':operations.save_checklist, '/api/task-review':operations.review_task,
+                              '/api/voice-attach':operations.attach_voice}[self.path]
+                    value = action(body)
+                elif self.path == '/api/usage-monitor':
                     if not isinstance(body, dict) or set(body) != {'enabled'} or type(body['enabled']) is not bool:
                         raise ValueError('Choose On or Off for the usage monitor.')
                     value = set_monitor_enabled(body['enabled'])
+                elif self.path == '/api/automatic-startup':
+                    if not isinstance(body, dict) or set(body) != {'enabled'} or type(body['enabled']) is not bool:
+                        raise ValueError('Choose On or Off for automatic orchestration.')
+                    from automatic_startup import set_enabled
+                    value = set_enabled(body['enabled'])
                 elif self.path == '/api/lead':
                     if (not isinstance(body, dict) or set(body) != {'lead'}
                             or body['lead'] not in ('claude', 'astra', 'sol')):

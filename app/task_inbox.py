@@ -18,6 +18,19 @@ def _text(value, default=''):
     return value if isinstance(value, str) else default
 
 
+def _run_id(data):
+    value = _text(data.get('run_id'))
+    if value:
+        return value
+    # Retain only the run identifier from older output bindings, never a private path.
+    parts = Path(_text(data.get('requested_output'))).parts
+    if '.orchestration' in parts:
+        index = parts.index('.orchestration') + 1
+        if index < len(parts) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,159}', parts[index]):
+            return parts[index]
+    return ''
+
+
 def _time(value):
     if not isinstance(value, str):
         return None
@@ -174,6 +187,8 @@ def collect(tasks=None, workspaces=None):
             group = 'Needs attention'
         row = {
             'id': folder.name if re.fullmatch(r'[a-f0-9]{32}', folder.name) else 'unreadable-' + str(len(rows) + 1),
+            'project_id': _text(data.get('assignment_project_id')),
+            'run_id': _run_id(data),
             'title': _text(data.get('task'), 'Task needing inspection') or 'Untitled task',
             'worker': _text(data.get('worker'), 'Unknown worker') or 'Unknown worker',
             'state': state, 'group': group, 'label': label, 'next_step': next_step,
@@ -194,9 +209,25 @@ def collect(tasks=None, workspaces=None):
             'tasks': rows, 'warnings': sum(bool(row['notices']) for row in rows)}
 
 
-def render_page(tasks=None, workspaces=None, *, live=False, dataset=None):
+def render_page(tasks=None, workspaces=None, *, live=False, dataset=None, scope=None):
     """Return the inbox HTML with its data embedded as inert, escaped JSON (no writes)."""
     dataset = dataset if dataset is not None else collect(tasks, workspaces=workspaces)
+    if scope:
+        project, run_id = scope.get('project', ''), scope.get('run_id', '')
+        if any(not isinstance(value, str) or value and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,159}',value) for value in (project,run_id)):
+            raise ValueError('Invalid Inbox project or run scope')
+        def selected(row):
+            if project and row.get('project_id') != project:
+                return False
+            if not run_id:
+                return True
+            if row.get('run_id'):
+                return row['run_id'] == run_id
+            if row.get('project_id') == run_id:
+                return True
+            return False
+        rows = [row for row in dataset['tasks'] if selected(row)]
+        dataset = dict(dataset, tasks=rows, scope={'project':project,'run_id':run_id},warnings=sum(bool(row.get('notices')) for row in rows))
     if live:
         dataset = dict(dataset, live=True)
     from workspace_navigation import THEME
