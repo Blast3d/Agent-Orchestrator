@@ -19,6 +19,7 @@ from init_run import create_run
 from memory_bundle import capture_run
 from orchestration_lifecycle import _discover, closeout_run, start_run
 from paths import ROOT
+from provider_policy import legacy_plan
 from task_store import TaskStore, write_json
 
 
@@ -30,6 +31,10 @@ def operating():
 
 
 class LifecycleTests(unittest.TestCase):
+    # Closeout mechanics run on a receipt recorded before policy v2 (two families).
+    # test_provider_family_gate selects the current policy for end-to-end coverage.
+    policy_factory = staticmethod(legacy_plan)
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -44,6 +49,11 @@ class LifecycleTests(unittest.TestCase):
         self.context_patch = patch('orchestration_lifecycle.load_operating_context', side_effect=operating)
         self.context_patch.start()
         self.addCleanup(self.context_patch.stop)
+        # Suites that borrow this setUp keep the legacy receipt unless they choose otherwise.
+        policy_patch = patch('orchestration_lifecycle.plan',
+                             side_effect=getattr(self, 'policy_factory', legacy_plan))
+        policy_patch.start()
+        self.addCleanup(policy_patch.stop)
         start_run(run=self.run, root=self.root, **self.identity)
 
     def read(self, path):

@@ -50,15 +50,18 @@ class DispatchTests(unittest.TestCase):
     def canonical(self, result):
         return json.loads(Path(result['canonical_result']).read_text(encoding='utf-8'))
 
-    def test_no_memory_still_supplies_operating_guide_in_actual_request(self):
+    def test_no_memory_still_supplies_worker_guide_in_actual_request(self):
         import hashlib
         self.args.no_memory = True
         result = self.run_task()
         sent_prompt = dispatcher.cloud_command.call_args.args[1]
-        self.assertTrue(sent_prompt.startswith('# Orchestration Operating Guide (v1)'))
+        self.assertTrue(sent_prompt.startswith('# Worker Operating Guide (v1)'))
+        # Coordinator duties stay with the lead; workers get only their own guide.
+        self.assertNotIn('# Orchestration Operating Guide (v1)', sent_prompt)
         self.assertIn(self.prompt.read_text(), sent_prompt)
         self.assertNotIn('memory_context', result)
         context = self.canonical(result)['orchestration_context']
+        self.assertEqual(context['worker_guide']['sha256'], dispatcher.load_worker_guide()['sha256'])
         self.assertTrue(context['execution_requested'])
         self.assertEqual(context['request_sha256'], hashlib.sha256((dispatcher.PREFIX + sent_prompt).encode()).hexdigest())
         index = json.loads((self.store.root / result['job_id'] / 'record.json').read_text(encoding='utf-8'))
@@ -83,6 +86,24 @@ class DispatchTests(unittest.TestCase):
         self.assertFalse(result['orchestration_context']['execution_requested'])
         self.invoke.assert_not_called()
         self.guard.finish.assert_called_once()
+
+    def test_worker_guide_change_during_quota_preparation_prevents_execution(self):
+        import orchestration_context
+        original = orchestration_context.load_worker_guide()
+        changed = dict(original, sha256='0' * 64)
+        with patch.object(orchestration_context, 'load_worker_guide', return_value=changed):
+            result = self.run_task()
+        self.assertEqual(result['execution_status'], 'held')
+        self.assertIn('Worker guidance changed', result['reason'])
+        self.invoke.assert_not_called()
+
+    def test_missing_worker_guide_holds_before_quota_or_provider(self):
+        with patch.object(dispatcher, 'load_worker_guide',
+                          side_effect=dispatcher.OperatingContextError('Worker guide missing')):
+            result = self.run_task()
+        self.assertEqual(result['execution_status'], 'held')
+        self.factory.assert_not_called()
+        self.invoke.assert_not_called()
 
     def test_assignment_reuse_keeps_original_context_when_guide_is_unavailable(self):
         self.args.project = 'context-test'
@@ -279,12 +300,12 @@ class DispatchTests(unittest.TestCase):
     def test_verified_antigravity_uses_dedicated_parser_and_reviews_answer(self):
         self.args.worker = 'gemini'
         self.invoke.return_value.stdout = json.dumps({'response': 'Reviewed later', 'status': 'SUCCESS',
-            'model': 'gemini-3.8-flash-medium', 'usage': {'input_tokens': 1, 'output_tokens': 2}})
+            'model': 'gemini-3.8-flash-high', 'usage': {'input_tokens': 1, 'output_tokens': 2}})
         with patch.object(dispatcher, 'boundary_error', return_value=None), patch('antigravity_boundary.verify_prepared') as verify:
             result = self.run_task()
         self.assertEqual(result['status'], 'awaiting_review')
         self.assertEqual(self.invoke.call_args.kwargs['protocol'], 'antigravity')
-        self.assertEqual(self.invoke.call_args.kwargs['expected_model'], 'gemini-3.8-flash-medium')
+        self.assertEqual(self.invoke.call_args.kwargs['expected_model'], 'gemini-3.8-flash-high')
         verify.assert_called_once()
         self.guard.finish.assert_called_once()
 

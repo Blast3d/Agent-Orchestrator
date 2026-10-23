@@ -58,14 +58,23 @@ class ProviderPolicyExternalTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             policy.require_coverage('sol', ledger, hosted)
 
-    def test_three_family_preference_keeps_two_as_hard_minimum(self):
+    def test_legacy_runs_keep_two_as_hard_minimum(self):
         ledger, hosted = fixture([('claude', 'claude-opus-5-5', False),
                                   ('grok', 'grok-4.6-build', False)])
-        result = policy.require_coverage('sol', ledger, hosted)
+        result = policy.require_coverage('sol', ledger, hosted, policy=policy.legacy_plan('sol'))
         self.assertEqual(result['family_count'], 2)
         self.assertTrue(result['minimum_met'])
         self.assertFalse(result['preferred_met'])
         self.assertTrue(result['warnings'])
+
+    def test_current_runs_hold_until_gemini_also_contributes(self):
+        workers = [('claude', 'claude-opus-5-5', False), ('grok', 'grok-4.6-build', False)]
+        with self.assertRaisesRegex(ValueError, r'gemini \(Google\)'):
+            policy.require_coverage('sol', *fixture(workers))
+        result = policy.require_coverage(
+            'sol', *fixture(workers + [('gemini', 'gemini-3.8-flash-high', False)]))
+        self.assertTrue(result['minimum_met'])
+        self.assertTrue(result['balance']['balanced'])
 
 
 if __name__ == '__main__':

@@ -32,6 +32,10 @@ def main(argv=None):
     capture=sub.add_parser('capture');capture.add_argument('--run',required=True,help='Application run ID or absolute workspace run directory');capture.add_argument('--file',type=Path,required=True)
     capture.add_argument('--owner',required=True);capture.add_argument('--session',required=True);capture.add_argument('--generation',type=int,required=True)
     capture.add_argument('--reviewer',required=True);capture.add_argument('--note',required=True)
+    retire=sub.add_parser('retire-capture',help='Retire a provably unwritten invalid import after a verified replacement')
+    retire.add_argument('job_id');retire.add_argument('--run',required=True);retire.add_argument('--replacement-job',required=True)
+    retire.add_argument('--source-sha256',required=True);retire.add_argument('--owner',required=True);retire.add_argument('--session',required=True)
+    retire.add_argument('--generation',type=int,required=True);retire.add_argument('--reviewer',required=True);retire.add_argument('--note',required=True)
     usage=sub.add_parser('use');usage.add_argument('job_id')
     feedback=sub.add_parser('feedback');feedback.add_argument('job_id');feedback.add_argument('--rating',choices=['helped','neutral','harmful'],required=True)
     feedback.add_argument('--reviewer',required=True);feedback.add_argument('--note',required=True)
@@ -44,7 +48,7 @@ def main(argv=None):
         if args.command=='dashboard':
             from brain_dashboard import main as dashboard_main
             return dashboard_main(['--root',str(args.root),'--port',str(args.port)]+(['--open'] if args.open else []))
-        brain=BrainStore(args.root) if args.command!='capture' else None
+        brain=BrainStore(args.root) if args.command not in ('capture','retire-capture') else None
         if args.command in ('init','status'):result=brain.status()
         elif args.command=='propose':
             if args.file.stat().st_size>16384:raise ValueError('Candidate file exceeds 16 KiB')
@@ -56,6 +60,11 @@ def main(argv=None):
             run=resolve_capture_run(args.root,args.run)
             result=capture_run(args.root,run,read_json(args.file.absolute(),run),owner=args.owner,
                                session=args.session,generation=args.generation,reviewer=args.reviewer,note=args.note)
+        elif args.command=='retire-capture':
+            from capture_retirement import retire_capture
+            result=retire_capture(args.root,args.run,args.job_id,replacement_job=args.replacement_job,
+                source_sha256=args.source_sha256,owner=args.owner,session=args.session,generation=args.generation,
+                reviewer=args.reviewer,note=args.note)
         elif args.command in ('use','feedback'):
             from task_store import TaskStore
             from memory_usage import summary, record_feedback

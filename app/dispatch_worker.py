@@ -21,7 +21,7 @@ from task_activity import PhaseTracker
 from memory_usage import recall_plan, contract_fields
 from jev_profiles import PROFILES
 from claude_models import select_model
-from orchestration_context import (OperatingContextError, load_operating_context,
+from orchestration_context import (OperatingContextError, load_operating_context, load_worker_guide,
                                    verify_run_startup, verify_request_context)
 
 PROVIDERS = {'gemini': 'antigravity', 'grok': 'grok', 'claude': 'claude', 'vscode-copilot': 'vscode-copilot',
@@ -94,7 +94,7 @@ def worker_environment():
 
 
 def cloud_command(worker, prompt, work, claude_model=None, claude_effort='medium', *, preflight=False,
-                  codex_model=None, codex_effort='medium'):
+                  codex_model=None, codex_effort='medium', timeout_seconds=None):
     # Readiness checks must not prepare a stale provider input before admission.
     if preflight and prompt:
         raise ValueError('Transport preflight does not accept task or memory text')
@@ -121,7 +121,7 @@ def cloud_command(worker, prompt, work, claude_model=None, claude_effort='medium
             from antigravity_boundary import EXE
             return [str(EXE)], None
         from antigravity_boundary import command_for
-        return command_for(PREFIX + prompt, work, worker_environment()), None
+        return command_for(PREFIX + prompt, work, worker_environment(), timeout_seconds), None
     if worker == 'grok':
         task_file = work / 'task.txt'
         if not preflight:
@@ -377,10 +377,13 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
         else:
             operating = load_operating_context()
             binding = verify_run_startup(args, operating)
-            result['orchestration_context'] = dict(operating, execution_requested=False)
+            # The coordinator guide binds the run; the worker receives only its own duties.
+            worker_guide = load_worker_guide()
+            result['orchestration_context'] = dict(operating, execution_requested=False,
+                worker_guide={key: worker_guide[key] for key in ('revision', 'sha256', 'chars', 'source')})
             if binding:
                 result.update(run_id=binding['run_id'], orchestration_startup=binding)
-            prompt = operating['context'] + '\n\n## Assigned task\n' + prompt
+            prompt = worker_guide['context'] + '\n\n## Assigned task\n' + prompt
             if skill_plan:
                 from skill_flow import delivery
                 selected = delivery(storage_root, project_id, skill_plan)
@@ -466,7 +469,7 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                     result.update(status='held', execution_status='held', reason='Quota admission refused')
                 else:
                     result['reservation_id'] = decision['reservation_id']
-                    verify_request_context(args, operating, binding)
+                    verify_request_context(args, operating, binding, worker_guide)
                     if skill_plan:
                         fresh_skills = delivery(storage_root, project_id, skill_plan)
                         if fresh_skills != result['skill_context']:
@@ -479,7 +482,8 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                     if provider:
                         command, stdin = cloud_command(args.worker, prompt, work,
                             claude_model, getattr(args, 'claude_effort', 'medium'),
-                            codex_model=codex_model, codex_effort=codex_effort)
+                            codex_model=codex_model, codex_effort=codex_effort,
+                            timeout_seconds=effective_timeout)
                         if args.worker == 'vscode-copilot':
                             command.extend(['--timeout-seconds', str(effective_timeout)])
                             result.update(requested_model=command[command.index('--model-id') + 1],
@@ -641,6 +645,21 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
     return result
 
 
+def select_auto_worker(args, *, root=ROOT):
+    """Resolve `run auto` to the least-used eligible non-lead family of the run."""
+    from orchestration_context import selected_run
+    from team_balance import select_worker
+    run = selected_run(args)
+    if run is None:
+        return {'worker': None, 'eligible': [], 'ineligible': {},
+                'reason': 'run auto needs --run or an --output inside a run folder.'}
+    report = select_worker(root, run, args.size)
+    if report['worker'] is None:
+        reasons = '; '.join(f'{worker}: {why}' for worker, why in report['ineligible'].items())
+        report['reason'] = 'No non-lead worker is eligible now. ' + (reasons or 'Check the run policy.')
+    return report
+
+
 def dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
     result = _dispatch(args, guard_factory=guard_factory, store=store, workspaces=workspaces)
     from dispatch_invocations import record_invocation
@@ -686,7 +705,8 @@ def main(argv=None):
                           'memory_outcome': outcome or None}))
         return 2 if memory_error else 0
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('worker', choices=['gemini', 'grok', 'claude', 'codex', 'local-chat', 'vscode-copilot'])
+    parser.add_argument('worker', choices=['auto', 'gemini', 'grok', 'claude', 'codex', 'local-chat', 'vscode-copilot'],
+                        help='auto picks the eligible non-lead family with the fewest tasks in the run')
     parser.add_argument('--prompt-file', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True, help='New JSON file; claimed before any model call')
     parser.add_argument('--size', choices=['tiny', 'small', 'medium', 'large'], default='small')
@@ -712,12 +732,20 @@ def main(argv=None):
     parser.add_argument('--memory-profile', choices=PROFILES,
                         help='Evidence needs for the task role; defaults to the work category, independently of worker identity')
     parser.add_argument('--timeout-seconds',type=int,help='Explicit hosted-worker deadline, 30..1800 seconds; changes assignment identity')
-    parser.add_argument('--fallback-worker', action='append', choices=['claude', 'grok', 'codex', 'local-chat'], default=[],
+    parser.add_argument('--fallback-worker', action='append', choices=['claude', 'grok', 'codex', 'gemini', 'local-chat'], default=[],
                         help='Suitable approved alternate for confirmed quota limits; repeat to set the order')
     parser.add_argument('--no-auto-fallback', action='store_true',
                         help='Disable configured alternates for a task with narrower provider scope')
     from task_handoff import apply_automatic_fallbacks, dispatch_with_handoff
     args = parser.parse_args(argv)
+    selection = None
+    if args.worker == 'auto':
+        selection = select_auto_worker(args)
+        if selection['worker'] is None:
+            print(json.dumps({'status': 'held', 'execution_status': 'held', 'worker': 'auto',
+                              'reason': selection['reason'], 'balanced_selection': selection}))
+            return 2
+        args.worker = selection['worker']
     project_default = None
     project_file = ROOT / '.orchestration' / 'project.json'
     if Path.cwd().resolve() == ROOT.resolve() and project_file.is_file() and project_file.stat().st_size <= 16384:
@@ -732,6 +760,11 @@ def main(argv=None):
     if result.get('brief_check'):
         summary['brief_check'] = {key: result['brief_check'].get(key)
                                   for key in ('ok', 'missing', 'errors', 'warnings', 'character_count')}
+    if selection is not None:
+        summary['balanced_selection'] = {key: selection[key] for key in ('worker', 'eligible', 'ineligible')}
+    # A Claude Code lead hears each finished worker through OpenWhispr; best effort only.
+    from worker_readback import announce_worker_result
+    summary['readback'] = announce_worker_result(result)
     print(json.dumps(summary))
     if result.get('assignment_reused'):
         if result.get('reuse_state') == 'incomplete':

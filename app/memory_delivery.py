@@ -1,7 +1,9 @@
 """Fit recalled evidence to an existing worker transport without changing its brief."""
 from brain_recall import _pack
 
-BYTE_LIMITS = {'gemini': 12000, 'vscode-copilot': 32768}
+# Gemini's brief is one command-line argument; antigravity_boundary checks the exact
+# Windows limit, and this earlier gate trims recall to fit before that check.
+BYTE_LIMITS = {'gemini': 28000, 'vscode-copilot': 32768}
 
 
 def heading(profile):

@@ -102,17 +102,61 @@ def safe_path(root, path):
     return path
 
 
+def candidate_fields(payload):
+    try:
+        size = len(json.dumps(payload,allow_nan=False).encode())
+    except (TypeError,ValueError):
+        raise ValueError('Memory candidate must contain valid JSON values') from None
+    if not isinstance(payload, dict) or size > 16384:
+        raise ValueError('Memory candidate must be an object smaller than 16 KiB')
+    project_id = scope(payload.get('project_id'))
+    user_id = scope(payload.get('user_id','local'), 'User')
+    kind = payload.get('kind')
+    if kind not in KINDS:
+        raise ValueError('Select fact, preference, episode or procedure')
+    title = text(payload.get('title'), 'Title', 160)
+    content = text(payload.get('content'), 'Memory', 3000)
+    tags = payload.get('tags', [])
+    if not isinstance(tags, list) or len(tags)>12:
+        raise ValueError('Use at most 12 tags or aliases')
+    tags = sorted(set(text(t,'Tag',60) for t in tags))
+    importance = payload.get('importance',0.5)
+    if isinstance(importance,bool) or not isinstance(importance,(float,int)) or not math.isfinite(importance) or not 0<=importance<=1:
+        raise ValueError('Importance must be between 0 and 1')
+    start, end = date(payload.get('valid_from'),now()), date(payload.get('valid_to'))
+    if end and end <= start:
+        raise ValueError('Validity end must follow its start')
+    episode = payload.get('episode',{})
+    if not isinstance(episode, dict):
+        raise ValueError('Episode must be an object')
+    episode = {k:text(episode.get(k),k,1000) for k in ('problem','action','outcome')} if kind=='episode' else {}
+    if isinstance(payload.get('source'), dict) and payload['source'].get('type') == 'memory_reference':
+        raise ValueError('Create cross-project references through the explicit reviewed link action')
+    return {'project_id':project_id,'user_id':user_id,'kind':kind,'title':title,
+            'content':content,'tags':tags,'importance':importance,'valid_from':start,
+            'valid_to':end,'episode':episode}
+
+
 class BrainStore:
-    def __init__(self, root=ROOT, *, limits=None, budget=None):
+    def __init__(self, root=ROOT, *, limits=None, budget=None, read_only=False):
         if sqlite3.sqlite_version_info < (3,42,0):
             raise ValueError('Brain requires SQLite 3.42+ for secure FTS deletion')
         self.root = Path(root).resolve()
         self.home = safe_path(self.root, self.root / 'runtime/brain')
         self.db = self.home / 'memory.sqlite'
         self.lock = self.home / 'brain.lock'
+        self.read_only = read_only
         self.limits = dict(LIMITS, **(limits or {}))
         if any(type(n) is not int or n < 1 for n in self.limits.values()):
             raise ValueError('Brain limits must be positive integers')
+        if read_only:
+            self._paths()
+            if not self.db.is_file():
+                raise ValueError('Existing Brain database is required for read-only verification')
+            with self._connection() as con:
+                if con.execute('PRAGMA user_version').fetchone()[0] != 4:
+                    raise ValueError('Read-only verification requires the current Brain schema')
+            return
         self.budget = budget or StorageBudget(self.root)
         self.home.mkdir(parents=True, exist_ok=True)
         with file_lock(self.lock):
@@ -175,6 +219,11 @@ class BrainStore:
 
     def _connect(self):
         self._paths()
+        if self.read_only:
+            con = sqlite3.connect(self.db.as_uri() + '?mode=ro', uri=True, timeout=5)
+            con.row_factory = sqlite3.Row
+            con.execute('PRAGMA query_only=ON')
+            return con
         con = sqlite3.connect(self.db, timeout=5)
         con.row_factory = sqlite3.Row
         con.execute('PRAGMA foreign_keys=ON')
@@ -197,6 +246,8 @@ class BrainStore:
 
     @contextmanager
     def _write(self, *, cleanup=False):
+        if self.read_only:
+            raise ValueError('Read-only Brain cannot write memory')
         # The app lock serializes reads with forgetting/purging derived copies.
         with file_lock(self.lock):
             # Callers use this to tell a lock timeout (nothing written) from a
@@ -433,35 +484,10 @@ class BrainStore:
                 self._remove_view(path)
 
     def candidate(self, payload):
-        try:
-            size = len(json.dumps(payload,allow_nan=False).encode())
-        except (TypeError,ValueError):
-            raise ValueError('Memory candidate must contain valid JSON values') from None
-        if not isinstance(payload, dict) or size > 16384:
-            raise ValueError('Memory candidate must be an object smaller than 16 KiB')
-        project_id = scope(payload.get('project_id'))
-        user_id = scope(payload.get('user_id','local'), 'User')
-        kind = payload.get('kind')
-        if kind not in KINDS:
-            raise ValueError('Select fact, preference, episode or procedure')
-        title = text(payload.get('title'), 'Title', 160)
-        content = text(payload.get('content'), 'Memory', 3000)
-        tags = payload.get('tags', [])
-        if not isinstance(tags, list) or len(tags)>12:
-            raise ValueError('Use at most 12 tags or aliases')
-        tags = sorted(set(text(t,'Tag',60) for t in tags))
-        importance = payload.get('importance',0.5)
-        if isinstance(importance,bool) or not isinstance(importance,(float,int)) or not math.isfinite(importance) or not 0<=importance<=1:
-            raise ValueError('Importance must be between 0 and 1')
-        start, end = date(payload.get('valid_from'),now()), date(payload.get('valid_to'))
-        if end and end <= start:
-            raise ValueError('Validity end must follow its start')
-        episode = payload.get('episode',{})
-        if not isinstance(episode, dict):
-            raise ValueError('Episode must be an object')
-        episode = {k:text(episode.get(k),k,1000) for k in ('problem','action','outcome')} if kind=='episode' else {}
-        if isinstance(payload.get('source'), dict) and payload['source'].get('type') == 'memory_reference':
-            raise ValueError('Create cross-project references through the explicit reviewed link action')
+        fields = candidate_fields(payload)
+        project_id,user_id,kind,title,content,tags,importance,start,end,episode = (
+            fields[key] for key in ('project_id','user_id','kind','title','content','tags',
+                                   'importance','valid_from','valid_to','episode'))
         source, source_hash = self._source(payload.get('source'),project_id)
         # Fingerprint only exact normalized copies. Semantic contradictions need review.
         fp = digest([kind,' '.join(title.casefold().split()),' '.join(content.casefold().split()),episode,

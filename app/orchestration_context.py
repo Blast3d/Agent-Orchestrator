@@ -6,6 +6,8 @@ from pathlib import Path
 from provider_policy import validate_plan
 
 GUIDE = Path(__file__).with_name('assets') / 'orchestration-context.md'
+# Workers get only their own duties; the coordinator guide stays bound to startup.
+WORKER_GUIDE = Path(__file__).with_name('assets') / 'worker-guide.md'
 MAX_GUIDE_BYTES = 16 * 1024
 
 
@@ -13,8 +15,7 @@ class OperatingContextError(ValueError):
     """Hold a new request until its operating context can be verified."""
 
 
-def load_operating_context(path=None):
-    path = Path(path) if path is not None else GUIDE
+def _load_guide(path, heading, source):
     try:
         if not path.is_file() or path.is_symlink() or path.resolve().parent != path.parent.resolve():
             raise ValueError('Guide must be a regular local file')
@@ -23,14 +24,23 @@ def load_operating_context(path=None):
         if len(raw) > MAX_GUIDE_BYTES:
             raise ValueError('Guide exceeds 16 KiB')
         context = raw.decode('utf-8')
-        if not context.splitlines() or context.splitlines()[0] != '# Orchestration Operating Guide (v1)' or len(context.strip()) < 100:
+        if not context.splitlines() or context.splitlines()[0] != heading or len(context.strip()) < 100:
             raise ValueError('Guide version or content is invalid')
     except (OSError, UnicodeError, ValueError) as error:
-        raise OperatingContextError('Operating guidance could not load; repair app/assets/orchestration-context.md before dispatch. ' + str(error)) from error
+        raise OperatingContextError('Operating guidance could not load; repair ' + source + ' before dispatch. ' + str(error)) from error
     return {'schema_version': 1, 'revision': '1', 'context': context,
             'sha256': hashlib.sha256(raw).hexdigest(), 'chars': len(context),
-            'source': 'app/assets/orchestration-context.md',
-            'loaded_at': datetime.now(timezone.utc).isoformat()}
+            'source': source, 'loaded_at': datetime.now(timezone.utc).isoformat()}
+
+
+def load_operating_context(path=None):
+    return _load_guide(Path(path) if path is not None else GUIDE,
+                       '# Orchestration Operating Guide (v1)', 'app/assets/orchestration-context.md')
+
+
+def load_worker_guide(path=None):
+    return _load_guide(Path(path) if path is not None else WORKER_GUIDE,
+                       '# Worker Operating Guide (v1)', 'app/assets/worker-guide.md')
 
 
 def selected_run(args):
@@ -81,10 +91,12 @@ def verify_run_startup(args, operating):
         raise OperatingContextError('Run startup is missing or stale. Run orchestrator.py start --run with the current lead identity before dispatch. ' + str(error)) from error
 
 
-def verify_request_context(args, operating, binding):
+def verify_request_context(args, operating, binding, worker_guide=None):
     """Recheck immediately before execution, after potentially slow quota work."""
     current = load_operating_context()
     if current['sha256'] != operating['sha256']:
         raise OperatingContextError('Operating guidance changed while preparing this request; start a new assignment after reloading it.')
+    if worker_guide is not None and load_worker_guide()['sha256'] != worker_guide['sha256']:
+        raise OperatingContextError('Worker guidance changed while preparing this request; start a new assignment.')
     if verify_run_startup(args, current) != binding:
         raise OperatingContextError('Run startup changed while preparing this request; inspect the current lead.')

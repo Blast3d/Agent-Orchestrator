@@ -5,8 +5,20 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
-from provider_policy import (MINIMUM_FAMILIES, PREFERRED_FAMILIES, coverage,
-                             family_for_worker, plan, require_coverage, validate_plan)
+from provider_policy import (LEGACY_MINIMUM_FAMILIES, LEGACY_PREFERRED_FAMILIES,
+                             MINIMUM_FAMILIES, PREFERRED_FAMILIES, coverage,
+                             family_for_worker, legacy_plan, plan, require_coverage,
+                             validate_plan)
+
+
+# Runs started before policy v2 keep their recorded two-family receipt; the
+# retained-evidence rules below are shared by both versions.
+def legacy_coverage(owner, ledger, hosted, **options):
+    return coverage(owner, ledger, hosted, policy=legacy_plan(owner), **options)
+
+
+def legacy_require(owner, ledger, hosted, **options):
+    return require_coverage(owner, ledger, hosted, policy=legacy_plan(owner), **options)
 
 
 def native_ledger(*families):
@@ -50,17 +62,26 @@ def hosted_work(ledger, hosted, worker, *, model=None, status='succeeded',
 
 class FamilyIdentityTests(unittest.TestCase):
     def test_thresholds_and_lead_plan_are_immutable(self):
-        self.assertEqual((MINIMUM_FAMILIES, PREFERRED_FAMILIES), (2, 3))
-        for owner, family, workers in (
-                ('astra', 'OpenAI', ['claude', 'grok', 'gemini']),
-                ('sol', 'OpenAI', ['claude', 'grok', 'gemini']),
-                ('fable', 'Anthropic', ['codex', 'grok', 'gemini'])):
+        self.assertEqual((MINIMUM_FAMILIES, PREFERRED_FAMILIES), (3, 4))
+        self.assertEqual((LEGACY_MINIMUM_FAMILIES, LEGACY_PREFERRED_FAMILIES), (2, 3))
+        for owner, family, workers, required in (
+                ('astra', 'OpenAI', ['claude', 'grok', 'gemini'], ['Anthropic', 'xAI', 'Google']),
+                ('sol', 'OpenAI', ['claude', 'grok', 'gemini'], ['Anthropic', 'xAI', 'Google']),
+                ('fable', 'Anthropic', ['codex', 'grok', 'gemini'], ['OpenAI', 'xAI', 'Google'])):
             with self.subTest(owner=owner):
                 value = plan(owner)
-                self.assertEqual(value, {'schema_version': 1, 'minimum_families': 2,
-                                        'preferred_families': 3, 'lead_family': family,
-                                        'cross_family_workers': workers})
+                self.assertEqual(value, {'schema_version': 2, 'minimum_families': 3,
+                                        'preferred_families': 4, 'lead_family': family,
+                                        'cross_family_workers': workers,
+                                        'required_worker_families': required,
+                                        'balance': {'measure': 'accepted_hosted_tasks',
+                                                    'max_spread_ratio': 0.15, 'min_spread': 1}})
                 self.assertEqual(validate_plan(value, owner), value)
+                legacy = legacy_plan(owner)
+                self.assertEqual(legacy, {'schema_version': 1, 'minimum_families': 2,
+                                         'preferred_families': 3, 'lead_family': family,
+                                         'cross_family_workers': workers})
+                self.assertEqual(validate_plan(legacy, owner), legacy)
         with self.assertRaises(ValueError):
             plan('imaginary-lead')
 
@@ -78,8 +99,11 @@ class FamilyIdentityTests(unittest.TestCase):
         for value in variants:
             with self.subTest(value=value), self.assertRaises(ValueError):
                 validate_plan(value, 'sol')
-        reordered = dict(expected, cross_family_workers=list(reversed(expected['cross_family_workers'])))
+        reordered = dict(expected, cross_family_workers=list(reversed(expected['cross_family_workers'])),
+                         required_worker_families=list(reversed(expected['required_worker_families'])))
         self.assertEqual(validate_plan(reordered, 'sol')['cross_family_workers'], reordered['cross_family_workers'])
+        with self.assertRaises(ValueError):
+            validate_plan(dict(reordered, required_worker_families=expected['required_worker_families']), 'sol')
 
     def test_official_routes_and_observed_models_identify_families(self):
         for worker, models, expected in (
@@ -108,14 +132,14 @@ class RetainedFamilyCoverageTests(unittest.TestCase):
     def test_native_lead_and_other_canonical_family_pass_and_encourage_three(self):
         ledger, hosted = native_ledger('OpenAI'), {}
         hosted_work(ledger, hosted, 'claude', model='claude-opus-5')
-        result = require_coverage('sol', ledger, hosted, native_capture=True)
+        result = legacy_require('sol', ledger, hosted, native_capture=True)
         self.assertEqual(result['families'], ['Anthropic', 'OpenAI'])
         self.assertEqual(result['family_count'], 2)
         self.assertTrue(result['minimum_met'])
         self.assertFalse(result['preferred_met'])
         self.assertTrue(result['warnings'])
         hosted_work(ledger, hosted, 'grok', model='grok-4.6-build')
-        result = require_coverage('sol', ledger, hosted, native_capture=True)
+        result = legacy_require('sol', ledger, hosted, native_capture=True)
         self.assertEqual(result['family_count'], 3)
         self.assertTrue(result['preferred_met'])
         self.assertEqual(result['warnings'], [])
@@ -124,30 +148,30 @@ class RetainedFamilyCoverageTests(unittest.TestCase):
         ledger, hosted = native_ledger(), {}
         hosted_work(ledger, hosted, 'claude', model='claude-opus-5')
         hosted_work(ledger, hosted, 'grok', model='grok-4.6-build')
-        self.assertEqual(require_coverage('astra', ledger, hosted)['families'], ['Anthropic', 'xAI'])
+        self.assertEqual(legacy_require('astra', ledger, hosted)['families'], ['Anthropic', 'xAI'])
 
     def test_lead_identity_alone_and_same_family_workers_do_not_satisfy_minimum(self):
         ledger, hosted = native_ledger('OpenAI', 'OpenAI', 'OpenAI'), {}
         hosted_work(ledger, hosted, 'codex', model='gpt-6-sol')
         hosted_work(ledger, hosted, 'vscode-copilot', model='gpt-6')
-        result = coverage('sol', ledger, hosted, native_capture=True)
+        result = legacy_coverage('sol', ledger, hosted, native_capture=True)
         self.assertEqual(result['families'], ['OpenAI'])
         self.assertFalse(result['minimum_met'])
         with self.assertRaisesRegex(ValueError, '(?i)(famil|provider)'):
-            require_coverage('sol', ledger, hosted, native_capture=True)
+            legacy_require('sol', ledger, hosted, native_capture=True)
         hosted_only = native_ledger()
         only = {}
         hosted_work(hosted_only, only, 'claude', model='claude-opus-5')
-        self.assertEqual(coverage('sol', hosted_only, only)['families'], ['Anthropic'])
+        self.assertEqual(legacy_coverage('sol', hosted_only, only)['families'], ['Anthropic'])
 
     def test_native_capture_and_lead_family_retention_are_both_required(self):
         ledger, hosted = native_ledger('OpenAI'), {}
-        self.assertEqual(coverage('sol', ledger, hosted)['families'], [])
-        self.assertEqual(coverage('sol', native_ledger(), hosted, native_capture=True)['families'], [])
+        self.assertEqual(legacy_coverage('sol', ledger, hosted)['families'], [])
+        self.assertEqual(legacy_coverage('sol', native_ledger(), hosted, native_capture=True)['families'], [])
         fabricated = native_ledger('OpenAI', 'Anthropic', 'Google', 'xAI', 'TypeSafe')
-        self.assertEqual(coverage('sol', fabricated, hosted, native_capture=True)['families'], ['OpenAI'])
+        self.assertEqual(legacy_coverage('sol', fabricated, hosted, native_capture=True)['families'], ['OpenAI'])
         ledger['work_items'][0]['allocations'][0]['percent'] = 0
-        self.assertEqual(coverage('sol', ledger, hosted, native_capture=True)['families'], [])
+        self.assertEqual(legacy_coverage('sol', ledger, hosted, native_capture=True)['families'], [])
 
     def test_native_unretained_work_and_memory_import_cannot_be_lead_contribution(self):
         for changes in ({'status': 'pending'}, {'status': 'rejected'}, {'status': 'failed'},
@@ -155,12 +179,12 @@ class RetainedFamilyCoverageTests(unittest.TestCase):
             with self.subTest(changes=changes):
                 ledger = native_ledger('OpenAI')
                 ledger['work_items'][0].update(changes)
-                self.assertEqual(coverage('sol', ledger, {}, native_capture=True)['families'], [])
+                self.assertEqual(legacy_coverage('sol', ledger, {}, native_capture=True)['families'], [])
 
     def test_jev_and_typesafe_are_advice_not_worker_families(self):
         ledger, hosted = native_ledger('OpenAI'), {}
         hosted_work(ledger, hosted, 'jev', model='TypeSafe')
-        self.assertEqual(coverage('sol', ledger, hosted, native_capture=True)['families'], ['OpenAI'])
+        self.assertEqual(legacy_coverage('sol', ledger, hosted, native_capture=True)['families'], ['OpenAI'])
 
     def test_unretained_failed_pending_or_synthetic_work_never_qualifies(self):
         for changes in ({'work_status': 'pending'}, {'work_status': 'rejected'},
@@ -169,7 +193,7 @@ class RetainedFamilyCoverageTests(unittest.TestCase):
             with self.subTest(changes=changes):
                 ledger, hosted = native_ledger('OpenAI'), {}
                 hosted_work(ledger, hosted, 'claude', model='claude-opus-5', **changes)
-                self.assertEqual(coverage('sol', ledger, hosted, native_capture=True)['families'], ['OpenAI'])
+                self.assertEqual(legacy_coverage('sol', ledger, hosted, native_capture=True)['families'], ['OpenAI'])
 
     def test_exact_job_and_positive_worker_allocation_are_required(self):
         base, hosted = native_ledger('OpenAI'), {}
@@ -187,20 +211,20 @@ class RetainedFamilyCoverageTests(unittest.TestCase):
                     ledger['activity'][-1]['task_id'] = 'another-job'
                     ledger['activity'][-1]['agent_id'] = 'native:0'
                     ledger['work_items'][-1]['allocations'][0]['agent_id'] = 'native:0'
-                self.assertEqual(coverage('sol', ledger, hosted, native_capture=True)['families'], ['OpenAI'])
-        self.assertEqual(require_coverage('sol', base, hosted, native_capture=True)['family_count'], 2)
+                self.assertEqual(legacy_coverage('sol', ledger, hosted, native_capture=True)['families'], ['OpenAI'])
+        self.assertEqual(legacy_require('sol', base, hosted, native_capture=True)['family_count'], 2)
         self.assertIn(job, hosted)
 
     def test_canonical_worker_can_be_remapped_by_matching_delegation(self):
         ledger, hosted = native_ledger('OpenAI'), {}
         hosted_work(ledger, hosted, 'claude', model='claude-opus-5', alias='reviewer:Claude')
-        self.assertEqual(require_coverage('sol', ledger, hosted, native_capture=True)['family_count'], 2)
+        self.assertEqual(legacy_require('sol', ledger, hosted, native_capture=True)['family_count'], 2)
 
     def test_remapped_synthetic_hosted_lead_family_is_not_native_lead_work(self):
         ledger, hosted = native_ledger(), {}
         hosted_work(ledger, hosted, 'codex', model='gpt-6-sol', alias='reviewer:ASTRA', synthetic=True)
         hosted_work(ledger, hosted, 'claude', model='claude-opus-5')
-        self.assertEqual(coverage('sol', ledger, hosted, native_capture=True)['families'], ['Anthropic'])
+        self.assertEqual(legacy_coverage('sol', ledger, hosted, native_capture=True)['families'], ['Anthropic'])
 
     def test_copilot_unknown_and_contradictory_official_models_cannot_add_family(self):
         for worker, model in (('vscode-copilot', 'auto'), ('vscode-copilot', 'gpt-6'),
@@ -208,7 +232,7 @@ class RetainedFamilyCoverageTests(unittest.TestCase):
             with self.subTest(worker=worker, model=model):
                 ledger, hosted = native_ledger('OpenAI'), {}
                 hosted_work(ledger, hosted, worker, model=model)
-                self.assertEqual(coverage('sol', ledger, hosted, native_capture=True)['families'], ['OpenAI'])
+                self.assertEqual(legacy_coverage('sol', ledger, hosted, native_capture=True)['families'], ['OpenAI'])
 
 
 if __name__ == '__main__':

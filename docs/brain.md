@@ -454,6 +454,41 @@ Storage limits are unchanged. Sparse graphs should first be investigated as
 capture/scoping problems. Use small, independently useful nodes and justified
 connections; do not manufacture edges or fill the graph with raw chat.
 
+### Recover an invalid native capture
+
+Native capture validates every candidate field, including the three required
+episode fields, before creating or accepting an import. Resuming an unfinished
+import runs the same checks. Relationships also receive a read-only scope/source
+and validity check before import; insertion rechecks current evidence atomically.
+A clock, source, storage or I/O change can still hold capture after preflight.
+
+An older capture may already have an accepted artifact whose memory write failed
+because its candidate fields were invalid. Keep that artifact and its receipt.
+Capture a corrected bundle under a new `capture_id`, using the same evidence
+files and memory keys, then explicitly retire the invalid import:
+
+```powershell
+python orchestrator.py brain retire-capture FAILED_JOB --run EXACT_RUN_DIRECTORY --replacement-job CORRECTED_JOB --source-sha256 FAILED_RESULT_FILE_SHA256 --owner sol --session CURRENT_SESSION --generation CURRENT_GENERATION --reviewer NAME --note "Verified the invalid fields, zero writes, and corrected replacement."
+```
+
+`--source-sha256` is the SHA-256 of the failed task's exact `result.json` bytes
+(for example, `Get-FileHash -Algorithm SHA256`), not its memory receipt's source
+digest. The command requires the current owner and a matching native import,
+unchanged source/evidence/journal, an `error` receipt explicitly marked retryable
+with no memory IDs, reproducibly invalid candidate fields at the original review
+time, and no Brain rows sourced from that import. The replacement must be from
+the exact same run/project and have verified active memories. A dynamic relation
+failure, uncertain write, partial write, remembered or forgotten capture cannot
+be retired through this command.
+
+Recovery creates only `runs/tasks/FAILED_JOB/capture-retirement.json`. It preserves
+the original task, review, memory receipt, journal, evidence and manifest. A
+matching repeated request returns the same receipt; conflicting requests are
+held. Retired imports cannot be retried. Closeout revalidates the retirement and
+its replacement, grants the retired task no contribution credit, and holds if
+the replacement has since been forgotten or its evidence has changed. No
+provider is called, no memory is recreated, and generic review rules stay intact.
+
 ## Review sources and prepare selected context
 
 Open a pending memory to see its **Current source check**. The dashboard checks

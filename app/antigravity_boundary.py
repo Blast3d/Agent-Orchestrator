@@ -9,12 +9,22 @@ import sys
 from paths import CONFIG
 from task_store import write_json
 
-MODEL = 'gemini-3.8-flash-medium'
+# Google's highest tier on this account's Antigravity route (agy models, 2026-10-21).
+MODEL = 'gemini-3.8-flash-high'
 VALIDATION = CONFIG / 'antigravity-boundary.json'
 HANDLER = Path(__file__).with_name('antigravity_deny_tools.py')
 EXE = Path.home() / 'AppData/Local/agy/bin/agy.exe'
 REQUIRED_CHECKS = ('mcp_denied', 'timeout_denied', 'files_denied', 'shell_denied',
                    'web_denied', 'delegation_denied', 'messaging_denied', 'scheduling_denied')
+# CreateProcess accepts 32,767 UTF-16 units for the whole command line; keep headroom.
+MAX_COMMAND_LINE_UNITS = 32000
+PRINT_TIMEOUT_MARGIN_SECONDS = 15
+
+
+def verified_models(proof):
+    """A proof lists every model tier it verified; older proofs name exactly one."""
+    models = proof.get('models', [proof.get('model')])
+    return {model for model in models if isinstance(model, str)} if isinstance(models, list) else set()
 
 
 class BoundaryHeld(ValueError):
@@ -31,7 +41,7 @@ def boundary_error():
     try:
         proof = json.loads(VALIDATION.read_text(encoding='utf-8'))
         if (type(proof.get('schema_version')) is not int or proof['schema_version'] != 1 or proof.get('status') != 'verified'
-                or proof.get('model') != MODEL
+                or MODEL not in verified_models(proof)
                 or any(proof.get('checks', {}).get(key) is not True for key in REQUIRED_CHECKS)):
             return 'Antigravity tool-boundary verification is missing or incomplete.'
         for key, path in (('executable_sha256', EXE), ('handler_sha256', HANDLER),
@@ -181,9 +191,20 @@ def prepare(work, env):
     return common
 
 
-def command_for(prompt, work, env):
-    if len(prompt.encode('utf-8')) > 12000:
-        raise BoundaryHeld('Antigravity supplied-text brief exceeds 12 KB; split the assignment.')
+def command_line_units(command):
+    """UTF-16 length of the command line Windows builds from this argument list."""
+    return len(subprocess.list2cmdline(command).encode('utf-16-le')) // 2
+
+
+def command_for(prompt, work, env, timeout_seconds=None):
+    # The agent stops itself shortly before the dispatcher's own task deadline.
+    print_timeout = (90 if timeout_seconds is None
+                     else max(PRINT_TIMEOUT_MARGIN_SECONDS, int(timeout_seconds) - PRINT_TIMEOUT_MARGIN_SECONDS))
+    tail = ['--output-format', 'stream-json', '--disable-slash-commands', '--model', MODEL,
+            '--print-timeout', f'{print_timeout}s', '--log-file', str(Path(work) / 'private-agy.log')]
+    # The brief travels as one argument; refuse it before preparing anything.
+    planned = [str(EXE), '--add-dir', str(Path(work).resolve()), '--mode', 'plan', '--sandbox', '-p', prompt, *tail]
+    if command_line_units(planned) > MAX_COMMAND_LINE_UNITS:
+        raise BoundaryHeld('Antigravity supplied-text brief exceeds the Windows command-line limit; split the assignment.')
     common = prepare(work, env)
-    return common + ['-p', prompt, '--output-format', 'stream-json', '--disable-slash-commands',
-        '--model', MODEL, '--print-timeout', '90s', '--log-file', str(Path(work) / 'private-agy.log')]
+    return common + ['-p', prompt, *tail]

@@ -169,15 +169,18 @@ starting substantial project work with **start --automatic**. When it is Off or
 unreadable, automatic startup returns `disabled` without creating a run or loading
 memory. Manual runs use **start** without that flag. The lead uses **start** to load the
 operating guide and scoped Brain recall before assigning workers. The dispatcher
-includes the guide in every new worker request; project recall remains scoped to
-the assignment. Startup records a provider policy requiring **two contributing AI
-families**, with **three preferred**; run-linked dispatch verifies it. **closeout**
-checks reviewed task captures, contribution maps and actual family coverage before
-recording completion. Same-family native agents and JEV routing advice cannot fill
-the minimum; Copilot counts by its actual model. A small edit run can use the lead
-plus a later cross-family reviewer. If no authorized alternate is usable, closeout
-stays held. These checks do not schedule or intercept native workers. See
-[startup and closeout](docs/startup-and-closeout.md).
+includes a compact worker guide in every new worker request; project recall remains
+scoped to the assignment. Startup records a provider policy (schema 2) requiring
+accepted work from **every non-lead family**: Grok, Gemini, and Codex or Claude,
+whichever is not leading. Those families share accepted worker tasks
+**near-equally**; `python orchestrator.py balance --run RUN` shows the counts and
+`run auto` dispatches to the least-used eligible family. Run-linked dispatch
+verifies the policy, and **closeout** checks reviewed task captures, contribution
+maps, family coverage and balance before recording completion. Same-family native
+agents and JEV routing advice cannot fill a share; Copilot counts by its actual
+model. Runs started before October 21, 2026 keep their recorded two-family rule.
+If an authorized family is unusable, closeout stays held. These checks do not
+schedule or intercept native workers. See [startup and closeout](docs/startup-and-closeout.md).
 For optional Discord completion calls or Busy-mode messages through OpenWhispr,
 enable [completion notifications](docs/completion-notifications.md), select
 OpenWhispr's `project` trigger, and supply the full lead report to
@@ -228,7 +231,7 @@ and old task sources keep their original project. The memory dashboard refreshes
 saved recall activity as well as memory changes. Healthy refreshes are quiet;
 manual controls appear for an error or updates deferred while reading/editing.
 
-Use `python orchestrator.py team --type audit --independent-workstreams 6 --cap 3` for a read-only team plan based on independent work, saved quota and measured task timings. The cap counts simultaneous workers; the lead is separate. The viewer's **Worker activity** panel shows dispatch phases, elapsed time, provider progress, deadlines and memory receipts. See [team sizing and latency](docs/team-sizing.md).
+Use `python orchestrator.py team --type audit --independent-workstreams 6 --cap 3` for a read-only team plan based on independent work, saved quota and measured task timings; it also shows a near-equal allocation across the non-lead families. During a run, `python orchestrator.py balance --run RUN` reports each family's dispatched and accepted tasks, and `python orchestrator.py run auto --run RUN ...` sends the next assignment to the least-used eligible family. The cap counts simultaneous workers; the lead is separate. The viewer's **Worker activity** panel shows dispatch phases, elapsed time, provider progress, deadlines and memory receipts. See [team sizing and latency](docs/team-sizing.md).
 
 Every finalized worker task now saves a **contribution audit**, and Codex includes a combined audit when an orchestrated task finishes. It shows estimated accepted-work percentages by agent and category, alongside separate delegation and reported-token usage. Rejected drafts remain visible as usage. Unknown measurements remain unknown. See [contribution audits](docs/contribution-audits.md) for evidence rules and commands.
 
@@ -254,7 +257,7 @@ Repeating that assignment returns its original saved task and latest review, wit
 
 Codex can choose suitable, already-approved alternatives before starting. For example, append `--fallback-worker grok` to the keyed command above. A confirmed quota hold or an exited rate-limit rejection hands the brief to Grok through the same allowance guard. Each attempt has its own result and a linked handoff record. Repeating the command reuses those attempts.
 
-This host configures Codex to try Claude, then Grok; Claude and Grok are each other's automatic alternate. Explicit `--fallback-worker` order takes precedence; `--no-auto-fallback` disables defaults for a task with narrower provider authorization. At low positive allowance the dispatcher prefers the next authorized worker before reserving or calling the primary. The last worker in the frozen plan can still start bounded work with positive allowance, so low readings do not stall the whole plan. Unkeyed requests get a generated assignment ID in the receipt; use explicit project/assignment IDs to resume a known request. An unkeyed repeat of a brief whose earlier run on the same worker is still unresolved (its reservation is open because the provider may still be working) is held before any reservation or model call; reconcile the earlier job first, or give deliberately new work its own assignment ID. No local models are used for Orchestrator/Brain work, and no new billable route is enabled. Unknown allowance does not prevent startup. Missing permissions, incomplete briefs and uncertain execution still require inspection. Codex includes accepted progress and remaining steps when preparing a continuation brief for work that has already made progress.
+This host gives every hosted worker two automatic alternates with Gemini always in reach: Claude and Codex try Grok then Gemini, Grok tries Gemini then Codex, and Gemini tries Grok then Codex. Explicit `--fallback-worker` order takes precedence; `--no-auto-fallback` disables defaults for a task with narrower provider authorization. At low positive allowance the dispatcher prefers the next authorized worker before reserving or calling the primary. The last worker in the frozen plan can still start bounded work with positive allowance, so low readings do not stall the whole plan. Unkeyed requests get a generated assignment ID in the receipt; use explicit project/assignment IDs to resume a known request. An unkeyed repeat of a brief whose earlier run on the same worker is still unresolved (its reservation is open because the provider may still be working) is held before any reservation or model call; reconcile the earlier job first, or give deliberately new work its own assignment ID. No local models are used for Orchestrator/Brain work, and no new billable route is enabled. Unknown allowance does not prevent startup. Missing permissions, incomplete briefs and uncertain execution still require inspection. Codex includes accepted progress and remaining steps when preparing a continuation brief for work that has already made progress.
 
 Local handoff plans require a tiny or small task in general chat, formatting, extraction, summarization or classification. Other sizes and categories are held before the first worker starts. Handoff plans freeze the brief and chosen worker order so a file edit or repeated command cannot quietly change the work midway.
 
@@ -274,7 +277,7 @@ setup, dispatch and validation limits.
 | Grok | Included SuperGrok account, official Grok Build, tools/web/subagents disabled |
 | Grok Bot | Atlas in the official Windows app; supervised tasks and a separate, manually refreshed weekly allowance |
 | Local Qwen | Small supplied-text jobs through loopback Ollama; pinned local model, 4K context, one active request |
-| Gemini | Optional Antigravity `agy` supplied-text route; requires separate CLI authentication and validated local boundary configuration. See the [boundary implementation](app/antigravity_boundary.py). |
+| Gemini | Antigravity `agy` supplied-text route on `gemini-3.8-flash-high`, Google's best tier for this account; tools denied by a verified per-job hook, briefs up to the Windows command-line limit (about 30 KB), size-based deadline. Requires CLI authentication and the validated boundary proof. See the [boundary implementation](app/antigravity_boundary.py). |
 | NotebookLM | Feature-specific jobs use saved/manual allowance evidence; no verified automatic consumer quota reader |
 | Codex | Lead and integrator; official account quota reader also supports reservations for native subagents |
 

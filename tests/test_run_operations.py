@@ -55,17 +55,26 @@ class OperatorTests(unittest.TestCase):
         self.assertFalse(view['minimum_met'])
         self.assertEqual((self.run/'coordinator.json').read_bytes(), before)
 
-    def test_two_actual_families_require_both_retained_allocations(self):
-        first=self.task()
-        second=self.task(worker='grok',model='grok-4.6')
-        ledger=task_ledger(first)
-        other=task_ledger(second)
+    def test_every_non_lead_family_requires_a_retained_allocation(self):
+        rows=[self.task(),self.task(worker='grok',model='grok-4.6')]
+        ledger=task_ledger(rows[0])
         ledger['scope_id']=self.run.name
-        for key in ('contributors','work_items','activity'):ledger[key].extend(other[key])
-        for item,row in zip(ledger['work_items'],(first,second)):
-            item.update(id=row['job_id'],allocations=[{'agent_id':'worker:'+row['worker'],'percent':100,'evidence':'Checked the canonical synthetic fixture'}])
-        write_json(self.run/'contributions-ledger.json',ledger)
-        self.assertEqual(self.operations.coverage(self.run.name)['families'],['Anthropic','xAI'])
+        def add(row):
+            other=task_ledger(row)
+            for key in ('contributors','work_items','activity'):ledger[key].extend(other[key])
+        def allocate():
+            for item,row in zip(ledger['work_items'],rows):
+                item.update(id=row['job_id'],allocations=[{'agent_id':'worker:'+row['worker'],'percent':100,'evidence':'Checked the canonical synthetic fixture'}])
+            write_json(self.run/'contributions-ledger.json',ledger)
+        add(rows[1])
+        allocate()
+        coverage=self.operations.coverage(self.run.name)
+        self.assertEqual(coverage['families'],['Anthropic','xAI'])
+        self.assertFalse(coverage['minimum_met'])
+        self.assertIn('assign accepted work to gemini (Google)',coverage['warnings'])
+        rows.append(self.task(worker='gemini',model='gemini-3.8-flash-high'))
+        add(rows[2])
+        allocate()
         self.assertTrue(self.operations.coverage(self.run.name)['minimum_met'])
         ledger['work_items'][1]['allocations'][0]['percent']=0
         write_json(self.run/'contributions-ledger.json',ledger)

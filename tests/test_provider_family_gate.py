@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_orchestration_lifecycle as fixture
@@ -12,10 +13,13 @@ from contributions import write_report
 from memory_bundle import capture_run
 from orchestration_context import OperatingContextError, verify_run_startup
 from orchestration_lifecycle import start_run
+from provider_policy import legacy_plan, plan
 from task_store import write_json
 
 
 class ProviderFamilyGateTests(unittest.TestCase):
+    # Current runs record policy v2: every non-lead family must contribute, near-equally.
+    policy_factory = staticmethod(plan)
     setUp = fixture.LifecycleTests.setUp
     read = fixture.LifecycleTests.read
     manifest = fixture.LifecycleTests.manifest
@@ -81,13 +85,16 @@ class ProviderFamilyGateTests(unittest.TestCase):
     def test_start_provides_policy_in_bound_receipt_and_worker_packet(self):
         result = start_run(run=self.run, root=self.root, **self.identity)
         policy = result['provider_policy']
-        self.assertEqual(policy['minimum_families'], 2)
-        self.assertEqual(policy['preferred_families'], 3)
+        self.assertEqual(policy['schema_version'], 2)
+        self.assertEqual(policy['minimum_families'], 3)
+        self.assertEqual(policy['preferred_families'], 4)
         self.assertEqual(policy['lead_family'], 'OpenAI')
+        self.assertEqual(policy['required_worker_families'], ['Anthropic', 'xAI', 'Google'])
         self.assertEqual(self.read(self.run / 'startup-context.json')['provider_policy'], policy)
         packet = (self.run / 'startup-context.md').read_text(encoding='utf-8')
         self.assertIn('family', packet.lower())
-        self.assertIn('claude', packet.lower())
+        for worker in ('claude', 'grok', 'gemini'):
+            self.assertIn(worker, packet.lower())
 
     def test_single_hosted_family_holds_even_if_lead_is_another_family(self):
         self.hosted()
@@ -100,37 +107,64 @@ class ProviderFamilyGateTests(unittest.TestCase):
         self.append_native_credit()
         result = self.close()
         self.held(result, 'provider_family_coverage')
-        self.assertIn('2', self.family_check(result)['reason'])
+        self.assertIn('gemini (Google)', self.family_check(result)['reason'])
 
-    def test_two_actual_hosted_families_complete_and_encourage_three(self):
+    def test_two_hosted_families_hold_until_gemini_contributes(self):
         self.hosted()
         self.hosted(worker='grok', model='grok-4.6-build')
         self.audit()
         result = self.close()
-        self.assertEqual(result['status'], 'completed', result)
-        check = self.family_check(result)
-        self.assertEqual(check['status'], 'passed')
-        self.assertEqual(check['detail']['families'], ['Anthropic', 'xAI'])
-        self.assertTrue(check['detail']['warnings'])
+        self.held(result, 'provider_family_coverage')
+        self.assertIn('assign accepted work to gemini (Google)', self.family_check(result)['reason'])
 
-    def test_three_actual_hosted_families_complete_without_coverage_warning(self):
+    def test_three_hosted_families_complete_and_only_suggest_lead_work(self):
         self.hosted()
         self.hosted(worker='grok', model='grok-4.6-build')
-        self.hosted(worker='gemini', model='gemini-3.8-flash-medium')
+        self.hosted(worker='gemini', model='gemini-3.8-flash-high')
         self.audit()
         result = self.close()
         self.assertEqual(result['status'], 'completed', result)
-        self.assertEqual(self.family_check(result)['detail']['family_count'], 3)
-        self.assertEqual(self.family_check(result)['detail']['warnings'], [])
+        detail = self.family_check(result)['detail']
+        self.assertEqual(detail['family_count'], 3)
+        self.assertTrue(detail['balance']['balanced'])
+        self.assertEqual(detail['warnings'], ['Prefer retained lead-family work from OpenAI.'])
 
-    def test_native_lead_and_one_accepted_other_family_complete(self):
+    def test_unbalanced_worker_shares_hold_closeout(self):
+        for _ in range(3):
+            self.hosted()
+        self.hosted(worker='grok', model='grok-4.6-build')
+        self.hosted(worker='gemini', model='gemini-3.8-flash-high')
+        self.audit()
+        result = self.close()
+        self.held(result, 'provider_family_coverage')
+        self.assertIn('worker task balance unmet', self.family_check(result)['reason'])
+
+    def test_native_lead_and_every_other_family_complete_without_warnings(self):
         self.hosted()
+        self.hosted(worker='grok', model='grok-4.6-build')
+        self.hosted(worker='gemini', model='gemini-3.8-flash-high')
         self.audit()
         self.native_capture()
         self.append_native_credit()
         result = self.close()
         self.assertEqual(result['status'], 'completed', result)
-        self.assertEqual(self.family_check(result)['detail']['families'], ['Anthropic', 'OpenAI'])
+        detail = self.family_check(result)['detail']
+        self.assertEqual(detail['families'], ['Anthropic', 'Google', 'OpenAI', 'xAI'])
+        self.assertTrue(detail['preferred_met'])
+        self.assertEqual(detail['warnings'], [])
+
+    def test_runs_started_before_policy_v2_keep_the_two_family_minimum(self):
+        with patch('orchestration_lifecycle.plan', side_effect=legacy_plan):
+            start_run(run=self.run, root=self.root, **self.identity)
+        # Resuming under the current code keeps the run's recorded policy generation.
+        start_run(run=self.run, root=self.root, **self.identity)
+        self.assertEqual(self.read(self.run / 'startup-context.json')['provider_policy'], legacy_plan('astra'))
+        self.hosted()
+        self.hosted(worker='grok', model='grok-4.6-build')
+        self.audit()
+        result = self.close()
+        self.assertEqual(result['status'], 'completed', result)
+        self.assertEqual(self.family_check(result)['detail']['families'], ['Anthropic', 'xAI'])
 
     def test_fabricated_native_anthropic_label_cannot_supply_other_family(self):
         self.audit()

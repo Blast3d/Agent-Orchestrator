@@ -19,14 +19,14 @@ diverse. The lead's provider is included when reporting the actual team mix.
 
 | Task | Starting assignment | What determines success |
 | --- | --- | --- |
-| Overall plan, architecture decisions, integration | Codex lead | Coherent scope, compatible pieces, working final output |
-| Coding and debugging | A ready Claude or Grok coding worker owns a bounded module/patch and tests; Codex integrates and checks | Correct behavior, evidence from relevant tests, reviewable changes |
-| Documentation and annotations | Claude or Grok authors the actual README section, examples, comments or walkthrough | Accurate explanations checked against the final implementation |
+| Overall plan, architecture decisions, integration | The recorded lead (Claude, ASTRA or Sol) | Coherent scope, compatible pieces, working final output |
+| Coding and debugging | A ready non-lead worker (Codex or Claude, Grok, Gemini; take turns by balance) owns a bounded module/patch and tests; the lead integrates and checks | Correct behavior, evidence from relevant tests, reviewable changes |
+| Documentation and annotations | A non-lead worker authors the actual README section, examples, comments or walkthrough | Accurate explanations checked against the final implementation |
 | Story, writing, speaker script | Claude as the initial narrative worker; other creative model when demonstrated useful | Clear audience fit, coherent story, faithful claims, little editorial rework |
 | Visual concepts and alternate design | Available model with strong visual/design performance; Antigravity supplied useful direction in the example | Useful composition, visual hierarchy, renderable specifications; inspect actual render |
 | Source synthesis and project mind map | NotebookLM when approved sources and its formats fit | Grounded structure, source traceability, accurate labels |
 | Broad research and alternative reasoning | Gemini through Antigravity CLI or another capable research worker with source access | Current primary sources, explicit uncertainty, evidence-backed alternatives |
-| Independent code/content review | A capable model distinct from the maker where available | Specific reproducible defects or claim/source mismatches, not generic praise |
+| Independent code/content review | A non-lead family other than the maker's; rotating reviews keeps shares level | Specific reproducible defects or claim/source mismatches, not generic praise |
 | High-volume extraction or short drafts | Suitable local model or a verified free-quota API model | Structured output reliability and acceptable quality on a small sample |
 | Exact-script speech | Piper or another suitable available TTS tool | Complete recorded audio aligned to the reviewed script |
 | Conversational audio interpretation | NotebookLM when requested | Reviewable transcript; unsupported additions corrected or labeled |
@@ -48,15 +48,18 @@ sources or produce requested media when the feature allowance is known. Local Qw
 can extract labels, draft short captions, classify items or summarize small inputs;
 keep complex coding and final correctness decisions with stronger workers.
 
-Codex owns scope, interfaces, source permissions, integration, acceptance and the
-final audit. Native Codex workers remain appropriate for work requiring local
-access unavailable to other routes, targeted independent checks, or concrete
-recovery work. Record the reason if Codex takes over an external maker's artifact.
-Do not rewrite a sound external draft merely to give Codex authorship. Conversely,
+The recorded lead owns scope, interfaces, source permissions, integration,
+acceptance and the final audit. Native lead-family workers remain appropriate for
+work requiring local access unavailable to other routes, targeted independent
+checks, or concrete recovery work; they never fill a non-lead family's share.
+Record the reason if the lead takes over an external maker's artifact. Do not
+rewrite a sound external draft merely to give the lead authorship. Conversely,
 reject an unsound draft and credit only its retained useful contribution.
 
-Do not target equal percentages or add model calls to improve the chart. Track
-accepted work, provider allowance and elapsed time separately. Aggregate original
+Keep accepted worker task counts near-equal across the non-lead families, as
+[provider balance](provider-balance.md) defines, by giving each real work; never
+add filler model calls to improve a chart. Track accepted work, provider
+allowance and elapsed time separately. Aggregate original
 work points before rounding provider totals. More external ownership can spread
 included-plan usage, but repeated briefs, duplicated implementations and long
 reviews can consume more total inference; choose the smallest useful deliverables.

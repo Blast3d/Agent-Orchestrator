@@ -44,16 +44,17 @@ required. Availability across projects does not mean every request needs a team.
 
 ## Choose a useful team
 
-Every orchestration run requires accepted, retained work from at least **two AI
-families** before completion. Aim for **three** when useful authorized assignments
-exist. Count the lead only when its retained work has verified evidence. Use
-OpenAI/Codex, Anthropic/Claude, xAI/Grok and Google/Gemini through Antigravity as
-appropriate. Before choosing native subagents, plan a useful assignment for a
-different family. Several OpenAI agents still count as one family; Copilot's
-family comes from its actual model, not the GitHub brand. JEV routing advice is
-not worker participation. Apply [provider balance](references/provider-balance.md)
-for evidence, model tiers and measurement. The same requirement applies when
-Claude leads.
+Every orchestration run requires accepted work from **every non-lead family**:
+Grok (xAI), Gemini (Google, on its best verified Antigravity tier) and whichever
+of Codex (OpenAI) or Claude (Anthropic) is not leading. Those families share the
+accepted worker tasks **near-equally**; lead-family work is optional and never
+fills their share. Use `orchestrator.py balance --run RUN` to see counts and the
+next worker, or `run auto` to dispatch to the least-used eligible family (Gemini
+on ties). Plan cross-family assignments before same-family native subagents.
+Several OpenAI agents still count as one family; Copilot's family comes from its
+actual model, not the GitHub brand. JEV routing advice is not worker
+participation. Apply [provider balance](references/provider-balance.md) for the
+balance rule, evidence and measurement.
 
 Start from the user's outcome, audience, existing decisions, deliverable formats,
 and accepted budget. Infer these from the conversation where possible; ask only
@@ -96,15 +97,16 @@ AGY supplied-text dispatch is verified on this installation as of September 8,
 2026. Use the maintained dispatcher: it checks a pinned executable/handler,
 discovers an exact per-job deny hook, disables credit overage, reserves quota,
 and validates the AGY stream. Plan mode alone does not disable tools. A changed
-binary, handler, or effective configuration holds work for revalidation. This
-route returns text/code for Codex to review and apply; it does not directly edit
-project files. See provider-routing.md for the scope and legacy bridge reload.
+binary, handler, or effective configuration holds work for revalidation, and a
+new model tier needs its own denial regression before the proof lists it. Briefs
+may use the full Windows command line (about 30 KB) and the agent deadline follows
+task size. This route returns text/code for the lead to review and apply; it does
+not directly edit project files. See provider-routing.md for the scope.
 
-Choose the smallest useful team that meets the two-family requirement. A small
-edit performed as a run can use one lead plus a later reviewer from another
-family; a self-contained question need not start a run. Add a third family for
-concrete research, implementation or review work when useful. Prefer tools the
-user named and working local or included-plan access. Treat Cursor as optional.
+Choose the smallest team that gives every non-lead family real work. A small
+edit performed as a run can use the lead plus one review from each non-lead
+family; a self-contained question need not start a run. Prefer tools the user
+named and working local or included-plan access. Treat Cursor as optional.
 Do not create filler jobs or credit discarded work to meet a count. The user
 will acquire additional models as needed; discover new arrivals without treating
 the roster as an install queue. If no authorized alternate is usable, record the
@@ -145,10 +147,12 @@ checkpoint or handoff changes the generation, reload startup for that same run.
 Do not silently switch to the newest run. See `docs/startup-and-closeout.md`.
 
 The operating guide is a maintained required input, separate from task-specific
-memory. The dispatcher includes it in every new request, including `--no-memory`
-tasks, and records the request hash. Run-linked requests require matching startup
-identity, guide hash and recorded `provider_policy` with minimum two and preferred
-three families. This policy remains required with `--no-memory`. Use
+memory. Startup gives the lead the coordinator guide; the dispatcher gives every new
+worker request the short worker guide instead, including `--no-memory` tasks, and
+records both hashes. Run-linked requests require matching startup identity, guide
+hashes and the recorded `provider_policy` (schema 2: every non-lead family, minimum
+three and preferred four; earlier runs keep schema 1). This policy remains required
+with `--no-memory`. Use
 `--run EXACT_RUN` when the output is not inside the run. Missing, stale or weakened
 startup holds new execution before inference; reusing an existing assignment
 preserves its original context and result.
@@ -371,8 +375,9 @@ Use the maintained `orchestrator.py closeout --run EXACT_RUN --owner OWNER
 --session SESSION --generation N` before final delivery. It verifies current
 ownership, linked task reviews and capture receipts, native capture when
 required, and the standard contribution audit/map. Its `provider_family_coverage`
-check requires positive accepted work from at least two actual families and
-encourages three. Hosted credit must match canonical task/model evidence; native
+check requires positive accepted work from every non-lead family with near-equal
+task counts; runs started earlier keep their recorded two-family minimum. Hosted
+credit must match canonical task/model evidence; native
 lead credit requires a genuine reviewed capture from this run. Arbitrary foreign
 native provider labels, JEV advice and synthetic checks do not satisfy coverage.
 Resolve missing evidence instead of setting the run complete manually. Native

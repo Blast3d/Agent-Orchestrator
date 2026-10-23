@@ -12,7 +12,7 @@ from brain_store import BrainStore
 from brain_recall_budget import resolve
 from memory_usage import recall_plan, contract_fields
 from orchestration_lifecycle import start_run
-from memory_delivery import fit, heading
+from memory_delivery import BYTE_LIMITS, fit, heading
 from storage_budget import StorageLimitError
 
 
@@ -88,7 +88,7 @@ class RecallBudgetTests(unittest.TestCase):
         found['recall_incomplete'] = True
         found['source_validation']['excluded_memories'] = 1
         base = 'Operating guide and exact assigned brief.\n' * 80
-        for worker,maximum in [('gemini',12000),('vscode-copilot',32768)]:
+        for worker,maximum in BYTE_LIMITS.items():
             result = fit(found,worker=worker,base_prompt=base,prefix='Worker: ')
             supplied = 'Worker: '+base+heading('general')+result['context']
             self.assertLessEqual(len(supplied.encode('utf-8')),maximum)
@@ -97,7 +97,7 @@ class RecallBudgetTests(unittest.TestCase):
             self.assertIn('Unverifiable task-backed memories were excluded',result['context'])
             self.assertEqual(result['delivery']['delivered_count'],len(result['results']))
         with self.assertRaises(ValueError):
-            fit(found,worker='gemini',base_prompt='x'*12001)
+            fit(found,worker='gemini',base_prompt='x'*(BYTE_LIMITS['gemini']+1))
 
     def test_trace_cleanup_failure_preserves_recall_and_reports_reservation_problem(self):
         memory = self.memory(1)

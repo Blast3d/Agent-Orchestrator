@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import uuid
 
-from brain_store import BrainStore, RELATIONS, digest, now, safe_path, scope, text
+from brain_store import BrainStore, RELATIONS, candidate_fields, digest, now, safe_path, scope, text
 from storage_budget import StorageLimitError
 from task_store import TaskStore, timestamp, write_json
 from usage_guard import file_lock
@@ -55,6 +55,51 @@ def validate_bundle(bundle, project):
     return rows, links
 
 
+def validate_capture_fields(bundle, project, *, reviewed_at=None):
+    """Run the same candidate field checks before creating a canonical import."""
+    rows, _ = validate_bundle(bundle, project)
+    reviewed_at = reviewed_at or now()
+    fields = {}
+    for row in rows:
+        # Match the eventual canonical source's size without inventing a task.
+        payload = dict(row, project_id=project, user_id='local',
+                       source={'type': 'task', 'job_id': '0' * 32, 'review_sha256': '0' * 64})
+        if payload.get('valid_from') is None:
+            payload['valid_from'] = reviewed_at
+        try:
+            fields[row['key']] = candidate_fields(payload)
+        except ValueError as exc:
+            raise ValueError('Memory ' + row['key'] + ': ' + str(exc)) from None
+    return fields
+
+
+def prevalidate_capture(root, bundle, project):
+    moment = now()
+    fields = validate_capture_fields(bundle, project, reviewed_at=moment)
+    for link in bundle.get('relations', []):
+        for endpoint in (link['from'], link['to']):
+            if endpoint in fields:
+                item = fields[endpoint]
+                if item['valid_from'] > moment or (item['valid_to'] and item['valid_to'] <= moment):
+                    raise ValueError('Relationships require currently valid approved memories')
+    external = {endpoint for link in bundle.get('relations', [])
+                for endpoint in (link['from'], link['to']) if endpoint not in fields}
+    if external:
+        brain = BrainStore(root, read_only=True)
+        with file_lock(brain.lock), brain._connection() as con:
+            for identifier in external:
+                row = brain._row(con, identifier)
+                if row['project_id'] != project or row['user_id'] != 'local':
+                    raise ValueError('Relationships cannot cross project or user scopes')
+                if not brain._current(row, now(), {}):
+                    raise ValueError('Relationships require currently valid approved memories')
+
+
+def capture_source_hash(result):
+    return digest({key: result.get(key) for key in
+                   ('job_id', 'assignment_project_id', 'response', 'review', 'finalized_at')})
+
+
 def _insert(brain, result, bundle):
     project = scope(result['assignment_project_id'])
     rows, links = validate_bundle(bundle, project)
@@ -65,7 +110,8 @@ def _insert(brain, result, bundle):
     fields = []
     for row in rows:
         payload = dict(row, project_id=project, user_id='local', source=source)
-        payload.setdefault('valid_from', review['reviewed_at'])
+        if payload.get('valid_from') is None:
+            payload['valid_from'] = review['reviewed_at']
         fields.append((row['key'], brain.candidate(payload)))
     ids, relations, explanations = {}, [], []
     with brain._write() as con:
@@ -127,6 +173,8 @@ def record_accepted_bundle(task_store, job_id, bundle):
         raise ValueError('Reviewed capture requires the canonical task store')
     receipt_path = directory / 'memory-outcome.json'
     with file_lock(directory / 'memory.lock'):
+        if safe_path(root, directory / 'capture-retirement.json').exists():
+            raise ValueError('This invalid native capture was retired; preserve its original receipt')
         result = read_json(directory / 'result.json', root, 8 * 1024**2)
         if not (isinstance(result,dict) and result.get('job_id') == job_id and result.get('status') == result.get('review_status') == 'accepted'
                 and result.get('execution_status') == 'succeeded' and result.get('finalized_at')):
@@ -134,7 +182,7 @@ def record_accepted_bundle(task_store, job_id, bundle):
         project = scope(result.get('assignment_project_id'))
         validate_bundle(bundle, project)
         request_hash = digest(bundle)
-        source_hash = digest({k:result.get(k) for k in ('job_id','assignment_project_id','response','review','finalized_at')})
+        source_hash = capture_source_hash(result)
         old = read_json(receipt_path, root) if receipt_path.exists() else None
         if receipt_path.exists():
             if (not isinstance(old,dict) or old.get('schema_version') != 1
@@ -251,12 +299,14 @@ def capture_run(root, run_id, bundle, *, owner, session, generation, reviewer, n
             proof.append({'path':relative,'sha256':hashlib.sha256(raw).hexdigest()})
         identity = digest({'bundle':bundle,'proof':proof,'reviewer':reviewer,'note':note})
         journal = safe_path(run, run / 'review' / ('memory-capture-' + capture_id + '.json'))
-        store = TaskStore(root / 'runs/tasks')
         old = read_json(journal,run) if journal.exists() else None
         if journal.exists() and (not isinstance(old,dict) or old.get('request_sha256') != identity
                 or old.get('run_directory',str(run)) != str(run)
                 or old.get('status') not in ('importing','remembered','error','writing')):
             raise ValueError('This closeout changed or its journal is invalid; preserve its evidence')
+        if old is None or old.get('status') == 'importing':
+            prevalidate_capture(root, bundle, project)
+        store = TaskStore(root / 'runs/tasks')
         if journal.exists():
             job_id = old.get('job_id')
             if not isinstance(job_id,str) or not re.fullmatch(r'[a-f0-9]{32}',job_id):
@@ -299,6 +349,7 @@ def capture_run(root, run_id, bundle, *, owner, session, generation, reviewer, n
                               artifact_origin='reviewed-run-closeout')
                 store.save(job_id,result)
         if result.get('review_status') == 'pending':
+            prevalidate_capture(root, bundle, project)
             result = store.review(job_id,'accepted',reviewer,note,curated_payload=bundle)
             outcome = result.get('memory_outcome',{})
         else:

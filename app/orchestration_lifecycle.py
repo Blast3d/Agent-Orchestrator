@@ -1,6 +1,6 @@
 """Load shared startup context and verify evidence before completing a run."""
 import argparse
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 import hashlib
 import itertools
 import json
@@ -15,16 +15,28 @@ from contribution_tasks import task_ledger
 from contributions import _atomic_text, build_report
 from coordinator_handoff import Coordinator
 from init_run import create_run
-from memory_bundle import read_json, validate_bundle
+from memory_bundle import capture_source_hash, read_json, validate_bundle
 from paths import ROOT
 from project_visuals import ProjectLibrary, project_from_report
-from provider_policy import plan, require_coverage
+from provider_policy import legacy_plan, plan, require_coverage
 from task_store import timestamp, write_json
 from usage_guard import file_lock
 
 JOB = re.compile(r'[a-f0-9]{32}')
 MAX_SCAN = 2000
 MAX_SCAN_BYTES = 16 * 1024**2
+QUERY_ERROR = 'Recall query must contain 1 to 500 characters; narrow --query for a long objective'
+
+
+def _valid_query(value):
+    return isinstance(value, str) and bool(value.strip()) and len(value) <= 500
+
+
+def _recorded_policy(run):
+    try:
+        return _object(run / 'startup-context.json', run, 64 * 1024).get('provider_policy')
+    except (OSError, ValueError, TypeError):
+        return None
 
 
 def load_operating_context():
@@ -148,6 +160,9 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
         raise ValueError('New run identity is established by create_run')
     if dry_run:
         return resume_preflight(run=run, owner=owner, session=session, generation=generation)
+    if run is None and not no_memory and not _valid_query(query if query is not None else objective):
+        # Refuse before creating anything, so a held start leaves no orphan run.
+        raise ValueError(QUERY_ERROR)
     operating = (context_loader or load_operating_context)()
     from brain_recall_budget import resolve
     budget = resolve(memory_depth)
@@ -164,10 +179,12 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
         manifest = _manifest(coordinator)
         project_id = scope(manifest.get('project_id') or manifest['run_id'])
         search = query if query is not None else manifest.get('objective')
-        if not isinstance(search, str) or not search.strip() or len(search) > 500:
-            raise ValueError('Recall query must contain 1 to 500 characters; narrow --query for a long objective')
+        # An omitted recall needs no query; only a real search is bounded.
+        if not no_memory and not _valid_query(search):
+            raise ValueError(QUERY_ERROR)
         if no_memory:
-            recalled = {'query': search, 'project_id': project_id, 'user_id': 'local',
+            recalled = {'query': search if _valid_query(search) else None,
+                        'project_id': project_id, 'user_id': 'local',
                         'results': [], 'context': '', 'context_chars': 0,
                         'status': 'not_requested', 'reason': 'explicit_no_memory'}
         else:
@@ -175,7 +192,11 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
         calls = 0 if no_memory else (recalled.get('retrieval') or {}).get('provider_calls')
         calls = calls if type(calls) is int and calls >= 0 else None
         selection = _lead_summary(state['owner'])
-        provider_policy = plan(state['owner'])
+        # A run keeps its policy generation: one started under the two-family rule
+        # resumes under it, re-derived for the current lead after any handoff.
+        recorded = None if created else _recorded_policy(coordinator.run)
+        provider_policy = (legacy_plan(state['owner']) if isinstance(recorded, dict)
+                           and recorded.get('schema_version') == 1 else plan(state['owner']))
         policy_text = json.dumps(provider_policy, sort_keys=True)
         relay = _relay_inbox(root, manifest['run_id'])
         relay_text = _relay_section(relay)
@@ -198,8 +219,10 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
             rendered = ('# Orchestration startup packet\n\n' + packet['evidence_limit'] + '\n\n'
                         + selection['line'] + '\n\n'
                         + '## Provider family policy\n\n'
-                        + 'Require at least two contributing AI families; prefer three. Assign a bounded task '
-                        + 'to an authorized worker from another family. JEV advice does not count as worker participation.\n\n'
+                        + 'Every non-lead family (' + ', '.join(provider_policy['cross_family_workers'])
+                        + ') must deliver accepted work, and they share accepted worker tasks near-equally. '
+                        + 'Use `orchestrator.py balance --run RUN` or `run auto` to pick the next worker. '
+                        + 'Lead-family work is optional. JEV advice does not count as worker participation.\n\n'
                         + '```json\n' + policy_text + '\n```\n\n'
                         + operating['context'] + relay_text + '\n\n## Project recall\n\n'
                         + (recalled['context'] or empty_reason) + '\n')
@@ -269,7 +292,7 @@ def _discover(root, run, manifest):
     return sorted(linked)
 
 
-def _receipt(root, result, project, brain):
+def _receipt(root, result, project, brain, *, brain_lock_held=False):
     job = result['job_id']
     if result.get('assignment_project_id') != project:
         raise ValueError('Accepted task belongs to a different project')
@@ -295,7 +318,8 @@ def _receipt(root, result, project, brain):
     fields = ('job_id', 'assignment_project_id', 'response', 'finalized_at', 'review')
     if mode != 'curated_bundle':
         fields += ('task', 'category', 'assignment_id')
-    source_hash = digest({key: result.get(key) for key in fields})
+    source_hash = (capture_source_hash(result) if mode == 'curated_bundle'
+                   else digest({key: result.get(key) for key in fields}))
     if performance_hash:
         source_hash = digest([source_hash,performance_hash])
     if receipt.get('source_sha256') != source_hash:
@@ -311,7 +335,7 @@ def _receipt(root, result, project, brain):
     states = []
     # Use maintained Brain source proofs while retaining deleted/missing rows as
     # historical receipts, as record_accepted_bundle does. Never recapture here.
-    with file_lock(brain.lock), brain._connection() as con:
+    with (nullcontext() if brain_lock_held else file_lock(brain.lock)), brain._connection() as con:
         for identifier in identifiers:
             row = con.execute('SELECT * FROM memories WHERE id=?', (identifier,)).fetchone()
             if row is None:
@@ -417,6 +441,7 @@ def closeout_run(run, *, owner, session, generation, root=ROOT, final_report=Non
         check('native_task_status', native_status)
         jobs = check('task_discovery', lambda: _discover(root, coordinator.run, manifest))
         native = []
+        retired = {}
         hosted = {}
         source_hashes = {}
         for job in jobs or []:
@@ -428,6 +453,13 @@ def closeout_run(run, *, owner, session, generation, root=ROOT, final_report=Non
                 if canonical.get('job_id') != job or not canonical.get('finalized_at'):
                     raise ValueError('Canonical task identity or finalization is missing')
                 source_hashes[job] = digest(canonical)
+                from capture_retirement import verify_retirement
+                disposition_path = directory / 'capture-retirement.json'
+                if disposition_path.exists():
+                    disposition = verify_retirement(root, coordinator.run, job, project,
+                                                    BrainStore(root, read_only=True))
+                    retired[job] = disposition
+                    return disposition
                 if canonical.get('status') == canonical.get('review_status') == 'rejected':
                     return {'decision': 'rejected', 'memory_required': False}
                 if canonical.get('status') == canonical.get('execution_status') == 'failed':
@@ -454,6 +486,13 @@ def closeout_run(run, *, owner, session, generation, root=ROOT, final_report=Non
             check('task:' + job, validate_task)
         native_required = manifest.get('native_work') is True or any(
             isinstance(task, dict) and task.get('agent') and not task.get('job_id') for task in manifest['tasks'])
+        def retirement_replacements():
+            for job, disposition in retired.items():
+                if disposition['replacement_job_id'] not in native:
+                    raise ValueError('Retired capture needs a discovered verified native replacement: ' + job)
+            return {'retired_jobs': sorted(retired), 'contribution_credit': False}
+        if retired:
+            check('retirement_replacements', retirement_replacements)
         audit_path = coordinator.run / 'contribution-audit.json'
         ledger_path = coordinator.run / 'contributions-ledger.json'
         def contribution():
@@ -517,7 +556,9 @@ def closeout_run(run, *, owner, session, generation, root=ROOT, final_report=Non
             ledger = _object(ledger_path, coordinator.run, 2 * 1024**2)
             if digest(ledger) != audit['ledger_sha256']:
                 raise ValueError('Contribution evidence changed before family coverage verification')
-            return require_coverage(owner, ledger, hosted, native_capture=bool(native))
+            # A run keeps the policy recorded at its startup; legacy runs stay on v1.
+            policy = (startup_proof or {}).get('provider_policy')
+            return require_coverage(owner, ledger, hosted, native_capture=bool(native), policy=policy)
         check('provider_family_coverage', family_coverage)
         def still_current():
             coordinator.require_owner(coordinator.read(), owner, session, generation)
@@ -529,6 +570,11 @@ def closeout_run(run, *, owner, session, generation, root=ROOT, final_report=Non
                 current = _object(root / 'runs/tasks' / job / 'result.json', root, MAX_CANONICAL_BYTES)
                 if digest(current) != expected:
                     raise ValueError('Task changed during closeout: ' + job)
+            for job, expected in retired.items():
+                from capture_retirement import verify_retirement
+                if verify_retirement(root, coordinator.run, job, project,
+                                     BrainStore(root, read_only=True)) != expected:
+                    raise ValueError('Retirement changed during closeout: ' + job)
             if audit and (digest(_object(ledger_path, coordinator.run, 2 * 1024**2)) != audit['ledger_sha256']
                           or digest(_object(audit_path, coordinator.run, 2 * 1024**2)) != audit['report_sha256']):
                 raise ValueError('Contribution evidence changed during closeout')

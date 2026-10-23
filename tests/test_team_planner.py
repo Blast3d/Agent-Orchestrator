@@ -35,12 +35,22 @@ def record(**updates):
 
 class TeamPlanningTests(unittest.TestCase):
     def test_simple_run_requires_cross_family_review_without_launching_it(self):
-        plan = planner.recommend('simple', 9, 4, {'capacity': 1, 'status': 'ready'})
+        plan = planner.recommend('simple', 9, 4, {'capacity': 3, 'status': 'ready'})
         self.assertEqual(plan['status'], 'ready')
-        self.assertEqual(plan['total_roles_including_lead'], 2)
+        # Each of the three non-lead families reviews the lead's change.
+        self.assertEqual(plan['reviewer_assignments'], 3)
+        self.assertEqual(plan['total_roles_including_lead'], 4)
         self.assertEqual(plan['first_wave_workers'], 0)
-        self.assertEqual(plan['family_policy']['minimum_families'], 2)
-        self.assertEqual(plan['family_policy']['preferred_families'], 3)
+        self.assertEqual(plan['family_policy']['minimum_families'], 3)
+        self.assertEqual(plan['family_policy']['preferred_families'], 4)
+        self.assertIsNone(plan['worker_allocation'])
+
+    def test_allocation_is_near_equal_across_non_lead_families(self):
+        claude_led = planner.recommend('audit', 6, 4, {'capacity': 4, 'status': 'ready'}, owner='fable')
+        self.assertEqual(claude_led['worker_allocation'], {'gemini': 3, 'grok': 3, 'codex': 2})
+        codex_led = planner.recommend('debug', 1, 4, {'capacity': 4, 'status': 'ready'}, owner='astra')
+        self.assertEqual(codex_led['worker_allocation'], {'gemini': 1, 'grok': 1, 'claude': 1})
+        self.assertEqual(planner.allocate(4, ['codex', 'grok', 'gemini']), {'gemini': 2, 'grok': 1, 'codex': 1})
 
     def test_large_audit_uses_waves_and_counts_reviewers_separately(self):
         plan = planner.recommend('audit', 6, 4, {'capacity': 4, 'status': 'ready'})
@@ -56,7 +66,9 @@ class TeamPlanningTests(unittest.TestCase):
         self.assertEqual(plan['producer_assignments'], 1)
         self.assertEqual(plan['first_wave_workers'], 1)
         self.assertEqual(plan['planned_peak_simultaneous_workers'], 1)
-        self.assertEqual(plan['planned_waves'], 2)
+        # One maker plus two reviewers keeps all three non-lead families involved.
+        self.assertEqual(plan['reviewer_assignments'], 2)
+        self.assertEqual(plan['planned_waves'], 3)
 
     def test_partial_and_unknown_quota_are_not_silent_permission(self):
         plan = planner.recommend('research', 4, 4, {'capacity': 2, 'status': 'ready'})

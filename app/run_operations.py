@@ -13,6 +13,7 @@ from coordinator_handoff import Coordinator
 from memory_bundle import validate_bundle
 from provider_policy import coverage
 from task_store import TaskStore, write_json
+from team_balance import recorded_policy
 from usage_guard import file_lock
 
 
@@ -127,7 +128,8 @@ class RunOperations:
                         hosted[job] = {'actor':actor, 'event':events[0], 'synthetic':row.get('synthetic_input') is True or row.get('count_as_build_worker') is False}
             except (OSError, ValueError, KeyError, TypeError) as error:
                 notices.append({'job_id':job, 'reason':str(error) if isinstance(error,ValueError) else type(error).__name__})
-        result = coverage(state['owner'], ledger, hosted, native_capture=native)
+        result = coverage(state['owner'], ledger, hosted, native_capture=native,
+                          policy=recorded_policy(run, state['owner']))
         return dict(result, notices=notices, provider_calls=0, preview_only=True,
                     note='Canonical accepted work and allocation evidence only. Full closeout separately checks all reviews, captures, source proofs and audits.')
 

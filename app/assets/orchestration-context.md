@@ -13,20 +13,27 @@ session, and generation. Keep the stable memory project separate from the run ID
 Read the project's current instructions and check relevant memories against their
 sources. Empty recall is valid; a failed mandatory guide load stops new dispatch.
 
-Workers receive this guide even when project recall is explicitly disabled.
-Only include project information authorized for that worker and task. Never send
+Workers receive the compact worker guide (`app/assets/worker-guide.md`) in every
+request, even when project recall is explicitly disabled; this coordinator guide
+stays with the lead. Only include project information authorized for that worker
+and task. Supply the source a worker must judge: anything it was not given is
+unknown to it, not missing. Never send
 the entire Brain or another project's records to broaden context. A context hash
 records prepared or requested input; it cannot prove a model read or obeyed it.
 
 ## Coordinator duties
 
-Every run needs accepted, retained work from at least two AI families before
-completion; prefer three when useful authorized scopes exist. Plan a bounded
-assignment for another family before adding same-family native workers. OpenAI,
-Anthropic, xAI and Google are families; Copilot counts by its actual model. JEV
-advice is not worker participation. A small edit run can use the lead plus a later
-cross-family review. Do not create filler jobs or fabricated credit. If no
-authorized alternate is usable, record the blocker and keep the run held.
+Every run needs accepted work from every non-lead family: Grok (xAI), Gemini
+(Google, best verified tier) and whichever of Codex (OpenAI) or Claude (Anthropic)
+is not leading. Those three share accepted worker tasks near-equally: the spread
+between the most and least used may not exceed max(1, ceil(0.15 x highest count)).
+Lead-family work is optional. Pick the next worker with `orchestrator.py balance
+--run RUN` or dispatch `run auto`, which chooses the least-used eligible family
+and Gemini on ties. Plan cross-family assignments before same-family native
+workers. Copilot counts by its actual model; JEV advice is not participation. A
+small edit run can use the lead plus one review from each non-lead family. Do not
+create filler jobs or fabricated credit. If an authorized family is unusable,
+record the blocker and keep the run held.
 
 Startup records this provider policy and run-linked dispatch verifies it, even
 with project recall disabled. This requirement grants no provider access, content
@@ -40,10 +47,11 @@ still apply. Do not repeat an uncertain task as though it never ran.
 Use the maintained dispatcher and stable project/assignment IDs. Reusing a saved
 assignment returns its original result without a new inference call. New work or
 a deliberate revision needs its own assignment identity. Link tasks to their run.
-Checkpoint progress before delegation and after review; reload startup context
-after the coordinator generation changes.
+Checkpoint progress before delegation and after review; after the coordinator
+generation changes, reload with `start --run RUN ... --no-memory`, which needs no
+query and makes no provider calls. Dispatch independent assignments in parallel.
 
-Native workers bypass the dispatcher. Give them this operating guide and the
+Native workers bypass the dispatcher. Give them the worker guide and the
 relevant approved recall in their actual assignment, with the exact run, role,
 input scope, deliverable, and acceptance checks. Record the assignment and its
 context; a packet saved on disk alone does not prove it was supplied to a worker.
@@ -77,8 +85,9 @@ Keep missing measurements unknown and do not infer efficiency from one sample.
 Complete the contribution ledger, generate the standard audit and project map,
 then run `orchestrator.py closeout`. Resolve missing receipts, pending work,
 unattributed accepted work, or invalid reports before claiming completion.
-The `provider_family_coverage` check requires positive accepted work from at least
-two actual families and encourages three. Hosted credit must match canonical
+The `provider_family_coverage` check requires positive accepted work from every
+non-lead family with near-equal task counts; runs started before this rule keep
+their recorded two-family minimum. Hosted credit must match canonical
 successful task/model evidence. Native lead credit requires a genuine reviewed
 capture from this exact run; arbitrary foreign native labels do not count.
 Synthetic checks, JEV advice and imported memories do not satisfy coverage.

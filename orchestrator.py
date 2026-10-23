@@ -20,15 +20,18 @@ def main():
                'summary': ('task_summary_repair.py', None), 'lead': ('coordinator_handoff.py', None),
                'brain': ('brain_cli.py', None), 'jev': ('jev_cli.py', None), 'watch': ('watch_coordinator.py', None),
                'skills': ('skill_cli.py', None),
-               'team': ('team_planner.py', None), 'remember': ('automatic_memory.py', None),
+               'team': ('team_planner.py', None), 'balance': ('team_balance.py', None),
+               'remember': ('automatic_memory.py', None),
                'vscode-bots': ('vscode_bots.py', None),
                'viewer': ('start_coordinator_viewer.py', None), 'map': ('system_map.py', None),
                'voice': ('voice_gateway.py', None), 'relay': ('relay_bridge.py', None),
                'notifications': ('completion_notifications.py', None)}
     if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
         print('Agent Orchestrator: the lead switch picks Claude (Opus 5.5), ASTRA or Sol (see lead selected); the runner-up continues through an explicit handoff.\n'
-              'Commands: automatic, start, closeout, brain, jev, skills, lead, viewer, voice, relay, notifications, watch, team, remember, map, doctor, status, refresh, dashboard, inbox, summary, visuals, brief-check, run, review, contributions, tasks, monitor, stop-monitor, local, inventory, vscode-bots\n'
+              'Commands: automatic, start, closeout, brain, jev, skills, lead, viewer, voice, relay, notifications, watch, team, balance, remember, map, doctor, status, refresh, dashboard, inbox, summary, visuals, brief-check, run, review, contributions, tasks, monitor, stop-monitor, local, inventory, vscode-bots\n'
               'Examples:\n  python orchestrator.py doctor\n  python orchestrator.py refresh --provider claude\n'
+              '  python orchestrator.py balance --run RUN_DIR\n'
+              '  python orchestrator.py run auto --run RUN_DIR --prompt-file brief.txt --output answer.json --task review\n'
               '  python orchestrator.py run claude --prompt-file brief.txt --output answer.json --task review --size small\n'
               '  python orchestrator.py run codex --prompt-file brief.txt --output answer.json --task review --codex-model sol\n'
               '  python orchestrator.py review JOB_ID --decision accepted --reviewer Codex --note "Verified against source and tests."')

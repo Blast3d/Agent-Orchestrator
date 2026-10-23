@@ -16,12 +16,12 @@ import statistics
 
 from execution_limits import timeout_for_task
 from paths import ROOT
-from provider_policy import MINIMUM_FAMILIES, PREFERRED_FAMILIES
+from provider_policy import MINIMUM_FAMILIES, PREFERRED_FAMILIES, plan as family_plan
 from usage_guard import Guard, validate_policy
 
 
 TASK_TYPES = {
-    'simple': (0, 1, 'The lead implements the change, then another AI family reviews it.'),
+    'simple': (0, 1, 'The lead implements the change, then each non-lead AI family reviews it.'),
     'debug': (1, 1, 'One diagnostic worker, then an independent check of the fix.'),
     'implementation': (2, 1, 'Separate file ownership for makers, then independent review.'),
     'research': (4, 1, 'Separate questions or sources, then a synthesis and evidence review.'),
@@ -262,13 +262,23 @@ def quota_capacity(policy, data, providers=PROVIDERS, size='small', cap=4):
         return unknown
 
 
-def recommend(task_type, independent_workstreams=1, cap=4, quota=None):
+def allocate(total, workers):
+    """Split assignments near-equally; the starved-first rotation takes any remainder."""
+    order = [worker for worker in ('gemini', 'grok', 'codex', 'claude') if worker in workers]
+    base, extra = divmod(total, len(order))
+    return {worker: base + (index < extra) for index, worker in enumerate(order)}
+
+
+def recommend(task_type, independent_workstreams=1, cap=4, quota=None, owner=None):
     if task_type not in TASK_TYPES:
         raise ValueError('Unknown task type')
     _integer(independent_workstreams, 'independent workstreams', 1, 1000)
     _integer(cap, 'cap', 1, 10)
     producers, reviewers, explanation = TASK_TYPES[task_type]
     producers = min(producers, independent_workstreams)
+    workers = family_plan(owner)['cross_family_workers'] if owner is not None else None
+    # Every non-lead family needs accepted work, so plan at least one assignment each.
+    reviewers = max(reviewers, (len(workers) if workers else MINIMUM_FAMILIES) - producers)
     peak = min(cap, max(producers, reviewers))
     capacity = 0 if quota is None else _integer(quota.get('capacity', 0), 'quota capacity', 0, 10)
     admitted = min(peak, capacity)
@@ -276,7 +286,9 @@ def recommend(task_type, independent_workstreams=1, cap=4, quota=None):
     return {
         'task_type': task_type, 'advisory_only': True, 'status': status,
         'family_policy': {'minimum_families': MINIMUM_FAMILIES,
-                          'preferred_families': PREFERRED_FAMILIES},
+                          'preferred_families': PREFERRED_FAMILIES,
+                          'rule': 'Every non-lead family delivers accepted work; their task counts stay near-equal.'},
+        'worker_allocation': allocate(producers + reviewers, workers) if workers else None,
         'lead_count': 1, 'independent_workstreams': independent_workstreams,
         'producer_assignments': producers, 'reviewer_assignments': reviewers,
         'total_worker_assignments': producers + reviewers,
@@ -289,16 +301,17 @@ def recommend(task_type, independent_workstreams=1, cap=4, quota=None):
         'explanation': explanation,
         'review_order': 'Review follows completed work; reviewers are included in worker totals, not added to the concurrent cap.',
         'next_step': ('Check admission reasons and choose an authorized worker from another AI family.' if not admitted else
-                      'Assign bounded scopes across at least two AI families; prefer three. Each dispatch checks quota and authorization.'),
+                      'Give Grok, Gemini and the non-lead Codex or Claude near-equal bounded scopes; '
+                      '`run auto` picks the least-used eligible one. Each dispatch checks quota and authorization.'),
     }
 
 
 def build_report(root=ROOT, *, task_type='implementation', independent_workstreams=1,
-                 cap=4, size='small', providers=PROVIDERS, history_limit=DEFAULT_HISTORY_LIMIT):
+                 cap=4, size='small', providers=PROVIDERS, history_limit=DEFAULT_HISTORY_LIMIT, owner=None):
     root = Path(root)
     timeout_for_task(size)
     # Validate before any history work, including the simple no-worker route.
-    recommend(task_type, independent_workstreams, cap)
+    recommend(task_type, independent_workstreams, cap, owner=owner)
     try:
         policy, _ = _json(root / 'runtime/policy.json', 128 * 1024)
         state, _ = _json(root / 'runtime/usage.json', 8 * 1024 * 1024)
@@ -306,7 +319,7 @@ def build_report(root=ROOT, *, task_type='implementation', independent_workstrea
         policy = state = None
     quota = quota_capacity(policy, state, providers, size, cap)
     return {'schema_version': 1,
-            'plan': recommend(task_type, independent_workstreams, cap, quota),
+            'plan': recommend(task_type, independent_workstreams, cap, quota, owner=owner),
             'quota': quota, 'task_size': size, 'execution_deadline_seconds': timeout_for_task(size),
             'history': timing_history(root / 'runs/tasks', history_limit),
             'limits': [
@@ -325,6 +338,9 @@ def render(report):
              f"Total roles: {plan['total_roles_including_lead']} | Peak simultaneous workers: {plan['planned_peak_simultaneous_workers']} | Cached quota permits up to: {plan['quota_limited_peak_workers']}",
              f"Quota evidence: {plan['quota_state']} (unknown is not a measured zero allowance)",
              plan['explanation'], plan['review_order'], plan['next_step'], '',
+             *([('Near-equal worker allocation: '
+                 + ', '.join(f'{worker} {count}' for worker, count in plan['worker_allocation'].items())), '']
+               if plan.get('worker_allocation') else []),
              'Historical successful task medians (seconds; unknown means unmeasured):',
              'Provider     Samples   Preparation   Execution   Postprocessing']
     for provider, row in report['history']['by_provider'].items():
@@ -344,12 +360,16 @@ def main(argv=None):
     parser.add_argument('--size', choices=('tiny', 'small', 'medium', 'large'), default='small')
     parser.add_argument('--provider', choices=PROVIDERS, action='append', help='Repeat to limit hosted quota pools considered')
     parser.add_argument('--history-limit', type=int, default=DEFAULT_HISTORY_LIMIT, help='Most recently modified task indexes, 0..1000')
+    parser.add_argument('--lead', choices=('claude', 'astra', 'sol'),
+                        help='Lead whose non-lead families get the allocation; defaults to the lead switch')
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
+    from lead_selection import describe
+    owner = {'claude': 'fable', 'astra': 'astra', 'sol': 'sol'}[args.lead] if args.lead else describe()['owner']
     try:
         report = build_report(task_type=args.task_type, independent_workstreams=args.independent_workstreams,
                               cap=args.cap, size=args.size, providers=args.provider or PROVIDERS,
-                              history_limit=args.history_limit)
+                              history_limit=args.history_limit, owner=owner)
     except ValueError as exc:
         parser.error(str(exc))
     print(json.dumps(report, indent=2) if args.json else render(report))

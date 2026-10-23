@@ -125,6 +125,15 @@ class HandoffTests(unittest.TestCase):
         plan = json.loads(next((self.root / 'handoffs').glob('*.json')).read_text())
         self.assertEqual(plan['contract']['claude_model'], 'opus')
 
+    def test_quota_limited_primary_hands_off_to_gemini(self):
+        self.args.worker = 'grok'
+        self.args.fallback_worker = ['gemini']
+        dispatcher = RecordedDispatcher({'grok': 'low', 'gemini': 'success'})
+        result = self.run_plan(dispatcher)
+        self.assertEqual(result['status'], 'awaiting_review')
+        self.assertEqual([step['worker'] for step in dispatcher.started], ['grok', 'gemini'])
+        self.assertEqual(result['response'], 'An answer from gemini')
+
     def test_paused_explicit_fable_holds_the_plan_before_either_worker(self):
         self.args.worker = 'grok'
         self.args.fallback_worker = ['claude']
@@ -266,7 +275,8 @@ class HandoffTests(unittest.TestCase):
         self.assertEqual([step['worker'] for step in dispatcher.started], ['claude', 'local-chat'])
 
     def test_duplicate_invalid_or_too_many_workers_are_held_before_dispatch(self):
-        for order in (['claude'], ['grok', 'grok'], ['grok', 'local-chat', 'claude'], ['gemini'], ['paid-api']):
+        for order in (['claude'], ['grok', 'grok'], ['grok', 'local-chat', 'claude'],
+                      ['vscode-copilot'], ['paid-api'], ['grok', 'gemini', 'codex']):
             with self.subTest(order=order):
                 args = deepcopy(self.args)
                 args.fallback_worker = order

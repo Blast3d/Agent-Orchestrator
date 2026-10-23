@@ -13,7 +13,7 @@ from usage_guard import file_lock
 from claude_models import select_model
 
 
-WORKERS = frozenset(('claude', 'codex', 'grok', 'local-chat'))
+WORKERS = frozenset(('claude', 'codex', 'grok', 'gemini', 'local-chat'))
 BASIC_LOCAL_CATEGORIES = frozenset(('general', 'chat', 'formatting', 'extraction', 'summarization', 'classification'))
 _ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,159}')
 _JOB = re.compile(r'[a-f0-9]{32}')
@@ -21,7 +21,7 @@ _LOW = ': task plus safety buffer exceeds available quota'
 _ADVISORY_LOW = ': available allowance is at or below the worker start threshold'
 _ADVISORY_EMPTY = ': available allowance is exhausted after reservations'
 _BLOCKED = ': provider rejected work; cooldown active'
-_AUTOMATIC_WORKERS = frozenset(('claude', 'codex', 'grok'))
+_AUTOMATIC_WORKERS = frozenset(('claude', 'codex', 'grok', 'gemini'))
 
 
 class HandoffHeld(ValueError):
@@ -217,7 +217,7 @@ def _configuration(args, frozen_contract=None):
         raise HandoffHeld('Choose an ordered list of fallback workers.')
     order = [args.worker, *fallback]
     if len(order) > 3 or len(set(order)) != len(order) or any(worker not in WORKERS for worker in order):
-        raise HandoffHeld('A handoff can use at most three different workers: Claude, Codex, Grok, or an explicitly chosen local worker.')
+        raise HandoffHeld('A handoff can use at most three different workers: Claude, Codex, Grok, Gemini, or an explicitly chosen local worker.')
     category = getattr(args, 'category', 'general')
     if 'local-chat' in order and (args.size not in ('tiny', 'small') or not isinstance(category, str)
                                  or category.strip().lower() not in BASIC_LOCAL_CATEGORIES):

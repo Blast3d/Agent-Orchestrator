@@ -295,8 +295,18 @@ The AGY stream has its own strict parser; it is not Claude's event format. It
 checks model, workspace, conversation identity and terminal status, rejects tool
 or delegation events, bounds output and excludes thinking bodies from progress.
 Protocol errors and uncertain timeouts keep protected reservations. Normal
-answers await Codex's independent review. Supplied briefs are capped at 12 KB and
-the agent has a fixed 90-second deadline; larger work needs smaller assignments.
+answers await the lead's independent review.
+
+October 21, 2026 update: the route runs `gemini-3.8-flash-high`, the highest
+Google tier `agy models` lists for this account. Its own denial regression (run
+`bot-voice-and-team-balance-20261022T020611Z-abf8443e`, job `63ebb491...`) denied
+file, write, shell, web, delegation, messaging and scheduling attempts with the
+same pinned executable, handler and configuration; the proof now lists both
+tiers and inherits the MCP and handler-timeout checks. Workers receive the
+compact worker guide instead of the coordinator guide, briefs may fill the
+Windows command line (about 30 KB, checked exactly after quoting), and the agent
+deadline follows task size (2/7.5/15/22.5 minutes, less a 15-second margin).
+Gemini is an automatic quota alternate for Claude, Codex and Grok.
 
 Do not combine a model ID ending in `-medium` with `--effort low`; the installed
 CLI rejected that conflict before inference. The fixed route uses the model's

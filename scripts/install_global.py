@@ -32,18 +32,22 @@ If `enabled` is true and the work is substantial, use the installed
 with the workspace, objective and short run name. If startup returns `disabled`,
 continue directly. For explicit manual runs, use `start` without `--automatic`.
 
-Every orchestration run, including a manually requested small edit run,
-needs accepted retained work from at least two AI
-families; prefer three when useful authorized scopes exist. Plan a cross-family
-assignment before adding same-family native workers. A small edit run can use the
-lead plus a later cross-family reviewer. JEV is advisory and does not count.
+Every orchestration run, including a manually requested small edit run, needs
+accepted work from every non-lead family: Grok, Gemini (its best verified tier)
+and whichever of Codex or Claude is not leading. Those families share accepted
+worker tasks near-equally; lead-family work never fills their share. Pick the next
+worker with `python "{root / 'orchestrator.py'}" balance --run RUN` or dispatch
+`run auto`. Plan cross-family assignments before same-family native workers. A
+small edit run can use the lead plus one review from each non-lead family. JEV is
+advisory and does not count.
 
 Before new worker assignments, run `python "{root / 'orchestrator.py'}" start`
 with the workspace, objective and a short run name, or resume the exact existing
 run with its current owner/session/generation. Read the returned operating guide
 and scoped Brain recall. Follow `{root / 'docs' / 'startup-and-closeout.md'}`.
 After a checkpoint or handoff changes the generation, reload that run's startup
-context. Never choose an unrelated latest run automatically.
+context; `start --run ... --no-memory` needs no query and makes no provider calls.
+Never choose an unrelated latest run automatically.
 
 The user's lead-orchestrator switch picks Claude (Opus 5.5), ASTRA (Codex
 GPT-6-Astra) or Sol (Codex GPT-6-Sol) to lead new runs and the runner-up at the
@@ -52,18 +56,19 @@ you start a run yourself, pass `--lead` with your own identity (claude, astra
 or sol). If the switch names a different lead, say so once and continue the
 work the user asked you to do.
 
-Give every native worker the operating guide and relevant authorized recall in
-its actual assignment. The guarded dispatcher supplies operating guidance itself,
-even with project recall disabled. Keep each provider's content permissions and
+Give every native worker the worker guide (`app/assets/worker-guide.md`) and
+relevant authorized recall in its actual assignment. The guarded dispatcher
+supplies that guide itself, even with project recall disabled. Keep each provider's content permissions and
 task scope; loading memory does not authorize broader access or extra spending.
 
 Before final orchestration delivery, review tasks, verify capture outcomes,
 complete the contribution ledger/map, and run `orchestrator.py closeout`.
 Startup records the provider policy and run-linked dispatch verifies it even with
 project recall disabled. The provider-family coverage check holds closeout until
-positive accepted work proves two actual families. Copilot counts by actual model,
-not brand; same-family agents and arbitrary foreign native labels cannot fill the
-minimum. Native lead credit requires a reviewed capture from the exact run.
+every non-lead family has positive accepted work with near-equal task counts;
+runs started before October 21, 2026 keep their recorded two-family minimum.
+Copilot counts by actual model, not brand; same-family agents and arbitrary
+foreign native labels cannot fill a share. Native lead credit requires a reviewed capture from the exact run.
 If no authorized alternate is usable, report the blocker and keep the run held.
 Do not waive the threshold, invent credit, broaden content access or add spending.
 Native tools remain outside the dispatcher; these checks are not a scheduler.

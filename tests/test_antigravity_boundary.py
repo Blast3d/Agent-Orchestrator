@@ -350,11 +350,39 @@ class AntigravityBoundaryTests(unittest.TestCase):
         for call in self.runner.call_args_list:
             self.assertNotIn(prompt, call.args[0])
 
-    def test_utf8_brief_limit_holds_before_any_inspection(self):
-        with self.assertRaises(boundary.BoundaryHeld):
-            boundary.command_for(chr(0xE9) * 6001, self.work, {})
+    def test_command_line_limit_holds_before_any_inspection(self):
+        # The brief is one argument; Windows counts UTF-16 units after quoting.
+        for brief in (chr(0xE9) * 32001, '"' * 16001):
+            with self.subTest(length=len(brief)), self.assertRaises(boundary.BoundaryHeld):
+                boundary.command_for(brief, self.work, {})
         self.runner.assert_not_called()
         self.assertFalse((self.work / '.agents').exists())
+
+    def test_briefs_beyond_the_old_twelve_kilobyte_cap_fit_one_argument(self):
+        brief = chr(0xE9) * 6001 + 'x' * 14000
+        command = boundary.command_for(brief, self.work, {}, timeout_seconds=450)
+        self.assertIn(brief, command)
+        self.assertLessEqual(boundary.command_line_units(command), boundary.MAX_COMMAND_LINE_UNITS)
+
+    def test_agent_deadline_follows_the_task_deadline(self):
+        import shutil
+        # The shortest explicit deadline (30 seconds) still leaves the agent a margin.
+        for timeout, expected in ((None, '90s'), (450, '435s'), (120, '105s'), (30, '15s')):
+            with self.subTest(timeout=timeout):
+                command = boundary.command_for('brief', self.work, {}, timeout_seconds=timeout)
+                self.assertEqual(command[command.index('--print-timeout') + 1], expected)
+            # Each assignment needs a fresh isolated folder.
+            shutil.rmtree(self.work / '.agents')
+            (self.work / 'antigravity-preflight.json').unlink()
+
+    def test_proof_may_list_several_verified_model_tiers(self):
+        self.assertEqual(boundary.verified_models({'model': 'one'}), {'one'})
+        self.assertEqual(boundary.verified_models({'model': 'one', 'models': ['one', 'two']}), {'one', 'two'})
+        self.assertEqual(boundary.verified_models({'models': 'not-a-list'}), set())
+        self.write_proof(dict(self.proof, model='another-tier', models=['another-tier', boundary.MODEL]))
+        self.assertIsNone(boundary.boundary_error())
+        self.write_proof(dict(self.proof, model='another-tier', models=['another-tier']))
+        self.assertIn('verification', boundary.boundary_error())
 
 
 if __name__ == '__main__':
