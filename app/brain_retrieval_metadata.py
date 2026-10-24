@@ -20,7 +20,7 @@ def public_retrieval(value):
     if isinstance(fusion,dict) and fusion.get('method')=='reciprocal_rank':
         result['fusion']={'method':'reciprocal_rank',**{key:number(fusion.get(key))
             for key in ('rank_constant','keyword_count','semantic_count','overlap_count')}}
-    for key in ('graph_hops','graph_added','lexical_candidates','semantic_added','context_tokens','provider_calls','input_tokens','candidate_count'):
+    for key in ('graph_hops','graph_added','lexical_candidates','semantic_added','context_tokens','provider_calls','input_tokens','candidate_count','contradiction_count'):
         result[key]=number(value.get(key))
     budget=value.get('budget')
     if isinstance(budget,dict):
@@ -50,6 +50,9 @@ def public_retrieval(value):
         if isinstance(cache,dict):
             result['jev']['cache']={'status':short(cache.get('status'))}
         result['jev']['ordering_policy']=short(jev.get('ordering_policy'))
+        for key in ('shape','requested_shape'):
+            result['jev'][key]=jev.get(key) if jev.get(key) in ('rubric','choice') else None
+        result['jev']['choice_confidence']=number(jev.get('choice_confidence'))
         result['jev']['fallback']=jev.get('fallback') if type(jev.get('fallback')) is bool else None
         result['jev']['order_changed']=jev.get('order_changed') if type(jev.get('order_changed')) is bool else None
         result['jev']['applied']=jev.get('applied') is True
