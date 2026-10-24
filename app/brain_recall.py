@@ -113,11 +113,21 @@ def _excerpt(result,room):
     return dict(result,content=content[:low]+'…',truncated=True)
 
 
-def _annotate_contradictions(con,rows,at):
+def _annotate_contradictions(store,con,state,rows,sources,excluded,at):
     """Warn when a recalled memory has a reviewed `contradicts` link to another current memory."""
     ids=[row['id'] for row in rows]
     if not ids:return 0
-    marks=','.join('?'*len(ids));peers={}
+    marks=','.join('?'*len(ids));peers={};current={}
+    def verified(identifier):
+        if identifier not in current:
+            row=store._row(con,identifier)
+            if row['project_id']!=state['project'] or row['user_id']!=state['user']:
+                current[identifier]=False
+            elif not _source_room(row,state['source_keys']):
+                state['limited']=True;current[identifier]=False
+            else:
+                current[identifier]=store._current(row,at,sources,excluded)
+        return current[identifier]
     for edge in con.execute(f'''SELECT r.source_id,r.target_id FROM relations r
             JOIN memories a ON a.id=r.source_id JOIN memories b ON b.id=r.target_id
             WHERE r.relation='contradicts' AND r.valid_from<=? AND (r.valid_to IS NULL OR r.valid_to>?)
@@ -125,6 +135,7 @@ def _annotate_contradictions(con,rows,at):
             AND (a.valid_to IS NULL OR a.valid_to>?) AND (b.valid_to IS NULL OR b.valid_to>?)
             AND (r.source_id IN ({marks}) OR r.target_id IN ({marks})) ORDER BY r.id LIMIT 200''',
             (at,at,at,at,*ids,*ids)):
+        if not verified(edge['source_id']) or not verified(edge['target_id']):continue
         peers.setdefault(edge['source_id'],set()).add(edge['target_id'])
         peers.setdefault(edge['target_id'],set()).add(edge['source_id'])
     flagged=0
@@ -140,7 +151,8 @@ def _annotate_contradictions(con,rows,at):
 def _finish(store,con,state,candidates,sources,excluded,record_trace):
     stage=time.perf_counter()
     ordered=sorted(candidates.values(),key=lambda r:(-r['score'],r['id']))
-    state['retrieval']['contradiction_count']=_annotate_contradictions(con,ordered[:state['budget']['candidate_limit']],now())
+    state['retrieval']['contradiction_count']=_annotate_contradictions(
+        store,con,state,ordered[:state['budget']['candidate_limit']],sources,excluded,now())
     # The private shortlist is collected before both the final count and context
     # limits. It never enters the result, trace or worker context as raw content.
     if state.get('candidate_pool') is not None:

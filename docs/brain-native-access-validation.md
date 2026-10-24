@@ -15,7 +15,9 @@ clients still need a new session to load changed MCP configuration.
 Review found that `brain_get` could retain a relationship after the peer memory
 expired. A regression reproduced the defect before the fix. Related memories
 now receive the same scope, current-state and source checks as the requested
-memory.
+memory. A subsequent PR review also reproduced stale contradiction warnings
+after a peer's task was rejected or its evidence changed. Recall now validates
+both endpoints before warning, within the existing source-check budget.
 
 ## Compact ranking comparison
 

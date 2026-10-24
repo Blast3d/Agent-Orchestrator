@@ -65,9 +65,9 @@ class ContradictionWarningTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.brain = BrainStore(Path(temporary.name))
 
-    def active(self, title, content):
-        proposed = self.brain.propose({'project_id': 'alpha', 'kind': 'fact', 'title': title, 'content': content,
-                                       'source': {'type': 'user', 'note': 'Synthetic reviewed source'}})
+    def active(self, title, content, **extra):
+        proposed = self.brain.propose(dict({'project_id': 'alpha', 'kind': 'fact', 'title': title, 'content': content,
+                                            'source': {'type': 'user', 'note': 'Synthetic reviewed source'}}, **extra))
         return self.brain.approve(proposed['id'], 'Tester', 'Checked against the synthetic source.')
 
     def test_contradicts_is_a_supported_relation_and_recall_warns_both_sides(self):
@@ -96,6 +96,34 @@ class ContradictionWarningTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.brain.relate(a['id'], b['id'], 'refutes', 'Tester')
         json.dumps(self.brain.get(a['id']))
+
+    def withdrawn_peer(self, update):
+        current = self.active('Retry limit', 'The retry limit is three attempts.')
+        job = 'a' * 32
+        path = self.brain.root / 'runs/tasks' / job / 'result.json'
+        path.parent.mkdir(parents=True)
+        task = {'job_id': job, 'assignment_project_id': 'alpha', 'execution_status': 'succeeded',
+                'status': 'accepted', 'review_status': 'accepted', 'finalized_at': '2026-09-01T00:00:00Z',
+                'response': 'Reviewed evidence for five attempts.'}
+        path.write_text(json.dumps(task), encoding='utf-8')
+        peer = self.active('Retry limit raised', 'The retry limit is five attempts.',
+                           source={'type': 'task', 'job_id': job})
+        self.brain.relate(peer['id'], current['id'], 'contradicts', 'Tester')
+        before = self.brain.search('retry limit', 'alpha', record_trace=False, jev=False)
+        self.assertEqual(before['retrieval']['contradiction_count'], 2)
+        task.update(update)
+        path.write_text(json.dumps(task), encoding='utf-8')
+        after = self.brain.search('retry limit', 'alpha', record_trace=False, jev=False)
+        self.assertEqual(self.brain.get(peer['id'])['status'], 'active')
+        self.assertEqual([item['id'] for item in after['results']], [current['id']])
+        self.assertNotIn('Reviewed contradiction', after['context'])
+        self.assertEqual(after['retrieval']['contradiction_count'], 0)
+
+    def test_rejected_task_peer_cannot_cast_doubt_on_a_current_policy(self):
+        self.withdrawn_peer({'status': 'rejected', 'review_status': 'rejected'})
+
+    def test_changed_task_evidence_cannot_cast_doubt_on_a_current_policy(self):
+        self.withdrawn_peer({'response': 'Changed after memory review.'})
 
 
 if __name__ == '__main__':
