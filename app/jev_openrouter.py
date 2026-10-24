@@ -4,6 +4,7 @@ No configuration is created automatically and no request is retried. The daily
 counter records attempted requests, including failures with uncertain billing.
 Byte limits bound payload size; they are not token estimates or dollar caps.
 """
+from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from http.client import HTTPException
 import json
@@ -25,6 +26,9 @@ MAX_CONFIG_BYTES = 16 * 1024
 MAX_REQUEST_BYTES = 16 * 1024
 MAX_RESPONSE_BYTES = 64 * 1024
 MAX_USAGE_BYTES = 1024
+# Requests in flight across every process on this app root. A saturated slot set
+# makes the caller keep its local order instead of queueing more provider work.
+DEFAULT_MAX_IN_FLIGHT = 4
 PURPOSES = ('memory_rank', 'memory_passage_review', 'route', 'evidence_review', 'instruction_scan',
             'memory_support', 'sufficiency', 'sensitivity', 'citations', 'duplicates',
             'relations', 'stale', 'durability', 'recover', 'skills', 'handoff', 'event')
@@ -180,7 +184,7 @@ def load_config(root):
         required = {'schema_version', 'enabled'}
         allowed = required | {'model', 'api_key_env', 'authorized_projects', 'purposes',
                               'timeout_seconds', 'max_requests_per_day', 'min_confidence', 'env_file',
-                              'cache_enabled', 'cache_ttl_seconds'}
+                              'cache_enabled', 'cache_ttl_seconds', 'memory_rank_shape', 'max_in_flight'}
         if (not isinstance(value, dict) or not required <= value.keys()
                 or value.keys() - allowed or type(value['schema_version']) is not int
                 or value['schema_version'] != 1 or type(value['enabled']) is not bool):
@@ -192,7 +196,8 @@ def load_config(root):
                   'api_key_env': 'OPENROUTER_API_KEY', 'authorized_projects': [],
                   'purposes': [], 'timeout_seconds': 10, 'max_requests_per_day': 100,
                   'min_confidence': .8, 'env_file': '.env',
-                  'cache_enabled': False, 'cache_ttl_seconds': 3600}
+                  'cache_enabled': False, 'cache_ttl_seconds': 3600,
+                  'memory_rank_shape': 'rubric', 'max_in_flight': DEFAULT_MAX_IN_FLIGHT}
         config.update(value)
         if (config['model'] != MODEL or not isinstance(config['api_key_env'], str)
                 or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,99}', config['api_key_env'])):
@@ -211,7 +216,10 @@ def load_config(root):
                 or not _number(config['min_confidence'], 0, 1)
                 or type(config['cache_enabled']) is not bool
                 or type(config['cache_ttl_seconds']) is not int
-                or not 60 <= config['cache_ttl_seconds'] <= 86400):
+                or not 60 <= config['cache_ttl_seconds'] <= 86400
+                or config['memory_rank_shape'] not in ('rubric', 'choice')
+                or type(config['max_in_flight']) is not int
+                or not 1 <= config['max_in_flight'] <= 16):
             raise ValueError('Invalid limits')
         present = _key(config, root) is not None
         return dict(config, key_present=present,
@@ -327,6 +335,33 @@ def _post(raw, api_key, timeout):
         return raw_response
 
 
+@contextmanager
+def _flight_slot(root, maximum, wait_seconds):
+    """Hold one of `maximum` request slots shared by every process on this app root.
+
+    Slots are OS file locks, released automatically if a process exits. Waiting is
+    bounded by one request timeout; then the request is reported as saturated.
+    """
+    deadline = time.monotonic() + max(0.0, float(wait_seconds))
+    while True:
+        for index in range(maximum):
+            try:
+                held = file_lock(_path(root, 'jev-flight-' + str(index) + '.lock'), timeout=0)
+                held.__enter__()
+            except TimeoutError:
+                continue
+            except (OSError, ValueError):
+                raise _Unavailable('unavailable', 'Jev request slots cannot be opened safely.') from None
+            try:
+                yield index
+            finally:
+                held.__exit__(None, None, None)
+            return
+        if time.monotonic() >= deadline:
+            raise _Unavailable('saturated', 'The app-wide Jev in-flight limit was reached; local order was kept.')
+        time.sleep(.05)
+
+
 def _response(raw, questions):
     if not isinstance(raw, bytes) or len(raw) > MAX_RESPONSE_BYTES:
         raise ValueError('Invalid response size')
@@ -434,19 +469,23 @@ def evaluate(root, project_id, purpose, state, questions, *, user_id='local', ca
             except (OSError, ValueError, TypeError, TimeoutError, OverflowError, RecursionError, StorageLimitError):
                 result['cache'] = {'status': 'unavailable'}
                 cache_key = None
-        _reserve_request(root, config['max_requests_per_day'])
-        result['provider_calls'] = 1
-        try:
-            response = _post(raw, api_key, config['timeout_seconds'])
-        except HTTPError as exc:
-            if type(exc.code) is int and 100 <= exc.code <= 599:
-                result['http_status'] = exc.code
-            exc.close()
-            raise _Unavailable('error', 'The Jev endpoint rejected the request.') from None
-        except (OSError, URLError, HTTPException, TimeoutError):
-            raise _Unavailable('error', 'The Jev request failed; billing may be unknown.') from None
-        except (ValueError, TypeError, UnicodeError, OverflowError, RecursionError):
-            raise _Unavailable('invalid_response', 'The Jev response could not be validated.') from None
+        # Take an app-wide slot before consuming a daily attempt, so a saturated
+        # request costs nothing and its caller keeps local order.
+        with _flight_slot(root, config.get('max_in_flight', DEFAULT_MAX_IN_FLIGHT),
+                          config.get('timeout_seconds', 10)):
+            _reserve_request(root, config['max_requests_per_day'])
+            result['provider_calls'] = 1
+            try:
+                response = _post(raw, api_key, config['timeout_seconds'])
+            except HTTPError as exc:
+                if type(exc.code) is int and 100 <= exc.code <= 599:
+                    result['http_status'] = exc.code
+                exc.close()
+                raise _Unavailable('error', 'The Jev endpoint rejected the request.') from None
+            except (OSError, URLError, HTTPException, TimeoutError):
+                raise _Unavailable('error', 'The Jev request failed; billing may be unknown.') from None
+            except (ValueError, TypeError, UnicodeError, OverflowError, RecursionError):
+                raise _Unavailable('invalid_response', 'The Jev response could not be validated.') from None
         try:
             result['http_status'] = 200
             validated = _response(response, questions)
