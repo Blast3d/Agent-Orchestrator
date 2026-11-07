@@ -22,6 +22,10 @@ def main(argv=None):
     configure.add_argument('--daily-calls', type=int, choices=range(1, 1001), default=100, metavar='1..1000')
     configure.add_argument('--cache', action='store_true', help='Reuse unchanged decisions after scope and source validation.')
     configure.add_argument('--cache-ttl', type=int, default=3600, metavar='60..86400')
+    configure.add_argument('--rank-shape', choices=['rubric', 'choice'], default='rubric',
+                           help='Memory ranking question format; measure with `brain eval run` before choosing choice.')
+    configure.add_argument('--max-in-flight', type=int, choices=range(1, 17), default=4, metavar='1..16',
+                           help='Jev requests allowed at once across every process on this app root.')
     commands.add_parser('disable')
     route = commands.add_parser('route')
     route.add_argument('--project', required=True)
@@ -65,7 +69,8 @@ def main(argv=None):
                     authorized_projects=sorted({scope(p) for p in args.project}),
                     purposes=sorted(set(args.purpose)), timeout_seconds=10,
                     max_requests_per_day=args.daily_calls, min_confidence=.8,
-                    cache_enabled=args.cache, cache_ttl_seconds=args.cache_ttl)
+                    cache_enabled=args.cache, cache_ttl_seconds=args.cache_ttl,
+                    memory_rank_shape=args.rank_shape, max_in_flight=args.max_in_flight)
             path = jev_openrouter._path(args.root, 'jev-config.json')
             with StorageBudget(args.root).allocation(32768, kind='task'):
                 with file_lock(jev_openrouter._path(args.root, 'jev-config.lock')):

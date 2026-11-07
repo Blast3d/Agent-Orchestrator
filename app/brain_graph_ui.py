@@ -216,7 +216,7 @@ function createBrainGraph(data, onSelect, options) {
   var linkTarget = editorField('Target memory', 'select');
   var targetCaption = document.createElement('small'); connectionEditor.appendChild(targetCaption);
   var linkRelation = editorField('Relationship', 'select');
-  [['related_to','Related to'],['supports','Supports'],['depends_on','Depends on'],['solves','Solves']].forEach(function(pair) {
+  [['related_to','Related to'],['supports','Supports'],['depends_on','Depends on'],['solves','Solves'],['contradicts','Contradicts']].forEach(function(pair) {
     var option = document.createElement('option'); option.value = pair[0]; option.textContent = pair[1]; linkRelation.appendChild(option);
   });
   var linkActor = editorField('Your name', 'input'); linkActor.value = 'Local user'; linkActor.maxLength = 100;

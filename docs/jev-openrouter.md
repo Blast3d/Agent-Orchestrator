@@ -92,6 +92,11 @@ The Brain's **How this memory was found** panel and recall receipts show whether
 Jev was applied, the model, elapsed time and provider-reported charge when known.
 Provider confidence is a model estimate; it is not proof a memory is correct.
 
+Memory ranking asks per-candidate rubric questions by default. `configure
+--rank-shape choice` switches single-request shortlists to one contrastive
+choice question; see [Jev question format](brain.md#jev-question-format) and
+measure it with the recall test first.
+
 ## Orchestrator routing advice
 
 Create a small JSON file containing only workers you currently permit, with
@@ -127,6 +132,14 @@ uncertain failures. Request bodies are capped at 16 KiB, responses at 64 KiB, an
 the default timeout is 10 seconds. There are no automatic retries, redirects or
 model/provider fallbacks. A daily call limit is **not a dollar cap**; use the
 OpenRouter key limit for spending control. Missing usage remains unknown.
+
+At most `max_in_flight` requests (default 4, `configure --max-in-flight 1..16`)
+run at once across every process on this app root. Slots are OS file locks
+`runtime/jev-flight-N.lock`, released automatically when a process exits. A
+request that waits one request timeout without a slot returns `saturated`,
+consumes no daily attempt, and its caller keeps its local result.
+`configure` rewrites the whole file, so repeat `--rank-shape` and
+`--max-in-flight` when reconfiguring non-default values.
 
 Offline tests use temporary SQLite memories and mocked HTTP. They validate
 integration behavior, not live Jev quality, account access or performance gains.

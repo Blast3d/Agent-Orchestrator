@@ -20,7 +20,9 @@ from usage_guard import file_lock
 from storage_budget import StorageBudget, StorageLimitError
 
 KINDS = ('fact', 'preference', 'episode', 'procedure')
-RELATIONS = ('solves', 'depends_on', 'supports', 'related_to')
+# `contradicts` is a reviewed claim that two current memories disagree. Recall
+# warns about it and the curator report lists it until someone resolves it.
+RELATIONS = ('solves', 'depends_on', 'supports', 'related_to', 'contradicts')
 LIMITS = {'max_memories': 10000, 'max_pending': 500, 'max_relations': 30000,
           'max_traces': 200, 'max_changes': 1000, 'max_db_bytes': 256 * 1024**2}
 FEED_SCHEMA = '''CREATE TABLE IF NOT EXISTS feed_state (
@@ -650,7 +652,7 @@ class BrainStore:
             from brain_links import forget_rows
             return forget_rows(self, con, memory_id)
 
-    def search(self, query, project_id, user_id='local', limit=None, max_chars=None, hops=None, *, strategy='auto', record_trace=True, profile='general', depth='compact', jev=True):
+    def search(self, query, project_id, user_id='local', limit=None, max_chars=None, hops=None, *, strategy='auto', record_trace=True, profile='general', depth='compact', jev=True, jev_shape=None):
         from brain_recall import search
         from brain_jev import maybe_rank
         from jev_profiles import validate_profile
@@ -673,7 +675,7 @@ class BrainStore:
                 result['jev_ranking'] = {'status': 'skipped', 'reason': 'local-only search requested'}
             else:
                 result = maybe_rank(self,result,max_chars=max_chars,record_trace=record_trace,profile=profile,
-                                  candidate_pool=candidate_pool,limit=limit,
+                                  candidate_pool=candidate_pool,limit=limit,shape=jev_shape,
                                   _trace_reserved=trace_allocation['reserved'])
         finally:
             try:

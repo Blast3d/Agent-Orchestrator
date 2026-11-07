@@ -2,11 +2,16 @@
 import argparse
 import json
 from pathlib import Path
+import sys
 
 from paths import ROOT
 from brain_store import BrainStore
 from storage_budget import StorageLimitError
 from jev_profiles import PROFILES
+
+DELEGATED={'eval':('brain_eval','Hand-labelled recall test: extract cases, then A/B retrieval settings'),
+           'curator':('brain_curator','Read-only report of contradictions, duplicates and stale memories'),
+           'inbox':('brain_session_inbox','Review native agent sessions captured as memory candidates')}
 
 
 def main(argv=None):
@@ -26,6 +31,7 @@ def main(argv=None):
     search.add_argument('--strategy',choices=['auto','keyword','graph','semantic'],default='auto')
     search.add_argument('--no-jev',action='store_true',help='Keep this search local: skip Jev (OpenRouter) ranking even when enabled')
     search.add_argument('--profile',choices=PROFILES,default='general')
+    search.add_argument('--jev-shape',choices=['rubric','choice'],help='Jev question format for this search; defaults to the configured one')
     for command in ('semantic-status','semantic-index'):
         semantic=sub.add_parser(command);semantic.add_argument('--project',required=True)
         if command=='semantic-index':semantic.add_argument('--limit',type=int,default=100)
@@ -43,6 +49,17 @@ def main(argv=None):
         p=sub.add_parser(name);p.add_argument('--project',required=True);p.add_argument('--user',default='local')
         if name=='changes':p.add_argument('--after',type=int,default=0)
     dashboard=sub.add_parser('dashboard');dashboard.add_argument('--port',type=int,default=0);dashboard.add_argument('--open',action='store_true')
+    # These modules own their argument parsing, so they are routed before argparse
+    # (a subparser remainder cannot capture leading options). Listed here for --help.
+    for name,(_,description) in DELEGATED.items():
+        sub.add_parser(name,help=description,add_help=False)
+    tokens=list(sys.argv[1:] if argv is None else argv)
+    root,index=ROOT,0
+    if tokens[:1]==['--root'] and len(tokens)>1:root,index=Path(tokens[1]),2
+    elif tokens and tokens[0].startswith('--root='):root,index=Path(tokens[0].split('=',1)[1]),1
+    if len(tokens)>index and tokens[index] in DELEGATED:
+        from importlib import import_module
+        return import_module(DELEGATED[tokens[index]][0]).main(['--root',str(root)]+tokens[index+1:])
     args=parser.parse_args(argv)
     try:
         if args.command=='dashboard':
@@ -77,7 +94,7 @@ def main(argv=None):
         elif args.command=='supersede':result=brain.supersede(args.old_id,args.new_id,args.actor,args.reason)
         elif args.command=='relate':result=brain.relate(args.source_id,args.target_id,args.relation,args.actor)
         elif args.command=='search':
-            result=brain.search(args.query,args.project,args.user,args.limit,args.max_chars,args.hops,strategy=args.strategy,profile=args.profile,depth=args.depth,jev=not args.no_jev)
+            result=brain.search(args.query,args.project,args.user,args.limit,args.max_chars,args.hops,strategy=args.strategy,profile=args.profile,depth=args.depth,jev=not args.no_jev,jev_shape=args.jev_shape)
             if args.context_only:
                 print(result['context']);return 0
         elif args.command in ('semantic-status','semantic-index'):

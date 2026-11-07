@@ -22,6 +22,8 @@ own implementation; Graphiti is not installed. Automatic search starts with
 keywords and aliases. A complete lexical match avoids semantic work; relationship
 questions can expand the graph. An explicitly configured embedding connector can
 help weak lexical matches. There is no automatic semantic contradiction resolution.
+A reviewer can record a `contradicts` relationship instead; recall then warns on
+both memories (see [measuring and curating recall](#measuring-and-curating-recall)).
 
 ## Adaptive retrieval
 
@@ -532,3 +534,87 @@ Its first JSON line identifies a temporary dashboard origin, synthetic IDs and
 canonical task paths. Open the origin with `/#project=alpha`; changing the returned
 synthetic accepted task's response demonstrates drift and fresh context exclusion.
 Stop with Ctrl+C. This fixture never opens the user's Brain database.
+
+# Measuring and curating recall
+
+These additions borrow measured ideas from
+[ai-memory](https://github.com/akitaonrails/ai-memory). Native-agent search and
+the session inbox are described in [Brain access for native agents](brain-native-access.md).
+
+## Recall test
+
+A ranking change should show a gain on hand-labelled cases before it becomes a
+default. `brain eval` drafts cases from real recall queries, then compares two
+retrieval settings on the cases a person labelled.
+
+```powershell
+python orchestrator.py brain eval extract --project openwhispr --workspace C:/Users/jacob/openwhispr
+python orchestrator.py brain eval run --cases output/brain-recall-cases-openwhispr.json --baseline jev=off --candidate jev=on shape=choice --allow-jev
+```
+
+`extract` reads the recall queries saved in canonical tasks and in
+orchestration startup packets, including those of each `--workspace`. Each case
+lists the memories that were supplied plus the local keyword top ten, with
+titles. Fill `expected_ids` with the memories that should rank first, best
+first. Unlabelled cases are skipped; add your own cases in the same shape.
+About a hundred labelled queries make a useful set.
+
+`run` searches read-only and records no recall traces. Configuration keys are
+`strategy`, `depth` (`case` uses each case's recorded depth), `jev` and `shape`.
+It reports hit@1, hit@3, the share of cases whose answer appeared at all, mean
+reciprocal rank, recall, lookup latency, context size, Jev calls and charges,
+and the cases whose top answer flipped. A configuration with `jev=on` refuses
+to run without `--allow-jev`, because each search can make a billed request.
+Jev's decision cache can return earlier answers, so repeat a Jev comparison on
+another day before trusting a small difference.
+
+## Jev question format
+
+The default **rubric** format grades each candidate separately on four levels.
+The **choice** format asks Jev one question: which candidate most specifically
+answers the query. ai-memory measured the choice format ranking better and
+running faster on its own Jev backends, which were not `typesafe/jev-1.13`, so
+measure it here with the recall test before switching.
+
+Choice probabilities only order candidates inside one request. One confidence
+covers the whole answer, so either every candidate moves or the local order is
+kept. A shortlist that needs more than one request, as balanced and deep recall
+usually do, falls back to rubric scoring and says so in `shape_note`. Choose
+per search with `brain search --jev-shape choice`, or for every search with
+`jev configure --rank-shape choice`. The retrieval details record the shape
+used, the shape requested and the choice confidence.
+
+Jev requests are also limited across every process on this app root, four at a
+time by default (`jev configure --max-in-flight N`). A request that cannot get
+a slot within one request timeout reports `saturated`, consumes no daily
+attempt, and its caller keeps the local order.
+
+## Contradictions and the curator report
+
+`contradicts` joins the closed relationship set, in the dashboard's connection
+pickers and `brain relate`. While both memories are current, recall appends a
+warning to each one's reason, and the retrieval details count the warnings.
+
+`brain curator --project ID` prints a read-only report. It changes nothing and
+calls no model.
+
+| Finding | Meaning |
+| --- | --- |
+| `contradictions` | Current reviewed `contradicts` pairs, until one side is superseded or forgotten |
+| `near_duplicates` | Word-overlap pairs, ignoring words common to a third of the project's memories |
+| `not_recently_recalled` | Memories over 30 days old missing from retained traces and scanned task records |
+| `harmful_rated` | Memories supplied to tasks whose current usefulness rating is harmful |
+| `open_ended_environment` | Statements about passing machine or tool state with no end date |
+| `stale_pending` | Candidates waiting more than 14 days for review |
+
+Retained traces cover only the newest 200 searches across all projects, so
+"not recently recalled" does not mean "never recalled".
+
+## Summary-first packing
+
+When recall cannot fit every selected memory whole, each memory first receives
+a short leading excerpt in rank order, and the remaining budget then deepens
+them in rank order. One long memory can no longer crowd later ones out of a
+tight worker transport. When everything fits, every memory is delivered whole
+exactly as before. Excerpts remain exact prefixes ending in `…`, so delivery
+freshness checks are unchanged.

@@ -58,30 +58,101 @@ def _pack(store, rows, max_chars, limited, excluded, *, max_results=None):
             header+='Unverifiable cross-project reference memories were excluded.\n'
         if not isinstance(excluded, dict) or any(not reason.startswith('Cross-project reference') for reason in excluded.values()):
             header+='Unverifiable task-backed memories were excluded.\n'
-    context=header;results=[];omitted=[]
     keys=('id','project_id','kind','title','content','episode','source','valid_from','valid_to','reason')
+    part=lambda row:json.dumps({k:row[k] for k in keys},ensure_ascii=False)+'\n'
+    escaped=lambda row:len(json.dumps(row['content'],ensure_ascii=False))-2
+    used=len(header);chosen=[];omitted=[]
+    # Pass 1, summary first: each memory in rank order receives a short excerpt,
+    # so one long record cannot crowd later ones out of a tight budget.
     for result in rows:
-        if max_results is not None and len(results)>=max_results:break
-        part=json.dumps({k:result[k] for k in keys},ensure_ascii=False)+'\n'
-        if len(context)+len(part)>max_chars:
-            content=result['content']
-            room=max_chars-len(context)-len(part)+len(json.dumps(content,ensure_ascii=False))-2
-            if room<80:omitted.append(result['id']);continue
-            low,high=0,len(content)
-            while low<high:
-                middle=(low+high+1)//2
-                if len(json.dumps(content[:middle]+'…',ensure_ascii=False))-2<=room:low=middle
-                else:high=middle-1
-            result=dict(result,content=content[:low]+'…',truncated=True)
-            part=json.dumps({k:result[k] for k in keys},ensure_ascii=False)+'\n'
-        if len(context)+len(part)<=max_chars:results.append(result);context+=part
-        else:omitted.append(result['id'])
-    return results,context,omitted
+        if max_results is not None and len(chosen)>=max_results:break
+        floor=_floor(result);size=len(part(floor))
+        if used+size>max_chars:
+            floor=_excerpt(result,max_chars-used-size+escaped(floor))
+            size=len(part(floor)) if floor is not None else 0
+            if floor is None or used+size>max_chars:omitted.append(result['id']);continue
+        chosen.append([result,floor,size]);used+=size
+    # Pass 2: deepen in rank order with the remaining budget. When everything
+    # fits, every record ends whole, exactly as before.
+    for entry in chosen:
+        result,current,size=entry
+        if current is result:continue
+        full=len(part(result))
+        if used-size+full<=max_chars:
+            entry[1:]=[result,full];used+=full-size;continue
+        deeper=_excerpt(result,max_chars-(used-size)-full+escaped(result))
+        if deeper is not None and len(deeper['content'])>len(current['content']):
+            grown=len(part(deeper))
+            if used-size+grown<=max_chars:entry[1:]=[deeper,grown];used+=grown-size
+    results=[entry[1] for entry in chosen]
+    return results,header+''.join(part(row) for row in results),omitted
+
+
+FLOOR_CHARS=240
+
+
+def _floor(result):
+    """Short leading excerpt every packed memory receives before any full body."""
+    content=result['content']
+    if len(content)<=FLOOR_CHARS:return result
+    # Excerpts stay exact prefixes so delivery freshness checks keep working.
+    base=content[:-1] if result.get('truncated') and content.endswith('…') else content
+    cut=base.rfind(' ',0,FLOOR_CHARS)
+    cut=cut if cut>=FLOOR_CHARS//2 else FLOOR_CHARS
+    return dict(result,content=base[:cut].rstrip()+'…',truncated=True)
+
+
+def _excerpt(result,room):
+    """Longest content prefix whose JSON-escaped text fits room; None below 80 characters."""
+    if room<80:return None
+    content=result['content'];low,high=0,len(content)
+    while low<high:
+        middle=(low+high+1)//2
+        if len(json.dumps(content[:middle]+'…',ensure_ascii=False))-2<=room:low=middle
+        else:high=middle-1
+    return dict(result,content=content[:low]+'…',truncated=True)
+
+
+def _annotate_contradictions(store,con,state,rows,sources,excluded,at):
+    """Warn when a recalled memory has a reviewed `contradicts` link to another current memory."""
+    ids=[row['id'] for row in rows]
+    if not ids:return 0
+    marks=','.join('?'*len(ids));peers={};current={}
+    def verified(identifier):
+        if identifier not in current:
+            row=store._row(con,identifier)
+            if row['project_id']!=state['project'] or row['user_id']!=state['user']:
+                current[identifier]=False
+            elif not _source_room(row,state['source_keys']):
+                state['limited']=True;current[identifier]=False
+            else:
+                current[identifier]=store._current(row,at,sources,excluded)
+        return current[identifier]
+    for edge in con.execute(f'''SELECT r.source_id,r.target_id FROM relations r
+            JOIN memories a ON a.id=r.source_id JOIN memories b ON b.id=r.target_id
+            WHERE r.relation='contradicts' AND r.valid_from<=? AND (r.valid_to IS NULL OR r.valid_to>?)
+            AND a.status='active' AND b.status='active'
+            AND (a.valid_to IS NULL OR a.valid_to>?) AND (b.valid_to IS NULL OR b.valid_to>?)
+            AND (r.source_id IN ({marks}) OR r.target_id IN ({marks})) ORDER BY r.id LIMIT 200''',
+            (at,at,at,at,*ids,*ids)):
+        if not verified(edge['source_id']) or not verified(edge['target_id']):continue
+        peers.setdefault(edge['source_id'],set()).add(edge['target_id'])
+        peers.setdefault(edge['target_id'],set()).add(edge['source_id'])
+    flagged=0
+    for row in rows:
+        others=sorted(peers.get(row['id'],()))[:3]
+        if others:
+            flagged+=1
+            row['reason']+=(' Reviewed contradiction with '+', '.join(others)+
+                            '; confirm which claim is current before relying on either.')
+    return flagged
 
 
 def _finish(store,con,state,candidates,sources,excluded,record_trace):
     stage=time.perf_counter()
     ordered=sorted(candidates.values(),key=lambda r:(-r['score'],r['id']))
+    state['retrieval']['contradiction_count']=_annotate_contradictions(
+        store,con,state,ordered[:state['budget']['candidate_limit']],sources,excluded,now())
     # The private shortlist is collected before both the final count and context
     # limits. It never enters the result, trace or worker context as raw content.
     if state.get('candidate_pool') is not None:
