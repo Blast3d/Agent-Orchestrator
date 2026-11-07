@@ -455,7 +455,8 @@ def coverage(owner, ledger, hosted, *, native_capture=False, policy=None, mix=No
         unverified_pct = _pct(unverified, total_weight)
         deltas = {family: round(actual[family] - targets[family], 1) for family in _ALL_FAMILIES}
         within = {
-            family: abs(actual[family] - targets[family]) <= float(tolerance)
+            # Exact decimal comparison: the reported 1-decimal share against integer targets.
+            family: abs(Decimal(str(actual[family])) - Decimal(str(targets[family]))) <= Decimal(str(tolerance))
             for family in _ALL_FAMILIES
         }
         if total_weight == 0:

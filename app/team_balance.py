@@ -163,8 +163,9 @@ def _default_check(worker, size):
 
 
 def _default_boundary():
-    import antigravity_boundary
-    return antigravity_boundary.boundary_error()
+    # A changed Antigravity binary is verified once before Gemini is skipped.
+    from cli_updates import gemini_admission_error
+    return gemini_admission_error()
 
 
 def _short(value):

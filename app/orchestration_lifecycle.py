@@ -205,6 +205,16 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
             run_mix = team_mix.init_run_mix(coordinator.run, team_mix.read_global(root))
         relay = _relay_inbox(root, manifest['run_id'])
         relay_text = _relay_section(relay)
+        # Hash comparison only: report a changed Antigravity binary before Gemini is planned.
+        from antigravity_boundary import boundary_error
+        from cli_updates import ANTIGRAVITY_DRIFT
+        drift = boundary_error()
+        update_text = ''
+        if drift and drift.startswith(ANTIGRAVITY_DRIFT):
+            update_text = ('\n\n## Worker CLI updates\n\nAntigravity changed since its tool-boundary proof. '
+                           'The next Gemini dispatch verifies it automatically (about four synthetic '
+                           'sessions); `orchestrator.py updates verify antigravity` runs it now and '
+                           '`orchestrator.py updates status` shows every CLI.')
         packet = {'schema_version': 1, 'status': 'prepared', 'created': created,
                   'prepared_at': timestamp(), 'run': str(coordinator.run),
                   'run_id': manifest['run_id'], 'project_id': project_id,
@@ -215,6 +225,8 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
                   'evidence_limit': 'Prepared for the lead; this is not proof of reading, obedience or native-worker delivery.'}
         if relay_text:
             packet['relay_inbox'] = relay
+        if update_text:
+            packet['cli_updates'] = {'antigravity': 'updated', 'auto_verify': True}
         if run_mix is not None:
             current = run_mix['current']
             packet['team_mix'] = {key: current[key] for key in ('shares', 'tolerance', 'tiers', 'preset')}
@@ -245,7 +257,7 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
                         + '## Provider family policy\n\n'
                         + policy_line
                         + '```json\n' + policy_text + '\n```\n\n'
-                        + operating['context'] + relay_text + '\n\n## Project recall\n\n'
+                        + operating['context'] + relay_text + update_text + '\n\n## Project recall\n\n'
                         + (recalled['context'] or empty_reason) + '\n')
             packet['packet_sha256'] = hashlib.sha256(rendered.encode('utf-8')).hexdigest()
             serialized = (json.dumps(packet, indent=2) + '\n').replace('\n', os.linesep).encode('utf-8')
@@ -580,7 +592,7 @@ def closeout_run(run, *, owner, session, generation, root=ROOT, final_report=Non
             # A run keeps the policy recorded at its startup; legacy runs stay on v1/v2.
             policy = (startup_proof or {}).get('provider_policy')
             mix = None
-            if isinstance(policy, dict) and policy.get('schema_version') == 3:
+            if isinstance(policy, dict) and policy.get('schema_version', 0) >= 3:
                 state = team_mix.read_run_mix(coordinator.run)
                 mix_digest.append(digest(state))
                 mix = state['current']

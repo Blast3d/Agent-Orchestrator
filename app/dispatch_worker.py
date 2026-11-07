@@ -16,6 +16,7 @@ from usage_guard import Guard, file_lock
 from execution_limits import timeout_for_task
 from worker_execution import WorkerInterrupted, invoke_cloud
 from antigravity_boundary import boundary_error, BoundaryHeld
+from cli_updates import gemini_admission_error
 from storage_budget import StorageBudget, StorageLimitError
 from task_activity import PhaseTracker
 from memory_usage import recall_plan, contract_fields
@@ -402,7 +403,7 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
         if encoding_error or (require_brief and not brief_report['ok']):
             result.update(status='held', execution_status='held',
                           reason='The brief needs correction before this task can start. Read brief_check for the missing sections or errors.')
-        elif args.worker == 'gemini' and (held_reason := boundary_error()):
+        elif args.worker == 'gemini' and (held_reason := gemini_admission_error(boundary=boundary_error)):
             result.update(status='held', execution_status='held', reason=held_reason)
         elif args.worker == 'local-chat' and len(prompt) > 10000:
             raise ValueError('Local brief exceeds the small chat profile; split the task')

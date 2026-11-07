@@ -308,6 +308,20 @@ Windows command line (about 30 KB, checked exactly after quoting), and the agent
 deadline follows task size (2/7.5/15/22.5 minutes, less a 15-second margin).
 Gemini is an automatic quota alternate for Claude, Codex and Grok.
 
+November 7, 2026 update: Antigravity CLI 1.5.3 replaced 1.2.16 (a manual `agy`
+command without `AGY_CLI_DISABLE_AUTO_UPDATE=true` triggered the update; the user
+keeps updates). 1.5.3 lists legacy tool names it does not give the model, so
+`view_file`, `write_to_file`, `read_url_content` and similar calls fail as
+`unknown tool` before any handler, while the model's real tools (`read_file`,
+`write_file`, `edit_file`, `run_command`, `search_web`, delegation, messaging,
+scheduling, configured MCP) reach the wildcard hook and are denied. `--mode plan`
+has no effect with `--disable-slash-commands`, so the hook is the only control.
+The re-verified proof (run `team-mix-sliders-20261107T195340Z-4583fcf9`, reviewed
+by Codex) lists `gemini-3.8-flash-high` only; flash-medium needs its own check.
+From now on `orchestrator.py updates status` reports CLI updates and an
+Antigravity update is re-verified automatically before Gemini dispatch, once per
+new binary; a failed verification keeps Gemini held and is not retried silently.
+
 Do not combine a model ID ending in `-medium` with `--effort low`; the installed
 CLI rejected that conflict before inference. The fixed route uses the model's
 encoded effort. The legacy MCP bridge must forward to this guarded dispatcher;

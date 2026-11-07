@@ -300,6 +300,16 @@ class TeamMixGateTests(unittest.TestCase):
         self.held(result, 'provider_family_coverage')
         self.assertIn('assign accepted work to gemini (Google)', self.family_check(result)['reason'])
 
+    def test_startup_reports_a_changed_antigravity_binary(self):
+        drift = 'Antigravity executable or permission handler changed; revalidation is required.'
+        with patch('antigravity_boundary.boundary_error', return_value=drift):
+            packet = start_run(run=self.run, root=self.root, **self.identity)
+        self.assertEqual(packet['cli_updates'], {'antigravity': 'updated', 'auto_verify': True})
+        self.assertIn('## Worker CLI updates', (self.run / 'startup-context.md').read_text(encoding='utf-8'))
+        with patch('antigravity_boundary.boundary_error', return_value=None):
+            packet = start_run(run=self.run, root=self.root, **self.identity)
+        self.assertNotIn('cli_updates', packet)
+
     def test_v2_receipts_resume_as_v2_without_a_mix(self):
         (self.run / 'startup-context.json').unlink()
         (self.run / 'team-mix.json').unlink()

@@ -34,10 +34,15 @@ continue directly. For explicit manual runs, use `start` without `--automatic`.
 
 Every orchestration run, including a manually requested small edit run, needs
 accepted work from every non-lead family: Grok, Gemini (its best verified tier)
-and whichever of Codex or Claude is not leading. Those families share accepted
-worker tasks near-equally; lead-family work never fills their share. Pick the next
-worker with `python "{root / 'orchestrator.py'}" balance --run RUN` or dispatch
-`run auto`. Plan cross-family assignments before same-family native workers. A
+and whichever of Codex or Claude is not leading. New runs follow the user's team
+mix: linked sliders give every family, the lead included, a target share of
+accepted work (`python "{root / 'orchestrator.py'}" mix show`). When the lead's
+target is low, direct, review and integrate while workers produce; only the user
+retunes a mix. Pick the next worker with `python "{root / 'orchestrator.py'}" balance --run RUN`
+or dispatch `run auto`; use `--tier balanced|economy` for light work. Never run a
+worker CLI by hand without update suppression; `orchestrator.py updates status`
+reports CLI updates, and an Antigravity update is re-verified before Gemini runs.
+Plan cross-family assignments before same-family native workers. A
 small edit run can use the lead plus one review from each non-lead family. JEV is
 advisory and does not count.
 
@@ -65,8 +70,9 @@ Before final orchestration delivery, review tasks, verify capture outcomes,
 complete the contribution ledger/map, and run `orchestrator.py closeout`.
 Startup records the provider policy and run-linked dispatch verifies it even with
 project recall disabled. The provider-family coverage check holds closeout until
-every non-lead family has positive accepted work with near-equal task counts;
-runs started before October 21, 2026 keep their recorded two-family minimum.
+every non-lead family has positive accepted work and, for team-mix runs, every
+family's accepted share is within the mix tolerance of its target; earlier runs
+keep their recorded rule (near-equal task counts or the two-family minimum).
 Copilot counts by actual model, not brand; same-family agents and arbitrary
 foreign native labels cannot fill a share. Native lead credit requires a reviewed capture from the exact run.
 If no authorized alternate is usable, report the blocker and keep the run held.
