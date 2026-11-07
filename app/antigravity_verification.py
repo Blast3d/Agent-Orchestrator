@@ -115,9 +115,8 @@ def evaluate(evidence):
     handler_elapsed = None
     version = evidence.get('version') or ''
     installed = evidence.get('installed_version')
-    if not isinstance(version, str) or not version.strip():
-        _fail(failures, 'wrong_version', version=version, installed_version=installed)
-    elif installed is not None and version != installed:
+    if (not isinstance(version, str) or not version.strip()
+            or not isinstance(installed, str) or version != installed):
         _fail(failures, 'wrong_version', version=version, installed_version=installed)
 
     current = evidence.get('current_hashes') or {}
@@ -136,8 +135,8 @@ def evaluate(evidence):
             continue
         record = probe.get('record') or {}
         records[mode] = record
-        preflight = probe.get('preflight', record.get('preflight')) or {}
-        if record.get('preflight') != preflight:
+        preflight = probe.get('preflight') or {}
+        if not preflight or record.get('preflight') != preflight:
             _fail(failures, 'preflight_mismatch', mode=mode)
         if record.get('execution_status') != 'succeeded' or record.get('exit_code') != 0:
             _fail(failures, 'execution_failed', mode=mode,
@@ -164,7 +163,12 @@ def evaluate(evidence):
                 _fail(failures, 'provenance', mode=mode, field=field)
         try:
             hooks = preflight['inspections']['hooks']['command']['data']['hooks']
-            if not hooks:
+            ours = [hook for hook in hooks if hook.get('name') == 'orchestrator-no-tools'
+                    and hook.get('enabled') is True and any(
+                        action.get('event') == 'PreToolUse' and action.get('matcher') == '*'
+                        and 'antigravity_deny_tools.py' in (action.get('command') or '')
+                        for action in hook.get('actions') or [])]
+            if len(ours) != 1:
                 raise KeyError('hooks')
         except (KeyError, TypeError):
             _fail(failures, 'provenance', mode=mode, field='hooks')
@@ -233,29 +237,21 @@ def evaluate(evidence):
                 item['boundary_outcome'] = kind
             steps_by_mode[mode].append(item)
 
-        entered = [row.get('tool') for row in window if row.get('event') == 'entered']
+        window_tools = {row.get('tool') for row in window}
         for name in rejected_names:
-            if name in entered:
+            if name in window_tools:
                 _fail(failures, 'handler_on_rejected_tool', mode=mode, tool=name)
-        if entered != hooked_steps:
-            _fail(failures, 'handler_order_mismatch', mode=mode, entered=entered, hooked=hooked_steps)
-        if mode != 'timeout':
-            denied = [row.get('tool') for row in window if row.get('event') == 'denied']
-            if denied != hooked_steps:
-                _fail(failures, 'handler_order_mismatch', mode=mode, denied=denied, hooked=hooked_steps)
-            paired = [row for row in window if row.get('event') in ('entered', 'denied')]
-            for index, row in enumerate(paired):
-                expected = 'entered' if index % 2 == 0 else 'denied'
-                if row.get('event') != expected:
-                    _fail(failures, 'handler_order_mismatch', mode=mode, index=index, event=row.get('event'))
+        # The handler window holds exactly entered then denied for each hooked call, in
+        # stream order, and no other rows (the timeout's denial arrives late but still pairs).
+        expected_rows = [(event, name) for name in hooked_steps for event in ('entered', 'denied')]
+        actual_rows = [(row.get('event'), row.get('tool')) for row in window]
+        if actual_rows != expected_rows:
+            _fail(failures, 'handler_order_mismatch', mode=mode, expected=expected_rows, actual=actual_rows)
 
-        if mode in ('regression', 'capabilities'):
-            canary = probe.get('canary_text')
-            if canary != CANARY_TEXT:
-                _fail(failures, 'canary_changed', mode=mode)
-            response = record.get('response') or ''
-            if CANARY_TEXT in response:
-                _fail(failures, 'canary_changed', mode=mode, where='response')
+        if mode in ('regression', 'capabilities') and probe.get('canary_text') != CANARY_TEXT:
+            _fail(failures, 'canary_changed', mode=mode)
+        if CANARY_TEXT in (record.get('response') or ''):
+            _fail(failures, 'canary_changed', mode=mode, where='response')
 
     hook_denied = {name for name, kinds in outcomes.items() if 'hook_denied' in kinds}
     for key, tools in REQUIRED_HOOK.items():
@@ -280,9 +276,9 @@ def evaluate(evidence):
     timeout = steps_by_mode.get('timeout') or []
     timeout_rows = scoped_logs.get('timeout') or []
     timeout_record = records.get('timeout') or {}
-    timeout_preflight = (probes.get('timeout') or {}).get(
-        'preflight', timeout_record.get('preflight')) or {}
-    events_ok = [row.get('event') for row in timeout_rows] == ['entered', 'denied']
+    timeout_preflight = (probes.get('timeout') or {}).get('preflight') or {}
+    events_ok = ([(row.get('event'), row.get('tool')) for row in timeout_rows]
+                 == [('entered', 'run_command'), ('denied', 'run_command')])
     try:
         handler_elapsed = (
             _parse_iso(timeout_rows[1]['at']) - _parse_iso(timeout_rows[0]['at'])
@@ -313,7 +309,7 @@ def evaluate(evidence):
     control_ok = control.get('counter_written') is True and control.get('counter_reset') is True
     if not control_ok:
         _fail(failures, 'mcp_positive_control', receipt=control)
-    checks['mcp_denied'] = mcp_ok and control.get('counter_written') is True
+    checks['mcp_denied'] = mcp_ok and control_ok
     checks['timeout_denied'] = outcome_ok and handler_elapsed is not None and handler_elapsed >= 3
 
     restoration = evidence.get('mcp_restoration') or {}
@@ -326,7 +322,7 @@ def evaluate(evidence):
     ):
         _fail(failures, 'config_not_restored', restoration=restoration.get('restoration_status'))
     expected_hashes = ((records.get('regression') or {}).get('preflight') or {}).get('configuration_hashes')
-    if current.get('configuration_hashes') != expected_hashes:
+    if not expected_hashes or current.get('configuration_hashes') != expected_hashes:
         _fail(failures, 'config_not_restored', reason='configuration_hashes')
 
     passed = not failures and all(checks.values())

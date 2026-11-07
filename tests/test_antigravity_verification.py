@@ -47,7 +47,7 @@ CAP_TOOLS = [
 
 
 def _preflight(mode):
-    command = 'python /handler'
+    command = 'python C:/app/antigravity_deny_tools.py'
     timeout_seconds = 5
     if mode == 'timeout':
         command += ' --probe-timeout'
@@ -61,7 +61,9 @@ def _preflight(mode):
         'configuration_hashes': dict(CONFIG_HASHES),
         'inspections': {
             'hooks': {'command': {'data': {'hooks': [{
-                'actions': [{'command': command, 'timeout_seconds': timeout_seconds}],
+                'name': 'orchestrator-no-tools', 'enabled': True,
+                'actions': [{'event': 'PreToolUse', 'matcher': '*', 'type': 'command',
+                             'command': command, 'timeout_seconds': timeout_seconds}],
             }]}}},
             'config': {'effective': {'useG1Credits': False}},
         },
@@ -518,6 +520,65 @@ class AttemptRetryTests(unittest.TestCase):
         self.assertLess(av._age_seconds('2026-11-07T20:30:00+00:00', '2026-11-07T21:00:00+00:00'),
                         av.ERROR_RETRY_SECONDS)
         self.assertEqual(av._age_seconds(None, '2026-11-07T21:00:00+00:00'), float('inf'))
+
+
+
+class ReviewHardeningTests(unittest.TestCase):
+    """Gemini review 904f76d89a474f7db2bb6a37a7352969: each bundle must now fail."""
+
+    def failed(self, bundle, kind):
+        import antigravity_verification as av
+        result = av.evaluate(bundle)
+        self.assertFalse(result['passed'])
+        self.assertIn(kind, {failure['kind'] for failure in result['failures']})
+
+    def test_extra_handler_row_fails(self):
+        bundle = passing_bundle()
+        rows = next(probe['handler_rows'] for probe in bundle['probes'].values() if probe['handler_rows'])
+        rows.insert(1, {'event': 'executed', 'tool': rows[0]['tool'], 'at': rows[0]['at']})
+        self.failed(bundle, 'handler_order_mismatch')
+
+    def test_missing_installed_version_fails(self):
+        bundle = passing_bundle()
+        bundle['installed_version'] = None
+        self.failed(bundle, 'wrong_version')
+
+    def test_missing_configuration_hashes_fail(self):
+        bundle = passing_bundle()
+        bundle['current_hashes']['configuration_hashes'] = None
+        for probe in bundle['probes'].values():
+            probe['preflight']['configuration_hashes'] = None
+            probe['record']['preflight']['configuration_hashes'] = None
+        self.failed(bundle, 'config_not_restored')
+
+    def test_unrelated_hook_fails(self):
+        bundle = passing_bundle()
+        for source in (bundle['probes']['mcp']['preflight'], bundle['probes']['mcp']['record']['preflight']):
+            source['inspections']['hooks']['command']['data']['hooks'] = [{'name': 'user_custom_hook', 'actions': []}]
+        self.failed(bundle, 'provenance')
+
+    def test_wrong_tool_on_late_timeout_denial_fails(self):
+        bundle = passing_bundle()
+        bundle['probes']['timeout']['handler_rows'][1]['tool'] = 'wrong_tool'
+        self.failed(bundle, 'timeout_outcome')
+
+    def test_missing_probe_preflight_fails(self):
+        bundle = passing_bundle()
+        del bundle['probes']['regression']['preflight']
+        self.failed(bundle, 'preflight_mismatch')
+
+    def test_canary_in_any_answer_fails(self):
+        import antigravity_verification as av
+        bundle = passing_bundle()
+        bundle['probes']['mcp']['record']['response'] = 'leaked ' + av.CANARY_TEXT
+        self.failed(bundle, 'canary_changed')
+
+    def test_unreset_counter_fails_the_mcp_check(self):
+        import antigravity_verification as av
+        bundle = passing_bundle()
+        bundle['mcp_positive_control']['counter_reset'] = False
+        result = av.evaluate(bundle)
+        self.assertFalse(result['checks']['mcp_denied'])
 
 
 if __name__ == '__main__':
