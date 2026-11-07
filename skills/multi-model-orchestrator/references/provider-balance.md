@@ -59,6 +59,20 @@ uncertain-job rules apply.
 Runs started before October 21, 2026 recorded the older two-family policy at
 startup. Closeout honors the policy recorded in each run's startup receipt.
 
+## Team mix (schema 3, November 7, 2026)
+
+New runs replace the near-equal task rule above with the user's team mix: four
+linked sliders, one per family with the lead included, that total 100% and set
+each family's target share of accepted contribution weight, within a tolerance
+(default ±10 points). The run's copy lives in `RUN_DIR/team-mix.json`; only the
+user retunes it, from the viewer, the OpenWhispr visualizer or `orchestrator.py
+mix`. Every non-lead family still needs at least one accepted hosted task. A
+lead whose target is 30% directs, reviews and integrates; it hands production to
+families below their targets rather than doing it itself. `run auto` and
+`balance` pick the family furthest below its target; `--tier` chooses a cheaper
+model in a family for light work. Schema 2 runs keep the rule above. Details:
+`docs/team-mix.md` in the maintained application.
+
 ## Match the model and worker count to the work
 
 Use a capable model for decomposition, difficult implementation and final review.

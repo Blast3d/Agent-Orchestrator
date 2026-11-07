@@ -25,15 +25,22 @@ records prepared or requested input; it cannot prove a model read or obeyed it.
 
 Every run needs accepted work from every non-lead family: Grok (xAI), Gemini
 (Google, best verified tier) and whichever of Codex (OpenAI) or Claude (Anthropic)
-is not leading. Those three share accepted worker tasks near-equally: the spread
-between the most and least used may not exceed max(1, ceil(0.15 x highest count)).
-Lead-family work is optional. Pick the next worker with `orchestrator.py balance
---run RUN` or dispatch `run auto`, which chooses the least-used eligible family
-and Gemini on ties. Plan cross-family assignments before same-family native
-workers. Copilot counts by its actual model; JEV advice is not participation. A
-small edit run can use the lead plus one review from each non-lead family. Do not
-create filler jobs or fabricated credit. If an authorized family is unusable,
-record the blocker and keep the run held.
+is not leading. New runs follow the user's team mix (policy schema 3): four
+linked sliders give each family, the lead included, a target share of accepted
+contribution weight, within a tolerance. The startup packet states the run's
+targets. When your own family's target is low, direct, review and integrate, and
+delegate production to the families below their targets. Only the user retunes a
+mix (viewer, visualizer or `orchestrator.py mix`); never change it to pass
+closeout. Pick the next worker with `orchestrator.py balance --run RUN` or
+dispatch `run auto`, which chooses the eligible family furthest below its target
+(Gemini first on ties). Runs started under schema 2 keep near-equal task counts:
+spread at most max(1, ceil(0.15 x highest count)). Choose a cheaper `--tier`
+(balanced or economy) for light work; the mix sets each family's default tier.
+Plan cross-family assignments before same-family native workers. Copilot counts
+by its actual model; JEV advice is not participation. A small edit run can use
+the lead plus one review from each non-lead family. Do not create filler jobs or
+fabricated credit. If an authorized family is unusable, record the blocker and
+keep the run held.
 
 Startup records this provider policy and run-linked dispatch verifies it, even
 with project recall disabled. This requirement grants no provider access, content
@@ -85,9 +92,10 @@ Keep missing measurements unknown and do not infer efficiency from one sample.
 Complete the contribution ledger, generate the standard audit and project map,
 then run `orchestrator.py closeout`. Resolve missing receipts, pending work,
 unattributed accepted work, or invalid reports before claiming completion.
-The `provider_family_coverage` check requires positive accepted work from every
-non-lead family with near-equal task counts; runs started before this rule keep
-their recorded two-family minimum. Hosted credit must match canonical
+The `provider_family_coverage` check requires positive accepted hosted work from
+every non-lead family and, for schema 3, every family's accepted share within the
+run mix's tolerance of its target; schema 2 runs keep near-equal task counts and
+earlier runs their two-family minimum. Hosted credit must match canonical
 successful task/model evidence. Native lead credit requires a genuine reviewed
 capture from this exact run; arbitrary foreign native labels do not count.
 Synthetic checks, JEV advice and imported memories do not satisfy coverage.

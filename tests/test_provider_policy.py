@@ -7,7 +7,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 from provider_policy import (LEGACY_MINIMUM_FAMILIES, LEGACY_PREFERRED_FAMILIES,
                              MINIMUM_FAMILIES, PREFERRED_FAMILIES, coverage,
-                             family_for_worker, legacy_plan, plan, require_coverage,
+                             family_for_worker, legacy_plan, plan, plan_v2, require_coverage,
                              validate_plan)
 
 
@@ -69,7 +69,9 @@ class FamilyIdentityTests(unittest.TestCase):
                 ('sol', 'OpenAI', ['claude', 'grok', 'gemini'], ['Anthropic', 'xAI', 'Google']),
                 ('fable', 'Anthropic', ['codex', 'grok', 'gemini'], ['OpenAI', 'xAI', 'Google'])):
             with self.subTest(owner=owner):
-                value = plan(owner)
+                self.assertEqual(plan(owner), dict({k: v for k, v in plan_v2(owner).items() if k != 'balance'},
+                    schema_version=3, participation={'measure': 'accepted_contribution_share', 'mix_file': 'team-mix.json'}))
+                value = plan_v2(owner)
                 self.assertEqual(value, {'schema_version': 2, 'minimum_families': 3,
                                         'preferred_families': 4, 'lead_family': family,
                                         'cross_family_workers': workers,

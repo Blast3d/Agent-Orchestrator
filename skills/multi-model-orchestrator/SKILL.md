@@ -46,11 +46,15 @@ required. Availability across projects does not mean every request needs a team.
 
 Every orchestration run requires accepted work from **every non-lead family**:
 Grok (xAI), Gemini (Google, on its best verified Antigravity tier) and whichever
-of Codex (OpenAI) or Claude (Anthropic) is not leading. Those families share the
-accepted worker tasks **near-equally**; lead-family work is optional and never
-fills their share. Use `orchestrator.py balance --run RUN` to see counts and the
-next worker, or `run auto` to dispatch to the least-used eligible family (Gemini
-on ties). Plan cross-family assignments before same-family native subagents.
+of Codex (OpenAI) or Claude (Anthropic) is not leading. New runs follow the
+user's **team mix**: one target share per family, the lead included, set with
+linked sliders in the viewer or visualizer (`orchestrator.py mix`). Closeout holds
+until each family's accepted share is within the mix tolerance; when the lead's
+target is low, direct and review while workers produce. Use `orchestrator.py
+balance --run RUN` to see targets, counts and the next worker, or `run auto` to
+dispatch to the family furthest below its target (Gemini on ties). Choose `--tier
+balanced` or `economy` for light assignments. Runs started under schema 2 keep
+near-equal task counts. Plan cross-family assignments before same-family native subagents.
 Several OpenAI agents still count as one family; Copilot's family comes from its
 actual model, not the GitHub brand. JEV routing advice is not worker
 participation. Apply [provider balance](references/provider-balance.md) for the
@@ -375,8 +379,10 @@ Use the maintained `orchestrator.py closeout --run EXACT_RUN --owner OWNER
 --session SESSION --generation N` before final delivery. It verifies current
 ownership, linked task reviews and capture receipts, native capture when
 required, and the standard contribution audit/map. Its `provider_family_coverage`
-check requires positive accepted work from every non-lead family with near-equal
-task counts; runs started earlier keep their recorded two-family minimum. Hosted
+check requires positive accepted work from every non-lead family and, for schema
+3, each family's accepted share within the run mix's tolerance of its target;
+schema 2 runs keep near-equal task counts and earlier runs their two-family
+minimum. Hosted
 credit must match canonical task/model evidence; native
 lead credit requires a genuine reviewed capture from this run. Arbitrary foreign
 native provider labels, JEV advice and synthetic checks do not satisfy coverage.

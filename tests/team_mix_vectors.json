@@ -1,0 +1,130 @@
+[
+ {
+  "shares": {
+   "OpenAI": 25,
+   "Anthropic": 25,
+   "xAI": 25,
+   "Google": 25
+  },
+  "family": "Anthropic",
+  "value": 40,
+  "expected": {
+   "OpenAI": 20,
+   "Anthropic": 40,
+   "xAI": 20,
+   "Google": 20
+  }
+ },
+ {
+  "shares": {
+   "OpenAI": 25,
+   "Anthropic": 25,
+   "xAI": 25,
+   "Google": 25
+  },
+  "family": "OpenAI",
+  "value": 85,
+  "expected": {
+   "OpenAI": 85,
+   "Anthropic": 5,
+   "xAI": 5,
+   "Google": 5
+  }
+ },
+ {
+  "shares": {
+   "OpenAI": 25,
+   "Anthropic": 25,
+   "xAI": 25,
+   "Google": 25
+  },
+  "family": "xAI",
+  "value": 99,
+  "expected": {
+   "OpenAI": 5,
+   "Anthropic": 5,
+   "xAI": 85,
+   "Google": 5
+  }
+ },
+ {
+  "shares": {
+   "OpenAI": 25,
+   "Anthropic": 25,
+   "xAI": 25,
+   "Google": 25
+  },
+  "family": "Google",
+  "value": 0,
+  "expected": {
+   "OpenAI": 32,
+   "Anthropic": 32,
+   "xAI": 31,
+   "Google": 5
+  }
+ },
+ {
+  "shares": {
+   "OpenAI": 30,
+   "Anthropic": 40,
+   "xAI": 15,
+   "Google": 15
+  },
+  "family": "OpenAI",
+  "value": 50,
+  "expected": {
+   "OpenAI": 50,
+   "Anthropic": 27,
+   "xAI": 12,
+   "Google": 11
+  }
+ },
+ {
+  "shares": {
+   "OpenAI": 85,
+   "Anthropic": 5,
+   "xAI": 5,
+   "Google": 5
+  },
+  "family": "OpenAI",
+  "value": 40,
+  "expected": {
+   "OpenAI": 40,
+   "Anthropic": 20,
+   "xAI": 20,
+   "Google": 20
+  }
+ },
+ {
+  "shares": {
+   "OpenAI": 40,
+   "Anthropic": 20,
+   "xAI": 15,
+   "Google": 25
+  },
+  "family": "Google",
+  "value": 33,
+  "expected": {
+   "OpenAI": 35,
+   "Anthropic": 18,
+   "xAI": 14,
+   "Google": 33
+  }
+ },
+ {
+  "shares": {
+   "OpenAI": 30,
+   "Anthropic": 40,
+   "xAI": 15,
+   "Google": 15
+  },
+  "family": "xAI",
+  "value": 16.6,
+  "expected": {
+   "OpenAI": 29,
+   "Anthropic": 39,
+   "xAI": 17,
+   "Google": 15
+  }
+ }
+]

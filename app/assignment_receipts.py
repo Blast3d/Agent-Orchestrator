@@ -57,8 +57,14 @@ def _read_json(path):
 
 
 def _contract(value):
-    if not isinstance(value, dict) or not _CONTRACT_KEYS <= set(value) or set(value)-_CONTRACT_KEYS-{'memory_query','memory_policy','memory_profile','memory_depth','timeout_seconds','codex_model','codex_effort','skill_plan_binding'}:
+    if not isinstance(value, dict) or not _CONTRACT_KEYS <= set(value) or set(value)-_CONTRACT_KEYS-{'memory_query','memory_policy','memory_profile','memory_depth','timeout_seconds','codex_model','codex_effort','skill_plan_binding','model_tier'}:
         raise ValueError('Assignment contract must contain declared identity fields and supported optional settings')
+    if 'model_tier' in value:
+        tier = value['model_tier']
+        if (value.get('worker') not in ('grok', 'gemini') or not isinstance(tier, dict)
+                or set(tier) != {'model', 'effort'} or not isinstance(tier['model'], str)
+                or not tier['model'] or tier['effort'] not in (None, 'low', 'medium', 'high')):
+            raise ValueError('Model tier identity is invalid')
     if 'skill_plan_binding' in value:
         binding = value['skill_plan_binding']
         if (not isinstance(binding, dict) or set(binding) != {'plan_id', 'context_sha256'}

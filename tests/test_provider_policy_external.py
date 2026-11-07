@@ -7,6 +7,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 import provider_policy as policy
 
 
+_CURRENT_PLAN = policy.plan
+
+
+def setUpModule():
+    # Schema-2 regression suite: pin the default policy to v2 so these near-equal
+    # checks keep exercising v2; schema 3 lives in test_provider_policy_v3.py.
+    policy.plan = policy.plan_v2
+
+
+def tearDownModule():
+    policy.plan = _CURRENT_PLAN
+
+
 def fixture(workers):
     ledger = {'contributors': [], 'work_items': [], 'activity': []}
     hosted = {}

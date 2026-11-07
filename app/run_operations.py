@@ -11,9 +11,10 @@ from brain_store import BrainStore, digest, safe_path, text
 from contribution_tasks import task_ledger
 from coordinator_handoff import Coordinator
 from memory_bundle import validate_bundle
-from provider_policy import coverage
+from provider_policy import coverage, plan
 from task_store import TaskStore, write_json
 from team_balance import recorded_policy
+import team_mix
 from usage_guard import file_lock
 
 
@@ -128,8 +129,18 @@ class RunOperations:
                         hosted[job] = {'actor':actor, 'event':events[0], 'synthetic':row.get('synthetic_input') is True or row.get('count_as_build_worker') is False}
             except (OSError, ValueError, KeyError, TypeError) as error:
                 notices.append({'job_id':job, 'reason':str(error) if isinstance(error,ValueError) else type(error).__name__})
+        policy = recorded_policy(run, state['owner'])
+        mix = None
+        if (policy or plan(state['owner']))['schema_version'] >= 3:
+            try:
+                mix = team_mix.read_run_mix(run)['current']
+            except ValueError as error:
+                # Preview only: closeout still requires the run's own mix.
+                mix = team_mix.read_global(self.root)
+                notices.append({'job_id': None, 'reason': 'Team mix: ' + str(error)
+                                + '; previewing against the default for new runs'})
         result = coverage(state['owner'], ledger, hosted, native_capture=native,
-                          policy=recorded_policy(run, state['owner']))
+                          policy=policy, mix=mix)
         return dict(result, notices=notices, provider_calls=0, preview_only=True,
                     note='Canonical accepted work and allocation evidence only. Full closeout separately checks all reviews, captures, source proofs and audits.')
 

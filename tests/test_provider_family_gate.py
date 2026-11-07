@@ -13,13 +13,15 @@ from contributions import write_report
 from memory_bundle import capture_run
 from orchestration_context import OperatingContextError, verify_run_startup
 from orchestration_lifecycle import start_run
-from provider_policy import legacy_plan, plan
+from provider_policy import legacy_plan, plan, plan_v2
 from task_store import write_json
+import team_mix
 
 
 class ProviderFamilyGateTests(unittest.TestCase):
-    # Current runs record policy v2: every non-lead family must contribute, near-equally.
-    policy_factory = staticmethod(plan)
+    # Schema-2 regression suite: every non-lead family must contribute, near-equally.
+    # New runs record schema 3; see TeamMixGateTests below.
+    policy_factory = staticmethod(plan_v2)
     setUp = fixture.LifecycleTests.setUp
     read = fixture.LifecycleTests.read
     manifest = fixture.LifecycleTests.manifest
@@ -154,6 +156,8 @@ class ProviderFamilyGateTests(unittest.TestCase):
         self.assertEqual(detail['warnings'], [])
 
     def test_runs_started_before_policy_v2_keep_the_two_family_minimum(self):
+        # Simulate a run first started under the two-family rule (no receipt yet).
+        (self.run / 'startup-context.json').unlink()
         with patch('orchestration_lifecycle.plan', side_effect=legacy_plan):
             start_run(run=self.run, root=self.root, **self.identity)
         # Resuming under the current code keeps the run's recorded policy generation.
@@ -228,6 +232,84 @@ class ProviderFamilyGateTests(unittest.TestCase):
                                                                   'family': 'Anthropic'}[change]
                 write_json(path, receipt)
                 self.held(self.close(), 'startup_context')
+
+
+class TeamMixGateTests(unittest.TestCase):
+    """Schema 3: closeout follows the run's team mix, the lead included."""
+    policy_factory = staticmethod(plan)
+    setUp = fixture.LifecycleTests.setUp
+    read = fixture.LifecycleTests.read
+    manifest = fixture.LifecycleTests.manifest
+    task = fixture.LifecycleTests.task
+    audit = fixture.LifecycleTests.audit
+    close = fixture.LifecycleTests.close
+    held = fixture.LifecycleTests.held
+    hosted = ProviderFamilyGateTests.hosted
+    family_check = ProviderFamilyGateTests.family_check
+    native_capture = ProviderFamilyGateTests.native_capture
+    append_native_credit = ProviderFamilyGateTests.append_native_credit
+
+    def every_family_once(self):
+        # Claude, Grok and Gemini hosted work plus native ASTRA work, one weight each.
+        self.hosted()
+        self.hosted(worker='grok', model='grok-4.6-build')
+        self.hosted(worker='gemini', model='gemini-3.8-flash-high')
+        self.audit()
+        self.native_capture()
+        self.append_native_credit()
+
+    def test_start_records_v3_and_a_run_copy_of_the_default_mix(self):
+        receipt = self.read(self.run / 'startup-context.json')
+        self.assertEqual(receipt['provider_policy']['schema_version'], 3)
+        state = team_mix.read_run_mix(self.run)
+        self.assertEqual(state['current']['shares'], team_mix.PRESETS['balanced'])
+        self.assertEqual([row['source'] for row in state['history']], ['startup'])
+        self.assertEqual(receipt['team_mix']['shares'], team_mix.PRESETS['balanced'])
+        self.assertIn('OpenAI 25%', (self.run / 'startup-context.md').read_text(encoding='utf-8'))
+        team_mix.retune_run(self.run, preset='code', source='viewer')
+        start_run(run=self.run, root=self.root, **self.identity)
+        self.assertEqual(team_mix.read_run_mix(self.run)['current']['preset'], 'code')
+        self.assertEqual(self.read(self.run / 'startup-context.json')['team_mix']['preset'], 'code')
+        self.assertEqual(self.read(self.run / 'startup-context.json')['provider_policy']['schema_version'], 3)
+
+    def test_matching_mix_completes(self):
+        self.every_family_once()
+        result = self.close()
+        self.assertEqual(result['status'], 'completed', result)
+        participation = self.family_check(result)['detail']['participation']
+        self.assertTrue(participation['met'])
+        self.assertEqual(participation['actual'], dict.fromkeys(team_mix.FAMILIES, 25.0))
+
+    def test_lead_over_its_slider_holds_until_the_mix_is_retuned(self):
+        self.every_family_once()
+        team_mix.retune_run(self.run, shares={'OpenAI': 5, 'Anthropic': 35, 'xAI': 30, 'Google': 30},
+                            source='viewer')
+        result = self.close()
+        self.held(result, 'provider_family_coverage')
+        self.assertIn('OpenAI actual share 25.0 exceeds target 5.0', self.family_check(result)['reason'])
+        self.assertIn('delegate more', self.family_check(result)['reason'])
+        team_mix.retune_run(self.run, preset='balanced', source='viewer')
+        self.assertEqual(self.close()['status'], 'completed')
+        self.assertEqual(len(team_mix.read_run_mix(self.run)['history']), 3)
+
+    def test_every_non_lead_family_still_needs_hosted_work(self):
+        self.hosted()
+        self.hosted(worker='grok', model='grok-4.6-build')
+        self.audit()
+        result = self.close()
+        self.held(result, 'provider_family_coverage')
+        self.assertIn('assign accepted work to gemini (Google)', self.family_check(result)['reason'])
+
+    def test_v2_receipts_resume_as_v2_without_a_mix(self):
+        (self.run / 'startup-context.json').unlink()
+        (self.run / 'team-mix.json').unlink()
+        with patch('orchestration_lifecycle.plan', side_effect=plan_v2):
+            start_run(run=self.run, root=self.root, **self.identity)
+        start_run(run=self.run, root=self.root, **self.identity)
+        receipt = self.read(self.run / 'startup-context.json')
+        self.assertEqual(receipt['provider_policy'], plan_v2('astra'))
+        self.assertNotIn('team_mix', receipt)
+        self.assertFalse((self.run / 'team-mix.json').exists())
 
 
 if __name__ == '__main__':

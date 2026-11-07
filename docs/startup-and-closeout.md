@@ -36,6 +36,13 @@ counts and next worker; `python orchestrator.py run auto --run RUN ...` dispatch
 to the least-used eligible family, preferring Gemini on ties. Runs started before
 the change keep the two-family policy recorded in their startup receipt.
 
+Since November 7, 2026 new runs record policy schema 3 and copy the user's team
+mix into `RUN_DIR/team-mix.json` at startup. The near-equal task rule is replaced
+by per-family target shares of accepted contribution weight, the lead included,
+within the mix's tolerance; every non-lead family still needs accepted hosted
+work. The startup packet lists the targets. Schema 2 runs resume unchanged. See
+[team-mix.md](team-mix.md).
+
 ```powershell
 python orchestrator.py start --workspace C:\path\to\workspace --name feature-review --objective "Review the feature" --project my-project
 ```

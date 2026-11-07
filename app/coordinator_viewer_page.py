@@ -624,8 +624,13 @@ __WORKSPACE_NAV_STYLE__</style>
 
 from workspace_navigation import STYLE, THEME, static_markup  # noqa: E402
 from run_operations_page import HTML as OPERATIONS_HTML, JS as OPERATIONS_JS, STYLE as OPERATIONS_STYLE  # noqa: E402
+from team_mix_page import HTML as TEAM_MIX_HTML, JS as TEAM_MIX_JS, STYLE as TEAM_MIX_STYLE  # noqa: E402
 
 # The shared navigation; the server fills in the current lead for the chip.
-PAGE = PAGE.replace('__WORKSPACE_NAV__', static_markup('viewer', 'viewer', '__WORKSPACE_LEAD__')).replace('__WORKSPACE_NAV_STYLE__', THEME + STYLE + OPERATIONS_STYLE)
+PAGE = PAGE.replace('__WORKSPACE_NAV__', static_markup('viewer', 'viewer', '__WORKSPACE_LEAD__')).replace('__WORKSPACE_NAV_STYLE__', THEME + STYLE + OPERATIONS_STYLE + TEAM_MIX_STYLE)
 PAGE = PAGE.replace('  <footer>', OPERATIONS_HTML + '\n  <footer>', 1)
 PAGE = PAGE.replace('  renderCrumb(); loadServices(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh();', OPERATIONS_JS + '\n  renderCrumb(); loadServices(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh();', 1)
+# The team mix sits right after the lead switch it complements.
+PAGE = PAGE.replace('  <section class="panel session" aria-label="Selected orchestrator">',
+                    TEAM_MIX_HTML + '  <section class="panel session" aria-label="Selected orchestrator">', 1)
+PAGE = PAGE.replace('  renderCrumb(); loadServices();', TEAM_MIX_JS + '\n  renderCrumb(); loadServices();', 1)

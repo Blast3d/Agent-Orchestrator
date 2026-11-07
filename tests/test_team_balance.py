@@ -11,7 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
 
 import team_balance
-from provider_policy import legacy_plan, plan
+from provider_policy import legacy_plan, plan_v2 as plan
 
 
 def allow(worker, size):

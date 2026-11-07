@@ -55,6 +55,11 @@ allowance pools the advice considers. Local models are excluded. `--cap` accepts
 modified canonical task indexes. The full JSON reports first-wave workers,
 planned waves, total roles, quota state, and provider timing sample counts.
 
+With a team mix (schema 3 runs), the advice also lists `participation_targets` and
+the lead's target, and splits worker assignments by the non-lead families' shares
+instead of near-equally. Counts remain a starting point: closeout measures
+accepted contribution weight, not task counts. See [team-mix.md](team-mix.md).
+
 ## Allowance and admission
 
 Planning reads the saved policy and quota snapshot and evaluates it without

@@ -94,7 +94,8 @@ def worker_environment():
 
 
 def cloud_command(worker, prompt, work, claude_model=None, claude_effort='medium', *, preflight=False,
-                  codex_model=None, codex_effort='medium', timeout_seconds=None):
+                  codex_model=None, codex_effort='medium', timeout_seconds=None,
+                  grok_model='grok-4.6', grok_effort='low'):
     # Readiness checks must not prepare a stale provider input before admission.
     if preflight and prompt:
         raise ValueError('Transport preflight does not accept task or memory text')
@@ -123,12 +124,16 @@ def cloud_command(worker, prompt, work, claude_model=None, claude_effort='medium
         from antigravity_boundary import command_for
         return command_for(PREFIX + prompt, work, worker_environment(), timeout_seconds), None
     if worker == 'grok':
+        from model_tiers import validate_selection
+        verified, reason = validate_selection('grok', grok_model, grok_effort)
+        if not verified:
+            raise BoundaryHeld(reason)
         task_file = work / 'task.txt'
         if not preflight:
             task_file.write_bytes((PREFIX + prompt).encode('utf-8'))
         command = [str(Path.home() / '.grok/bin/grok.exe'), '--no-auto-update',
-                 '--prompt-file', str(task_file), '--model', 'grok-4.6',
-                 '--reasoning-effort', 'low',
+                 '--prompt-file', str(task_file), '--model', grok_model,
+                 '--reasoning-effort', grok_effort,
                  '--output-format', 'json', '--max-turns', '2', '--no-subagents',
                  '--verbatim', '--no-memory', '--no-plan', '--disable-web-search',
                  '--tools', 'read_file', '--disallowed-tools', 'read_file,Agent',
@@ -216,24 +221,41 @@ def delivery_evidence_check(brain, recalled, fingerprints=None):
 
 def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
     """Return a summary; successful execution always requires a separate review."""
-    claude_model = None
-    if args.worker == 'claude':
+    claude_model = codex_model = model_tier = tier_reason = None
+    claude_effort = getattr(args, 'claude_effort', None) or 'medium'
+    codex_effort = getattr(args, 'codex_effort', None) or 'medium'
+    grok_model, grok_effort = 'grok-4.6', 'low'
+    if args.worker in ('codex', 'claude', 'grok', 'gemini'):
+        # Tier precedence: --tier, explicit model flag, run mix, global mix, best.
+        # An unverified or paused model holds before any reservation.
+        from model_tiers import resolve_request
         try:
-            claude_model = select_model(requested=getattr(args, 'claude_model', None))
+            explicit = args.worker in ('claude', 'codex')
+            selection = resolve_request(
+                args.worker, getattr(args, 'tier', None),
+                model=getattr(args, args.worker + '_model', None) if explicit else None,
+                effort=getattr(args, args.worker + '_effort', None) if explicit else None,
+                run_dir=getattr(args, 'run', None))
+            model_tier = {key: selection[key] for key in ('tier', 'model', 'effort', 'source')}
+            tier_reason = selection['reason']
+            if not selection['verified']:
+                raise ValueError(tier_reason or 'This model tier is not verified for its route')
+            if args.worker == 'claude':
+                claude_model, claude_effort = select_model(requested=selection['model']), selection['effort']
+            elif args.worker == 'codex':
+                from codex_worker import select_codex_model
+                codex_model, codex_effort = select_codex_model(selection['model']), selection['effort']
+            elif args.worker == 'grok':
+                grok_model, grok_effort = selection['model'], selection['effort']
         except ValueError as exc:
             return dict(status='held', execution_status='held', worker=args.worker,
                         reason=str(exc), cleanup_errors=[], export_status='unclaimed',
-                        reservation_id=None, assignment_reused=False)
-    codex_model = None
-    codex_effort = getattr(args, 'codex_effort', 'medium')
-    if args.worker == 'codex':
-        from codex_worker import select_codex_model
-        try:
-            codex_model = select_codex_model(getattr(args, 'codex_model', None))
-        except ValueError as exc:
-            return dict(status='held', execution_status='held', worker=args.worker,
-                        reason=str(exc), cleanup_errors=[], export_status='unclaimed',
-                        reservation_id=None, assignment_reused=False)
+                        reservation_id=None, assignment_reused=False,
+                        model_tier=model_tier, model_tier_reason=tier_reason)
+    elif getattr(args, 'tier', None) is not None:
+        return dict(status='held', execution_status='held', worker=args.worker,
+                    reason='This worker has no model tier ladder', cleanup_errors=[],
+                    export_status='unclaimed', reservation_id=None, assignment_reused=False)
     override=getattr(args,'timeout_seconds',None)
     effective_timeout=timeout_for_task(args.size,override)
     if args.worker=='local-chat' and override is not None:
@@ -287,15 +309,23 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
     if auto_identity is None:
         auto_identity = (getattr(args, 'automatic_fallbacks_applied', False)
                          and isinstance(assignment_id, str) and assignment_id.startswith('auto-'))
+    if model_tier is not None:
+        metadata.update(model_tier=model_tier, model_tier_reason=tier_reason)
     check_repeat = args.worker in PROVIDERS and (not assignment_id or auto_identity)
     if assignment_id:
         from assignment_receipts import AssignmentReceipts, AssignmentConflict, AssignmentIncomplete
         contract = {key: metadata[key] for key in ('worker', 'prompt_sha256', 'size', 'category')}
         contract.update(claude_model=claude_model,
-                        claude_effort=getattr(args, 'claude_effort', 'medium') if args.worker == 'claude' else None,
+                        claude_effort=claude_effort if args.worker == 'claude' else None,
                         require_brief_check=require_brief)
         if args.worker == 'codex':
             contract.update(codex_model=codex_model, codex_effort=codex_effort)
+        # Claude and Codex already bind model and effort; Grok and Gemini add a
+        # field only when they leave their pre-tier configuration.
+        if args.worker == 'grok' and (grok_model, grok_effort) != ('grok-4.6', 'low'):
+            contract['model_tier'] = {'model': grok_model, 'effort': grok_effort}
+        if args.worker == 'gemini' and model_tier['model'] != 'gemini-3.8-flash-high':
+            contract['model_tier'] = {'model': model_tier['model'], 'effort': None}
         contract.update(contract_fields(memory_plan))
         if skill_plan:
             contract['skill_plan_binding'] = metadata['skill_plan_binding']
@@ -339,11 +369,13 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
     job_id = record['job_id']
     result = dict(record)
     result.update(cleanup_errors=[], export_status='unclaimed', reservation_id=None)
+    if model_tier is not None:
+        result.update(model_tier=model_tier, model_tier_reason=tier_reason)
     if args.worker == 'claude':
         result.update(requested_model=claude_model,
-                      requested_effort=getattr(args, 'claude_effort', 'medium'))
+                      requested_effort=claude_effort)
     elif args.worker == 'grok':
-        result['execution_configuration'] = {'model': 'grok-4.6', 'reasoning_effort': 'low'}
+        result['execution_configuration'] = {'model': grok_model, 'reasoning_effort': grok_effort}
     elif args.worker == 'codex':
         from codex_worker import configuration
         result.update(requested_model=codex_model, requested_effort=codex_effort,
@@ -395,7 +427,8 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                 raise BoundaryHeld('The operating guide and task exceed this worker transport; split the task before recall.')
             if provider:
                 readiness, _ = cloud_command(args.worker, '', workspaces / 'tasks' / job_id,
-                    claude_model, getattr(args, 'claude_effort', 'medium'), preflight=True)
+                    claude_model, claude_effort, preflight=True, codex_model=codex_model,
+                    codex_effort=codex_effort, grok_model=grok_model, grok_effort=grok_effort)
                 if not Path(readiness[0]).is_file():
                     raise ValueError('Configured official worker executable is unavailable')
                 if args.worker == 'codex':
@@ -481,8 +514,9 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                             raise BoundaryHeld('Memory changed during preparation; nothing was sent. Reload evidence in a new assignment.')
                     if provider:
                         command, stdin = cloud_command(args.worker, prompt, work,
-                            claude_model, getattr(args, 'claude_effort', 'medium'),
+                            claude_model, claude_effort,
                             codex_model=codex_model, codex_effort=codex_effort,
+                            grok_model=grok_model, grok_effort=grok_effort,
                             timeout_seconds=effective_timeout)
                         if args.worker == 'vscode-copilot':
                             command.extend(['--timeout-seconds', str(effective_timeout)])
@@ -714,12 +748,16 @@ def main(argv=None):
                         help='Recall budget; auto uses task size, with up to 6/12/24 memories.')
     parser.add_argument('--task', required=True)
     parser.add_argument('--category', default='general', help='Work category, e.g. coding, research, design, narration or review')
+    parser.add_argument('--tier', choices=['best', 'balanced', 'economy'],
+                        help='Model tier for codex, claude, grok or gemini; defaults to the run/global team mix')
     parser.add_argument('--claude-model', choices=['sonnet', 'opus', 'haiku', 'fable', 'claude-fable-5'],
                         default=None, help='Override the configured Claude worker model; paused families remain held')
-    parser.add_argument('--claude-effort', choices=['low', 'medium', 'high'], default='medium')
+    parser.add_argument('--claude-effort', choices=['low', 'medium', 'high'], default=None,
+                        help='Override the tier effort for Claude')
     parser.add_argument('--codex-model', choices=['astra', 'sol'], default=None,
-                        help='Codex worker identity; defaults to the Codex lead chosen on the lead switch')
-    parser.add_argument('--codex-effort', choices=['low', 'medium', 'high'], default='medium')
+                        help='Explicit Codex model when no --tier is given; defaults to the team-mix tier')
+    parser.add_argument('--codex-effort', choices=['low', 'medium', 'high'], default=None,
+                        help='Override the tier effort for Codex')
     parser.add_argument('--require-brief-check', action='store_true', help='Hold incomplete briefs before reserving allowance or calling a worker')
     parser.add_argument('--project', help='Stable project identifier, used with --assignment-id')
     parser.add_argument('--run', type=Path, help='Exact orchestration run; requires current startup context (also inferred from an output inside a run)')

@@ -198,6 +198,15 @@ def eligible_workers(workers, size, *, check=None, boundary=None):
     return eligible, reasons
 
 
+def _load_run_mix(run_dir):
+    import team_mix
+    packet = team_mix.read_run_mix(run_dir)
+    current = packet.get("current") if isinstance(packet, dict) else None
+    if not isinstance(current, dict):
+        raise ValueError("run mix current object missing")
+    return current
+
+
 def _selection(root, run_dir, size, check, boundary):
     run_dir = Path(run_dir)
     coordinator = _read_object(run_dir / "coordinator.json", 64 * 1024)
@@ -215,9 +224,17 @@ def _selection(root, run_dir, size, check, boundary):
         worker: metrics["dispatched"]
         for worker, metrics in tally["workers"].items()
     }
+    mix = None
+    mix_error = None
+    if policy["schema_version"] == 3:
+        try:
+            mix = _load_run_mix(run_dir)
+        except Exception as exc:
+            mix_error = _short("%s: %s" % (type(exc).__name__, exc))
+            mix = None
     report = {
         "worker": next_worker(
-            owner, dispatched, eligible=eligible, policy=policy
+            owner, dispatched, eligible=eligible, policy=policy, mix=mix
         ),
         "policy_schema": policy["schema_version"],
         "counts": tally["workers"],
@@ -227,6 +244,17 @@ def _selection(root, run_dir, size, check, boundary):
         "ineligible": reasons,
         "lead_family": policy["lead_family"],
     }
+    if policy["schema_version"] == 3:
+        shares = mix.get("shares") if isinstance(mix, dict) else {}
+        report["targets"] = dict(shares) if isinstance(shares, dict) else {}
+        report["tolerance"] = mix.get("tolerance") if isinstance(mix, dict) else None
+        report["target_note"] = (
+            "Closeout holds until each family's accepted contribution share is "
+            "within the run tolerance of its target; every non-lead family still "
+            "needs at least one accepted hosted task."
+        )
+        if mix_error:
+            report["error"] = mix_error
     return report, policy
 
 
@@ -249,22 +277,26 @@ def balance_report(root, run_dir, size="small", *, check=None, boundary=None):
         family: report["counts"][_family_worker(family)]["accepted"]
         for family in policy["required_worker_families"]
     }
-    highest = max(accepted.values(), default=0)
-    lowest = min(accepted.values(), default=0)
-    settings = policy["balance"]
-    allowed = max(
-        settings["min_spread"],
-        math.ceil(settings["max_spread_ratio"] * highest),
-    )
+    if policy["schema_version"] == 2:
+        highest = max(accepted.values(), default=0)
+        lowest = min(accepted.values(), default=0)
+        settings = policy["balance"]
+        allowed = max(
+            settings["min_spread"],
+            math.ceil(settings["max_spread_ratio"] * highest),
+        )
+        missing = [family for family, count in accepted.items() if count == 0]
+        spread = highest - lowest
+        report.update(
+            accepted=accepted,
+            spread=spread,
+            allowed_spread=allowed,
+            balanced=not missing and spread <= allowed,
+            missing=missing,
+        )
+        return report
     missing = [family for family, count in accepted.items() if count == 0]
-    spread = highest - lowest
-    report.update(
-        accepted=accepted,
-        spread=spread,
-        allowed_spread=allowed,
-        balanced=not missing and spread <= allowed,
-        missing=missing,
-    )
+    report.update(accepted=accepted, missing=missing)
     return report
 
 
@@ -295,6 +327,16 @@ def render(report):
             f"spread={report['spread']}; allowed={report['allowed_spread']}; "
             f"missing={', '.join(report['missing']) or 'none'}"
         )
+    if report["policy_schema"] == 3:
+        targets = report.get("targets") or {}
+        if targets:
+            shown = ", ".join(f"{family}={share}" for family, share in targets.items())
+            lines.append(f"Targets: {shown}; tolerance={report.get('tolerance')}")
+        note = report.get("target_note")
+        if note:
+            lines.append(note)
+        if report.get("error"):
+            lines.append(f"Mix error: {report['error']}")
     if report["scan_truncated"]:
         lines.append("Scan limit reached; counts may be incomplete.")
     return "\n".join(lines)

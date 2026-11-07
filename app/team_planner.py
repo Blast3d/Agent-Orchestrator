@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter, defaultdict
 from copy import deepcopy
+from fractions import Fraction
 from datetime import datetime
 import json
 import math
@@ -262,14 +263,27 @@ def quota_capacity(policy, data, providers=PROVIDERS, size='small', cap=4):
         return unknown
 
 
-def allocate(total, workers):
-    """Split assignments near-equally; the starved-first rotation takes any remainder."""
+_WORKER_FAMILY = {'codex': 'OpenAI', 'claude': 'Anthropic', 'grok': 'xAI', 'gemini': 'Google'}
+
+
+def allocate(total, workers, shares=None):
+    """Split by family shares (largest remainder), else near-equally; rotation order breaks ties."""
     order = [worker for worker in ('gemini', 'grok', 'codex', 'claude') if worker in workers]
-    base, extra = divmod(total, len(order))
-    return {worker: base + (index < extra) for index, worker in enumerate(order)}
+    if not order:
+        return {}
+    weights = [Fraction(shares.get(_WORKER_FAMILY[worker], 0)) for worker in order] if shares else []
+    if not sum(weights):
+        base, extra = divmod(total, len(order))
+        return {worker: base + (index < extra) for index, worker in enumerate(order)}
+    exact = [total * weight / sum(weights) for weight in weights]
+    counts = [math.floor(value) for value in exact]
+    ranked = sorted(range(len(order)), key=lambda index: (counts[index] - exact[index], index))
+    for index in ranked[:total - sum(counts)]:
+        counts[index] += 1
+    return dict(zip(order, counts))
 
 
-def recommend(task_type, independent_workstreams=1, cap=4, quota=None, owner=None):
+def recommend(task_type, independent_workstreams=1, cap=4, quota=None, owner=None, mix=None):
     if task_type not in TASK_TYPES:
         raise ValueError('Unknown task type')
     _integer(independent_workstreams, 'independent workstreams', 1, 1000)
@@ -283,12 +297,18 @@ def recommend(task_type, independent_workstreams=1, cap=4, quota=None, owner=Non
     capacity = 0 if quota is None else _integer(quota.get('capacity', 0), 'quota capacity', 0, 10)
     admitted = min(peak, capacity)
     status = 'solo' if not peak else 'held' if not admitted else 'limited' if admitted < peak else 'ready'
+    shares = mix.get('shares') if isinstance(mix, dict) else None
+    lead_family = family_plan(owner)['lead_family'] if owner is not None else None
     return {
         'task_type': task_type, 'advisory_only': True, 'status': status,
         'family_policy': {'minimum_families': MINIMUM_FAMILIES,
                           'preferred_families': PREFERRED_FAMILIES,
-                          'rule': 'Every non-lead family delivers accepted work; their task counts stay near-equal.'},
-        'worker_allocation': allocate(producers + reviewers, workers) if workers else None,
+                          'rule': ('Every non-lead family delivers accepted work; contribution shares follow the team mix.'
+                                   if shares else
+                                   'Every non-lead family delivers accepted work; their task counts stay near-equal.')},
+        'worker_allocation': allocate(producers + reviewers, workers, shares) if workers else None,
+        'participation_targets': dict(shares) if shares else None,
+        'lead_target': shares.get(lead_family) if shares and lead_family else None,
         'lead_count': 1, 'independent_workstreams': independent_workstreams,
         'producer_assignments': producers, 'reviewer_assignments': reviewers,
         'total_worker_assignments': producers + reviewers,
@@ -301,6 +321,9 @@ def recommend(task_type, independent_workstreams=1, cap=4, quota=None, owner=Non
         'explanation': explanation,
         'review_order': 'Review follows completed work; reviewers are included in worker totals, not added to the concurrent cap.',
         'next_step': ('Check admission reasons and choose an authorized worker from another AI family.' if not admitted else
+                      'Give Grok, Gemini and the non-lead Codex or Claude bounded scopes toward the team-mix targets; '
+                      '`run auto` picks the eligible family furthest below its target. Each dispatch checks quota and authorization.'
+                      if shares else
                       'Give Grok, Gemini and the non-lead Codex or Claude near-equal bounded scopes; '
                       '`run auto` picks the least-used eligible one. Each dispatch checks quota and authorization.'),
     }

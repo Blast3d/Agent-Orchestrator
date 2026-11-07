@@ -690,6 +690,13 @@ class ViewerHandler(DashboardHandler):
             if address.path == '/api/automatic-startup' and not address.query:
                 from automatic_startup import describe
                 return self._reply(200, describe())
+            if address.path == '/api/team-mix':
+                import team_mix
+                params = parse_qs(address.query, max_num_fields=1, keep_blank_values=True)
+                if set(params) - {'run'} or any(len(value) != 1 for value in params.values()):
+                    raise ValueError('Choose the default for new runs or one exact run.')
+                run_dir = self.server.store.run_path(params['run'][0]) if 'run' in params else None
+                return self._reply(200, team_mix.describe(run_dir))
             if address.path == '/api/readiness' and not address.query:
                 return self._reply(200, self.server.store.readiness())
             if address.path == '/api/operator':
@@ -717,9 +724,37 @@ class ViewerHandler(DashboardHandler):
         except Exception as error:
             self._handle_error(error)
 
+    def _team_mix(self, body):
+        """Retune the default for new runs or one run; the sliders' only write path."""
+        import team_mix
+        if not isinstance(body, dict) or set(body) - {'scope', 'run', 'shares', 'preset', 'tolerance', 'tiers'}:
+            raise ValueError('Team mix changes must be an object with only supported keys.')
+        scope = body.get('scope')
+        if scope not in ('global', 'run'):
+            raise ValueError('Choose new runs or the selected run.')
+        if (scope == 'run') != ('run' in body):
+            raise ValueError('Only the selected-run scope names a run.')
+        for key, size in (('shares', 4), ('tiers', 4)):
+            if key in body and (not isinstance(body[key], dict) or len(body[key]) != size):
+                raise ValueError(f'{key.title()} must name all four families.')
+        if 'tolerance' in body and type(body['tolerance']) is not int:
+            raise ValueError('Tolerance must be a whole number of points.')
+        updates = {key: body[key] for key in ('shares', 'preset', 'tolerance', 'tiers') if key in body}
+        if updates.get('preset') is not None:
+            # A preset fixes the shares; team_mix rejects a mismatching pair.
+            updates.pop('shares', None)
+        if scope == 'run':
+            run_dir = self.server.store.run_path(body['run'])
+            if updates:
+                team_mix.retune_run(run_dir, source='viewer', **updates)
+            return team_mix.describe(run_dir)
+        if updates:
+            team_mix.update_global(source='viewer', **updates)
+        return team_mix.describe()
+
     def do_POST(self):
         if not self._gate(mutation=True): return
-        if self.path not in ('/api/attach', '/api/interact', '/api/open', '/api/usage-monitor', '/api/automatic-startup', '/api/lead', '/api/checklist', '/api/task-review', '/api/voice-attach'):
+        if self.path not in ('/api/attach', '/api/interact', '/api/open', '/api/usage-monitor', '/api/automatic-startup', '/api/lead', '/api/team-mix', '/api/checklist', '/api/task-review', '/api/voice-attach'):
             return self._error(404, 'This action is not available.')
         try:
             body = self._body()
@@ -746,6 +781,8 @@ class ViewerHandler(DashboardHandler):
                         raise ValueError('Choose Claude, ASTRA or Sol as the lead orchestrator.')
                     from lead_selection import select_lead
                     value = select_lead(body['lead'])
+                elif self.path == '/api/team-mix':
+                    value = self._team_mix(body)
                 elif self.path == '/api/open':
                     value = self._open_service(body)
                 elif self.path == '/api/interact':

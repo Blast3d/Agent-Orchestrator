@@ -18,7 +18,8 @@ from init_run import create_run
 from memory_bundle import capture_source_hash, read_json, validate_bundle
 from paths import ROOT
 from project_visuals import ProjectLibrary, project_from_report
-from provider_policy import legacy_plan, plan, require_coverage
+from provider_policy import legacy_plan, plan, policy_for, require_coverage
+import team_mix
 from task_store import timestamp, write_json
 from usage_guard import file_lock
 
@@ -192,12 +193,16 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
         calls = 0 if no_memory else (recalled.get('retrieval') or {}).get('provider_calls')
         calls = calls if type(calls) is int and calls >= 0 else None
         selection = _lead_summary(state['owner'])
-        # A run keeps its policy generation: one started under the two-family rule
-        # resumes under it, re-derived for the current lead after any handoff.
+        # A run keeps its policy generation (v1 two-family, v2 near-equal tasks or
+        # v3 team mix), re-derived for the current lead after any handoff.
         recorded = None if created else _recorded_policy(coordinator.run)
-        provider_policy = (legacy_plan(state['owner']) if isinstance(recorded, dict)
-                           and recorded.get('schema_version') == 1 else plan(state['owner']))
+        provider_policy = (policy_for(state['owner'], recorded) if isinstance(recorded, dict)
+                           else plan(state['owner']))
         policy_text = json.dumps(provider_policy, sort_keys=True)
+        run_mix = None
+        if provider_policy['schema_version'] >= 3:
+            # The run copies the default mix once; later sliders retune only this copy.
+            run_mix = team_mix.init_run_mix(coordinator.run, team_mix.read_global(root))
         relay = _relay_inbox(root, manifest['run_id'])
         relay_text = _relay_section(relay)
         packet = {'schema_version': 1, 'status': 'prepared', 'created': created,
@@ -210,6 +215,25 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
                   'evidence_limit': 'Prepared for the lead; this is not proof of reading, obedience or native-worker delivery.'}
         if relay_text:
             packet['relay_inbox'] = relay
+        if run_mix is not None:
+            current = run_mix['current']
+            packet['team_mix'] = {key: current[key] for key in ('shares', 'tolerance', 'tiers', 'preset')}
+            packet['team_mix']['history_count'] = len(run_mix['history'])
+        if provider_policy['schema_version'] >= 3:
+            shares = packet['team_mix']['shares']
+            policy_line = ('Every non-lead family (' + ', '.join(provider_policy['cross_family_workers'])
+                           + ') must deliver accepted hosted work, and every family, the lead included, '
+                           + "must end within the team mix's tolerance of its target share of accepted work: "
+                           + ', '.join(f'{family} {shares[family]}%' for family in team_mix.FAMILIES)
+                           + f" (±{packet['team_mix']['tolerance']} points; lead family "
+                           + provider_policy['lead_family'] + '). Delegate to reach the targets; '
+                           + 'only the user retunes the mix. `orchestrator.py balance --run RUN` or `run auto` '
+                           + 'picks the family furthest below its target. JEV advice does not count.\n\n')
+        else:
+            policy_line = ('Every non-lead family (' + ', '.join(provider_policy['cross_family_workers'])
+                           + ') must deliver accepted work, and they share accepted worker tasks near-equally. '
+                           + 'Use `orchestrator.py balance --run RUN` or `run auto` to pick the next worker. '
+                           + 'Lead-family work is optional. JEV advice does not count as worker participation.\n\n')
         # Wider recall still obeys the existing receipt bound. Reduce delivery,
         # never repeat inference, and retain the original retrieval trace/counts.
         original_count = len(recalled.get('results', []))
@@ -219,10 +243,7 @@ def start_run(*, run=None, workspace=None, name=None, objective=None, project=No
             rendered = ('# Orchestration startup packet\n\n' + packet['evidence_limit'] + '\n\n'
                         + selection['line'] + '\n\n'
                         + '## Provider family policy\n\n'
-                        + 'Every non-lead family (' + ', '.join(provider_policy['cross_family_workers'])
-                        + ') must deliver accepted work, and they share accepted worker tasks near-equally. '
-                        + 'Use `orchestrator.py balance --run RUN` or `run auto` to pick the next worker. '
-                        + 'Lead-family work is optional. JEV advice does not count as worker participation.\n\n'
+                        + policy_line
                         + '```json\n' + policy_text + '\n```\n\n'
                         + operating['context'] + relay_text + '\n\n## Project recall\n\n'
                         + (recalled['context'] or empty_reason) + '\n')
@@ -556,9 +577,16 @@ def closeout_run(run, *, owner, session, generation, root=ROOT, final_report=Non
             ledger = _object(ledger_path, coordinator.run, 2 * 1024**2)
             if digest(ledger) != audit['ledger_sha256']:
                 raise ValueError('Contribution evidence changed before family coverage verification')
-            # A run keeps the policy recorded at its startup; legacy runs stay on v1.
+            # A run keeps the policy recorded at its startup; legacy runs stay on v1/v2.
             policy = (startup_proof or {}).get('provider_policy')
-            return require_coverage(owner, ledger, hosted, native_capture=bool(native), policy=policy)
+            mix = None
+            if isinstance(policy, dict) and policy.get('schema_version') == 3:
+                state = team_mix.read_run_mix(coordinator.run)
+                mix_digest.append(digest(state))
+                mix = state['current']
+            return require_coverage(owner, ledger, hosted, native_capture=bool(native),
+                                    policy=policy, mix=mix)
+        mix_digest = []
         check('provider_family_coverage', family_coverage)
         def still_current():
             coordinator.require_owner(coordinator.read(), owner, session, generation)
@@ -578,6 +606,8 @@ def closeout_run(run, *, owner, session, generation, root=ROOT, final_report=Non
             if audit and (digest(_object(ledger_path, coordinator.run, 2 * 1024**2)) != audit['ledger_sha256']
                           or digest(_object(audit_path, coordinator.run, 2 * 1024**2)) != audit['report_sha256']):
                 raise ValueError('Contribution evidence changed during closeout')
+            if mix_digest and digest(team_mix.read_run_mix(coordinator.run)) != mix_digest[-1]:
+                raise ValueError('Team mix was retuned during closeout; retry closeout')
             return 'Ownership and inspected evidence still match'
         if all(row['status'] == 'passed' for row in result['checks']):
             check('current_evidence', still_current)

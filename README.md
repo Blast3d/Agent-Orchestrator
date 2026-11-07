@@ -170,11 +170,13 @@ unreadable, automatic startup returns `disabled` without creating a run or loadi
 memory. Manual runs use **start** without that flag. The lead uses **start** to load the
 operating guide and scoped Brain recall before assigning workers. The dispatcher
 includes a compact worker guide in every new worker request; project recall remains
-scoped to the assignment. Startup records a provider policy (schema 2) requiring
+scoped to the assignment. Startup records a provider policy (schema 3) requiring
 accepted work from **every non-lead family**: Grok, Gemini, and Codex or Claude,
-whichever is not leading. Those families share accepted worker tasks
-**near-equally**; `python orchestrator.py balance --run RUN` shows the counts and
-`run auto` dispatches to the least-used eligible family. Run-linked dispatch
+whichever is not leading. Each run also copies the user's **team mix**: four linked
+sliders giving every family, the lead included, a target share of accepted work,
+plus a per-family Best/Balanced/Economy model tier ([docs/team-mix.md](docs/team-mix.md)).
+`python orchestrator.py balance --run RUN` shows the targets and counts, and
+`run auto` dispatches to the family furthest below its target. Run-linked dispatch
 verifies the policy, and **closeout** checks reviewed task captures, contribution
 maps, family coverage and balance before recording completion. Same-family native
 agents and JEV routing advice cannot fill a share; Copilot counts by its actual

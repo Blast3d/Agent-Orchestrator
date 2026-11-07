@@ -15,10 +15,24 @@ from provider_policy import (
     coverage,
     legacy_plan,
     next_worker,
-    plan,
+    plan_v2 as plan,
     require_coverage,
     validate_plan,
 )
+
+
+import provider_policy as _policy_module
+_CURRENT_PLAN = _policy_module.plan
+
+
+def setUpModule():
+    # Schema-2 regression suite: pin the default policy to v2 so these near-equal
+    # checks keep exercising v2; schema 3 lives in test_provider_policy_v3.py.
+    _policy_module.plan = _policy_module.plan_v2
+
+
+def tearDownModule():
+    _policy_module.plan = _CURRENT_PLAN
 
 
 MODELS = {
