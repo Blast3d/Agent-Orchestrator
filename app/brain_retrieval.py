@@ -85,6 +85,26 @@ def query_terms(query):
     return kept[:MAX_TERMS]
 
 
+def _identifier_phrases(query, terms):
+    """Map a literal to its ordered words, retaining at most one phrase per term."""
+    aliases = {}
+    for token in _TOKEN_RE.findall(query or ''):
+        literal = token.casefold()
+        if literal not in terms or literal in aliases:
+            continue
+        words = re.sub(r'(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])', ' ', token)
+        phrase = ' '.join(re.findall(r'[^\W_]+', words.casefold()))
+        if ' ' in phrase:
+            aliases[literal] = phrase
+    return aliases
+
+
+def keyword_phrases(query):
+    """Keep literal FTS matches and add ordered words from compound identifiers."""
+    terms = query_terms(query)
+    return list(dict.fromkeys([*terms, *_identifier_phrases(query, terms).values()]))
+
+
 def _as_list(value):
     if value is None:
         return []
@@ -155,6 +175,7 @@ def match_quality(query, rows):
     a routing heuristic, not a probability. Rows are never mutated.
     """
     terms = query_terms(query)
+    aliases = _identifier_phrases(query, terms)
     normalized_query = _normalize(query)
     quoted = [q.casefold().strip() for q in _QUOTED_RE.findall(query or "")]
     quoted = [q for q in quoted if q]
@@ -183,7 +204,10 @@ def match_quality(query, rows):
             continue
         def present(term):
             return term in tokens or bool(re.search(r'(?<!\w)'+re.escape(term)+r'(?!\w)',blob))
-        hits = sum(1 for t in terms if present(t))
+        phrase_fields = [' ' + ' '.join(re.findall(r'[^\W_]+', text.casefold())) + ' '
+                         for text in texts] if aliases else []
+        hits = sum(1 for term in terms if present(term) or
+                   (term in aliases and any(' ' + aliases[term] + ' ' in field for field in phrase_fields)))
         coverage = hits / float(len(terms))
         # A filename is only an exact answer when the same row also satisfies
         # the rest of the query, e.g. production versus development config.

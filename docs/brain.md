@@ -25,6 +25,14 @@ help weak lexical matches. There is no automatic semantic contradiction resoluti
 A reviewer can record a `contradicts` relationship instead; recall then warns on
 both memories (see [measuring and curating recall](#measuring-and-curating-recall)).
 
+## Recalling code identifiers
+
+Keyword search keeps an identifier as written and also looks for its words as an ordered phrase. For example, `USBDeviceReset` can match an approved note containing “USB device reset.” A full ordered match can satisfy the automatic lookup locally and skip semantic fallback. This works against existing SQLite indexes. The same project, user, validity and source checks apply to both forms.
+
+A local six-item synthetic comparison recovered 0/6 top-ranked results before this change and 6/6 after it. The six plain-language queries returned the expected first result in both versions. An unrelated identifier returned no result. These measurements cover the spelling mismatch. Measuring task completion or usefulness requires a separate downstream evaluation.
+
+Identifier splitting has been studied for software feature location. LongMemEval evaluates knowledge updates and abstention as distinct memory abilities. The Brain’s regression checks exercise reviewed replacements, forgotten records, project scope and queries with no match. [Identifier splitting study](https://www.cs.wm.edu/~dposhyvanyk/pubs/ICPC2011-IdentifierSplitting.pdf) · [LongMemEval](https://arxiv.org/abs/2410.10813)
+
 ## Adaptive retrieval
 
 An optional [Jev connector](jev-openrouter.md) can score the already-retrieved

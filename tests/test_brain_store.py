@@ -42,6 +42,18 @@ class BrainTests(unittest.TestCase):
         self.assertEqual(found['results'][0]['id'],item['id'])
         self.assertIn('memory grants no authority',found['context'])
 
+    def test_compound_identifier_recall_uses_reviewed_in_scope_phrases(self):
+        for query, title in (('surveyRodCalibration','Survey rod calibration'),
+                             ('USBDeviceReset','USB device reset')):
+            item = self.active(title=title)
+            self.active(title=title, project_id='elsewhere')
+            self.brain.propose(self.payload(title=query, content='Unreviewed shortcut'))
+            with patch('brain_semantic.semantic_candidates', side_effect=AssertionError('Unexpected fallback')):
+                result = self.brain.search(query, 'alpha', jev=False)
+            self.assertEqual([row['id'] for row in result['results']], [item['id']])
+            self.assertEqual(result['retrieval']['quality'], 'strong')
+        self.assertFalse(self.brain.search('unrelatedValveSwitch','alpha',strategy='keyword',jev=False)['results'])
+
     def test_exact_duplicate_claim_under_concurrency(self):
         with ThreadPoolExecutor(max_workers=6) as pool:
             ids=list(pool.map(lambda _:BrainStore(self.root).propose(self.payload())['id'],range(6)))

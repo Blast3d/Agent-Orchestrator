@@ -7,7 +7,7 @@ import uuid
 from contextlib import nullcontext
 
 from brain_store import digest, now, scope, text
-from brain_retrieval import match_quality, plan, query_terms
+from brain_retrieval import match_quality, plan, keyword_phrases
 from storage_budget import StorageLimitError
 from usage_guard import file_lock
 
@@ -222,7 +222,7 @@ def search(store,query,project_id,user_id='local',limit=6,max_chars=8000,hops=No
             state['empty']=True;retrieval.update(route='empty',reason='No active memories in this project; graph and semantic retrieval were skipped.')
             retrieval['timings_ms']['lexical']=_ms(stage)
             return _finish(store,con,state,candidates,sources,excluded,record_trace)
-        expression=' OR '.join('"'+term.replace('"','""')+'"' for term in query_terms(query))
+        expression=' OR '.join('"'+term.replace('"','""')+'"' for term in keyword_phrases(query))
         if expression:
             hits=con.execute('''SELECT m.rowid,bm25(memory_fts,3.0,1.0,2.0) AS lexical
               FROM memory_fts CROSS JOIN memories m ON m.rowid=memory_fts.rowid
