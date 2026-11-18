@@ -71,7 +71,7 @@ function selectEvidence(){state.memories=[memory('a'.repeat(32))];state.selected
 assert.equal(requests.length,1);assert.equal(requests[0].path,'/api/jev/workflows?project_id=alpha');
 assert.equal(requests[0].options.headers['X-Brain-Token'],'safe-test-token');
 assert.equal(state.project,'alpha');assert.equal(state.run,'exact-run');assert.equal(state.workflows.length,14);
-assert.equal($('back').href,'/#project=alpha&run=exact-run');assert.equal($('ask').disabled,true);
+assert.equal($('back').href,'/memory#project=alpha&run=exact-run');assert.equal($('ask').disabled,true);
 choose('handoff');assert.equal($('field-run_id').value,'exact-run');
 for(const row of CATALOGUE){choose(row.workflow);assert($('description').textContent.length);}
 ''')
@@ -97,7 +97,7 @@ choose('memory_support');$('field-claim').value='A reviewed claim.';const payloa
         self.run_js(r'''
 selectEvidence();let complete;api=()=>new Promise(resolve=>complete=resolve);const pending=loadMemories();
 syncScope('beta','next-run');assert.equal(state.selected.size,0);assert.equal(state.memories.length,0);assert.equal($('result').hidden,true);
-complete([memory('a'.repeat(32))]);await pending;assert.equal(state.memories.length,0);assert.equal(state.project,'beta');assert.equal($('back').href,'/#project=beta&run=next-run');
+complete([memory('a'.repeat(32))]);await pending;assert.equal(state.memories.length,0);assert.equal(state.project,'beta');assert.equal($('back').href,'/memory#project=beta&run=next-run');
 ''')
 
     def test_pending_advice_disables_button_and_cannot_cross_scope(self):

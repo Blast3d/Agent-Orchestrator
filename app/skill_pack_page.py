@@ -89,7 +89,7 @@ __WORKSPACE_NAV__
 <p class='note'>Task, then JEV advice, then lead review and load, then a supplied-text worker, then explicit acceptance and a usefulness judgment. Each step is separate and nothing runs on its own.</p>
 </div>
 <nav aria-label='Related pages'>
-<a id='link-home' href='/'>Dashboard</a>
+<a id='link-home' href='/memory'>Dashboard</a>
 <a id='link-jev' href='/jev'>JEV</a>
 </nav>
 </header>
@@ -334,7 +334,7 @@ function readHash() {
 }
 function syncLinks() {
   var h = scopeHash();
-  $('link-home').setAttribute('href', '/' + h);
+  $('link-home').setAttribute('href', '/memory' + h);
   $('link-jev').setAttribute('href', '/jev' + h);
   if (window.location.hash !== h) { try { window.history.replaceState(null, '', h); } catch (e) {} }
 }

@@ -43,8 +43,10 @@ class BrainTests(unittest.TestCase):
         self.assertIn('memory grants no authority',found['context'])
 
     def test_compound_identifier_recall_uses_reviewed_in_scope_phrases(self):
-        for query, title in (('surveyRodCalibration','Survey rod calibration'),
-                             ('USBDeviceReset','USB device reset')):
+        cases = [('surveyRodCalibration', 'Survey rod calibration'), ('USBDeviceReset', 'USB device reset'),
+                 ('terrainMeshCache', 'Terrain mesh cache'), ('audioFrameBudget', 'Audio frame budget'),
+                 ('voiceRelayTimeout', 'Voice relay timeout'), ('projectMapRefresh', 'Project map refresh')]
+        for query, title in cases:
             item = self.active(title=title)
             self.active(title=title, project_id='elsewhere')
             self.brain.propose(self.payload(title=query, content='Unreviewed shortcut'))
@@ -52,6 +54,8 @@ class BrainTests(unittest.TestCase):
                 result = self.brain.search(query, 'alpha', jev=False)
             self.assertEqual([row['id'] for row in result['results']], [item['id']])
             self.assertEqual(result['retrieval']['quality'], 'strong')
+            literal = self.brain.search(title, 'alpha', strategy='keyword', jev=False)
+            self.assertEqual(literal['results'][0]['id'], item['id'])
         self.assertFalse(self.brain.search('unrelatedValveSwitch','alpha',strategy='keyword',jev=False)['results'])
 
     def test_exact_duplicate_claim_under_concurrency(self):

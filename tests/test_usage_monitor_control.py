@@ -36,6 +36,17 @@ class MonitorControlTests(unittest.TestCase):
         self.script_patch = patch.object(monitor, 'SCRIPT', script)
         self.script_patch.start()
         self.addCleanup(self.script_patch.stop)
+        self.children = []
+        popen = monitor.subprocess.Popen
+
+        def start_child(*args, **kwargs):
+            child = popen(*args, **kwargs)
+            self.children.append(child)
+            return child
+
+        spawn = patch.object(monitor.subprocess, 'Popen', side_effect=start_child)
+        spawn.start()
+        self.addCleanup(spawn.stop)
         self.addCleanup(self.stop)
 
     def wait_off(self):
@@ -47,6 +58,9 @@ class MonitorControlTests(unittest.TestCase):
     def stop(self):
         monitor.set_monitor_enabled(False, self.root)
         self.wait_off()
+        # The monitor releases its lifetime lock just before Python closes its log handles.
+        for child in self.children:
+            child.wait(timeout=5)
 
     def test_stale_receipt_and_stop_file_do_not_report_on_or_launch(self):
         (self.root / 'monitor-state.json').write_text(json.dumps({'pid': 123}), encoding='utf-8')

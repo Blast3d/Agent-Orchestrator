@@ -75,7 +75,7 @@ process.stdout.write(JSON.stringify(links.map(link=>link.attrs.href??null)));
         self.assertEqual(contributions, '/contributions?run=run-one')
         self.assertEqual(experiments, 'http://127.0.0.1:4242/experiments')
         self.assertEqual(system_map, '/system-map')
-        self.assertIsNone(brain)
+        self.assertEqual(brain, 'http://127.0.0.1:4242/memory#project=alpha&run=current-run')
         self.assertEqual(lead, 'http://127.0.0.1:4242/?project=alpha&run=current-run#lead')
 
     def test_saved_file_pages_use_siblings_and_prefer_a_live_system_map(self):

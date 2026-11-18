@@ -25,7 +25,7 @@ class LinkTests(unittest.TestCase):
 
     def test_stale_state_file_without_a_live_server_gives_no_link(self):
         (self.root / 'runtime/coordinator-viewer.json').write_text(json.dumps({
-            'service': 'orchestrator-session-viewer', 'version': 1, 'pid': 1,
+            'service': 'orchestrator-unified-workspace', 'version': 1, 'pid': 1,
             'origin': 'http://127.0.0.1:9', 'instance_id': 'a' * 32}), encoding='utf-8')
         self.assertIsNone(links(self.root, 'brain')[1]['origin'])
 
@@ -51,7 +51,7 @@ class LinkTests(unittest.TestCase):
             result = ensure(self.root, 'viewer')
         self.assertEqual(result, {'id': 'viewer', 'title': 'Orchestrator', 'origin': 'http://127.0.0.1:5151', 'reused': False})
         self.assertEqual(launcher.call_args.args, (self.root, False))
-        self.assertEqual(launcher.call_args.kwargs, {'service': 'orchestrator-session-viewer',
+        self.assertEqual(launcher.call_args.kwargs, {'service': 'orchestrator-unified-workspace',
                                                      'script': 'coordinator_viewer.py', 'state_name': 'coordinator-viewer'})
         with patch('start_brain_dashboard.open_dashboard', side_effect=RuntimeError('Dashboard did not start.')):
             with self.assertRaisesRegex(ValueError, 'did not start'):

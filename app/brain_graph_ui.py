@@ -739,6 +739,8 @@ function createBrainGraph(data, onSelect, options) {
   // Redraw with the other palette when the system switches between light and dark.
   var schemeQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
   function onScheme() { requestDraw(); }
+  const themeObserver = new MutationObserver(onScheme);
+  themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ["data-workspace-theme"]});
   if (schemeQuery && schemeQuery.addEventListener) schemeQuery.addEventListener("change", onScheme);
   updateModeUI();
   resize();
@@ -752,6 +754,7 @@ function createBrainGraph(data, onSelect, options) {
     root.removeEventListener("keydown",onConnectionKey);
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
     ro.disconnect();
+    themeObserver.disconnect();
     window.removeEventListener("blur", onWinBlur);
     if (schemeQuery && schemeQuery.removeEventListener) schemeQuery.removeEventListener("change", onScheme);
     canvas.removeEventListener("pointerdown", onPointerDown);

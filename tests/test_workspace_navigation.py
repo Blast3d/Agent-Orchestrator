@@ -83,7 +83,7 @@ process.stdout.write(JSON.stringify(Object.fromEntries(links.map(link=>[link.dat
             page = decorate_report('<html><head><title>Report</title></head><body><h1>Report</h1></body></html>', self.root, 'usage')
         parsed = NavigationParser(page)
         self.assertEqual(set(parsed.links), {'viewer', 'usage', 'tasks', 'brain', 'contributions', 'experiments',
-                                             'system-map', 'lead'})
+                                             'system-map', 'lead', 'skills', 'jev', 'team-mix'})
         self.assertEqual(parsed.links['lead']['href'], 'http://127.0.0.1:4242/#lead')
         self.assertEqual(parsed.links['experiments']['href'], 'http://127.0.0.1:4242/experiments')
         self.assertEqual(parsed.links['tasks']['href'], 'task-inbox.html')
@@ -134,7 +134,7 @@ process.stdout.write(JSON.stringify(Object.fromEntries(links.map(link=>[link.dat
         self.assertEqual(links['usage']['href'], '/usage?project=shared-library&run=run-one')
         self.assertEqual(links['contributions']['href'], '/contributions?project=shared-library&run=run-one')
         self.assertEqual(links['viewer']['href'], 'http://127.0.0.1:4242/?project=shared-library&run=run-one')
-        self.assertEqual(links['brain']['href'], 'http://127.0.0.1:4343/#project=shared-library&run=run-one')
+        self.assertEqual(links['brain']['href'], 'http://127.0.0.1:4242/memory#project=shared-library&run=run-one')
 
     def test_file_links_use_siblings_and_keep_project_and_run_distinct(self):
         links = self.execute(self.script(), url='file:///C:/workspace/runtime/project-map.html?project=shared-library&run=unrelated-report')
@@ -143,7 +143,7 @@ process.stdout.write(JSON.stringify(Object.fromEntries(links.map(link=>[link.dat
         self.assertNotIn('project=unrelated-report', links['brain']['href'])
 
     def test_memory_hash_and_explicit_scope_refresh_are_encoded_and_bounded(self):
-        links = self.execute(self.script(), url='http://127.0.0.1:4343/#project=two+words%26extra&run=run-one')
+        links = self.execute(self.script(), url='http://127.0.0.1:4242/memory#project=two+words%26extra&run=run-one')
         self.assertEqual(links['usage']['href'], '/usage?project=two+words%26extra&run=run-one')
         links = self.execute(self.script(), refresh={'project': 'x' * 160, 'run': '../unsafe'})
         self.assertEqual(links['usage']['href'], '/usage?project=' + 'x' * 160)

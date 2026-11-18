@@ -24,7 +24,7 @@ from paths import ROOT
 from usage_guard import file_lock, write_json
 from start_usage_monitor import monitor_status, set_monitor_enabled
 
-SERVICE = 'orchestrator-session-viewer'
+SERVICE = 'orchestrator-unified-workspace'
 UUID = re.compile(r'[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}')
 SHORT_ID = re.compile(r'[a-f0-9]{8}')
 MAX_HISTORY_BYTES = 512 * 1024
@@ -640,12 +640,12 @@ class ViewerHandler(DashboardHandler):
                 and not self._same_site_page_navigation()):
             self._error(403, 'This request must come from the viewer.'); return False
         if self.path.startswith('/api/'):
-            tokens = self.headers.get_all('X-Viewer-Token', [])
+            tokens = self.headers.get_all('X-Viewer-Token', []) + self.headers.get_all('X-Brain-Token', [])
             if len(tokens) != 1 or not hmac.compare_digest(tokens[0].encode(), self.server.viewer_token.encode()):
                 self._error(403, 'Reload the viewer to reconnect securely.'); return False
         return True
 
-    def _handle_error(self, error):
+    def _viewer_error(self, error):
         if isinstance(error, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
             return super()._handle_error(error)
         if isinstance(error, ValueError):
@@ -654,6 +654,12 @@ class ViewerHandler(DashboardHandler):
             self._error(500, 'Saved session data could not be read. Refresh or inspect the original application.')
 
     def do_GET(self):
+        route = self.path.partition('?')[0]
+        if (route in ('/memory', '/skills', '/jev', '/api/status', '/api/snapshot', '/api/graph',
+                      '/api/memories', '/api/changes', '/api/usage', '/api/use',
+                      '/api/source-check', '/api/source-tasks')
+                or route.startswith(('/api/memories/', '/api/skills/', '/api/jev/'))):
+            return super().do_GET()
         if not self._gate(): return
         address = urlsplit(self.path)
         try:
@@ -704,7 +710,7 @@ class ViewerHandler(DashboardHandler):
                 if set(params) != {'run'} or len(params['run']) != 1:
                     raise ValueError('Choose one exact run for operator tools')
                 return self._reply(200, self.server.operations.detail(params['run'][0]))
-            if address.path not in ('/api/runs', '/api/run', '/api/history', '/api/services', '/api/usage-monitor'):
+            if address.path not in ('/api/runs', '/api/run', '/api/history', '/api/usage-monitor'):
                 return self._error(404, 'This page is not available.')
             params = parse_qs(address.query, max_num_fields=3)
             allowed = {'run', 'before'} if address.path == '/api/history' else {'run'} if address.path == '/api/run' else set()
@@ -712,8 +718,6 @@ class ViewerHandler(DashboardHandler):
                 raise ValueError('Invalid run or history selection.')
             if address.path == '/api/usage-monitor':
                 value = monitor_status()
-            elif address.path == '/api/services':
-                value = self._services()
             elif address.path == '/api/runs':
                 value = self.server.store.runs()
             elif address.path == '/api/run':
@@ -722,7 +726,28 @@ class ViewerHandler(DashboardHandler):
                 value = self.server.store.history(params.get('run', [''])[0], params.get('before', [None])[0])
             self._reply(200, value)
         except Exception as error:
-            self._handle_error(error)
+            self._viewer_error(error)
+
+    def _workspace_page(self, address):
+        if address.path not in ('/usage', '/contributions'):
+            return super()._workspace_page(address)
+        self._scope_params(address)
+        root = self.server.root
+        if address.path == '/usage':
+            from usage_guard import Guard
+            from usage_report import render_usage
+            from task_panel import render
+            page = render_usage(Guard(root / 'runtime').status()).replace('</html>', render() + '</html>')
+        else:
+            from project_visuals import ProjectLibrary
+            library = ProjectLibrary(root, root / 'runtime')
+            page = library.page(library.collect(), Path(__file__).with_name('assets') / 'project-map.html')
+        from workspace_navigation import decorate_report
+        from system_map import content_security_policy
+        page = decorate_report(page, root, address.path[1:], served_by='viewer', origin=self.server.origin)
+        policy = content_security_policy(page).replace('script-src ', "script-src 'self' ", 1)
+        self._reply(200, page, 'text/html; charset=utf-8', csp=policy)
+        return True
 
     def _team_mix(self, body):
         """Retune the default for new runs or one run; the sliders' only write path."""
@@ -753,8 +778,12 @@ class ViewerHandler(DashboardHandler):
         return team_mix.describe()
 
     def do_POST(self):
+        if (self.path in ('/api/search', '/api/memories', '/api/approve', '/api/forget',
+                          '/api/supersede', '/api/relate', '/api/links', '/api/feedback',
+                          '/api/jev/workflow', '/api/context') or self.path.startswith('/api/skills/')):
+            return super().do_POST()
         if not self._gate(mutation=True): return
-        if self.path not in ('/api/attach', '/api/interact', '/api/open', '/api/usage-monitor', '/api/automatic-startup', '/api/lead', '/api/team-mix', '/api/checklist', '/api/task-review', '/api/voice-attach'):
+        if self.path not in ('/api/attach', '/api/interact', '/api/usage-monitor', '/api/automatic-startup', '/api/lead', '/api/team-mix', '/api/checklist', '/api/task-review', '/api/voice-attach'):
             return self._error(404, 'This action is not available.')
         try:
             body = self._body()
@@ -783,15 +812,13 @@ class ViewerHandler(DashboardHandler):
                     value = select_lead(body['lead'])
                 elif self.path == '/api/team-mix':
                     value = self._team_mix(body)
-                elif self.path == '/api/open':
-                    value = self._open_service(body)
                 elif self.path == '/api/interact':
                     value = self.server.store.interact(body)
                 else:
                     value = self.server.store.attach(body)
                 self._reply(200, value)
         except Exception as error:
-            self._handle_error(error)
+            self._viewer_error(error)
 
 
 def main(argv=None):
@@ -799,11 +826,16 @@ def main(argv=None):
     parser.add_argument('--root', type=Path, default=ROOT)
     parser.add_argument('--port', type=int, default=0)
     parser.add_argument('--state-file', type=Path)
+    parser.add_argument('--open-memory', action='store_true')
     args = parser.parse_args(argv)
-    with ViewerServer(args.root, args.port) as server:
+    state_file = contained(args.root / 'runtime', args.state_file) if args.state_file else None
+    return serve_workspace(args.root, args.port, state_file, args.open_memory)
+
+
+def serve_workspace(root, port, state_file=None, open_memory=False):
+    with ViewerServer(root, port) as server:
         state = {'service': SERVICE, 'version': 1, 'pid': os.getpid(), 'origin': server.origin, 'instance_id': server.instance_id}
-        if args.state_file:
-            state_file = contained(args.root / 'runtime', args.state_file)
+        if state_file:
             state_file.parent.mkdir(parents=True, exist_ok=True)
             write_json(state_file, state)
         from workspace_navigation import write_navigation_script
@@ -811,13 +843,16 @@ def main(argv=None):
             write_navigation_script(server.root, server.page_id, server.origin)
         except OSError:
             print('Saved report links could not be refreshed; live dashboard navigation remains available.', flush=True)
+        if open_memory:
+            import webbrowser
+            webbrowser.open(server.origin + '/memory')
         print('Orchestrator viewer: ' + server.origin + '/', flush=True)
         try:
             server.serve_forever(poll_interval=.2)
         except KeyboardInterrupt:
             pass
         finally:
-            if args.state_file:
+            if state_file:
                 try:
                     if object_file(state_file).get('instance_id') == server.instance_id:
                         state_file.unlink(missing_ok=True)

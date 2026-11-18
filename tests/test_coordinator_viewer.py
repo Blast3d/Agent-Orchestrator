@@ -780,27 +780,13 @@ class HTTPTests(unittest.TestCase):
         self.assertNotIn('Access-Control-Allow-Origin', headers)
 
     def test_services_and_open_are_gated_and_never_touch_sessions(self):
-        status, _, body = self.request(path='/api/services')
-        self.assertEqual(status, 200, body)
-        body = json.loads(body)
-        self.assertEqual(body['current'], 'viewer')
-        self.assertEqual([(r['id'], r['current'], r['origin']) for r in body['services']],
-                         [('brain', False, None), ('viewer', True, None)])
-        self.assertEqual(self.request(path='/api/services?run=fixture')[0], 400)
+        self.assertEqual(self.request(path='/api/services')[0], 404)
         self.assertEqual(self.request(path='/api/services', authorized=False)[0], 403)
-        self.assertEqual(self.request(path='/api/open')[0], 404)
-        self.assertEqual(self.request('POST', '/api/open', payload={'target': 'brain'}, headers={'Origin': 'http://evil.example'})[0], 403)
-        opened = {'origin': 'http://127.0.0.1:6161', 'reused': False, 'pid': 7}
-        with patch('start_brain_dashboard.open_dashboard', return_value=opened) as launcher:
-            status, _, body = self.request('POST', '/api/open', payload={'target': 'brain'})
-        self.assertEqual(status, 200, body)
-        self.assertEqual(json.loads(body)['origin'], 'http://127.0.0.1:6161')
-        self.assertEqual(launcher.call_args.kwargs['script'], 'brain_dashboard.py')
-        self.assertEqual(self.request('POST', '/api/open', payload={'target': 'viewer-2'})[0], 400)
+        self.assertEqual(self.request('POST','/api/open',payload={'target':'brain'})[0], 404)
         self.assertEqual(self.store.opened, [])
         page = self.request(authorized=False)[2]
         self.assertIn('id="crumb-brain"', page)
-        self.assertIn("api('/api/open', {target: 'brain'})", page)
+        self.assertIn("'/memory'+(scope.size?'#'+scope:'')", page)
         self.assertIn("scope.set('project', memoryProject)", page)
         self.assertIn("scope.set('run', selected)", page)
 

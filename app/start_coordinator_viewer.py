@@ -13,6 +13,7 @@ from start_brain_dashboard import open_dashboard
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=ROOT)
+    parser.add_argument('--page', choices=('usage','tasks','contributions','system-map','memory','experiments','skills','jev'))
     parser.add_argument('--run', help='Exact run name or path within the selected workspace')
     parser.add_argument('--no-open', action='store_true')
     parser.add_argument('--bind-codex-session', help='Explicitly map an exact saved Codex conversation UUID to --run')
@@ -38,7 +39,9 @@ def main(argv=None):
             return 0
         state = open_dashboard(args.root, False, service=SERVICE,
                                script='coordinator_viewer.py', state_name='coordinator-viewer')
-        url = state['origin'] + ('/?run=' + quote(run_id) if run_id else '/')
+        url = state['origin'] + '/' + (args.page or '')
+        if run_id:
+            url += ('#run=' if args.page in ('memory','skills','jev') else '?run=') + quote(run_id)
         if not args.no_open:
             webbrowser.open(url)
         print(json.dumps(dict(state, url=url, model_calls=0)))

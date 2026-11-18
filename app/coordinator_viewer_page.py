@@ -13,7 +13,7 @@ PAGE = r'''<!doctype html>
 @media(max-width:850px){.shell{padding:22px 16px}.layout{grid-template-columns:1fr}.checkpoint{display:grid;grid-template-columns:1fr 1fr;gap:18px}.checkpoint section+section{border:0;margin:0;padding:0}.checkpoint section:first-child,.checkpoint details{grid-column:1/-1}.conversation{height:65vh}.session-grid{grid-template-columns:1fr}.attach-area{max-width:none}.attach-area button{width:auto}}@media(max-width:500px){.checkpoint{display:block}.checkpoint section+section{margin-top:19px;border-top:1px solid var(--line);padding-top:19px}.session,.checkpoint{padding:17px}.history-top,.history-sub,.history-bottom{padding-left:16px;padding-right:16px}.conversation{padding:12px 16px}.metrics{gap:12px 20px}.topline{align-items:start}.attach-area button{width:100%}}
 .workspace-crumbs{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;font-size:12px;margin-bottom:9px;line-height:1.8;color:var(--muted)}.workspace-crumbs [aria-current=page]{color:var(--accent);font-weight:700}.workspace-crumbs a{color:var(--muted);text-decoration:none}.workspace-crumbs a:hover{color:var(--accent);text-decoration:underline}
 
-__WORKSPACE_NAV_STYLE__</style>
+__WORKSPACE_NAV_STYLE__.run-settings{margin:14px 0}.run-settings>summary{cursor:pointer;padding:10px 14px;color:var(--ws-text);font-weight:600}.run-settings>section{margin-top:8px}</style>
 <style nonce="__NONCE__">
 .lead-controls{display:flex;flex-direction:column;align-items:stretch;gap:10px}.lead-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;min-width:min(430px,100%);margin:0;padding:4px;border:1px solid var(--line);border-radius:12px;background:var(--inset)}.lead-switch label{position:relative;cursor:pointer}.lead-switch input{position:absolute;inset:0;margin:0;opacity:0;cursor:pointer}.lead-switch span{display:block;padding:8px 14px;border-radius:9px;font-weight:650}.lead-switch small{display:block;font-weight:400;font-size:12px;color:var(--muted)}.lead-switch input:checked+span{background:var(--accent);color:var(--accent-ink)}.lead-switch input:checked+span small{color:var(--accent-ink)}.lead-switch input:focus-visible+span{outline:3px solid var(--accent);outline-offset:2px}.lead-switch input:disabled+span{opacity:.55;cursor:default}.lead-switch input:disabled{cursor:default}@media(max-width:500px){.lead-switch span{padding:8px 9px}}
 .readiness-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}.readiness-list{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:10px}.readiness-list .bot{border:1px solid var(--line);border-radius:11px;padding:11px 14px;background:var(--inset)}.readiness-list .bot.held{border-color:var(--bad-line)}.readiness-list .bot.quiet{border-style:dashed;color:var(--muted);font-size:13px}.bot-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}.bot-name{font-weight:650}.bot-why{margin-top:6px;font-size:13px;color:var(--muted)}.bot.held .bot-why{color:var(--text)}.pill{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--chip);color:var(--muted)}.pill.ready{background:var(--good-bg);color:var(--good)}.pill.held{background:var(--bad-bg);color:var(--bad)}.age-chip{display:inline-block;font-size:12px;padding:2px 9px;border-radius:20px;background:var(--chip);color:var(--muted);white-space:nowrap}.age-chip.fresh{background:var(--good-bg);color:var(--good)}.age-chip.aging{background:var(--aging-bg);color:var(--aging)}.age-chip.stale{background:var(--warn-bg);color:var(--warn)}.monitor-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.monitor-row label{font-weight:650}.switch{display:inline-flex;align-items:center;gap:9px;padding:6px 12px}.switch-track{position:relative;width:34px;height:19px;border-radius:12px;background:var(--line);transition:background .15s}.switch-thumb{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:var(--text);transition:left .15s}.switch[aria-checked=true] .switch-track{background:var(--accent)}.switch[aria-checked=true] .switch-thumb{left:17px;background:var(--accent-ink)}.monitor-row p{flex-basis:100%;margin:0}
@@ -24,7 +24,7 @@ __WORKSPACE_NAV_STYLE__</style>
 <main class="shell">
   __WORKSPACE_NAV__
   <header class="topline">
-    <div><h1>Your session, in view.</h1><p class="muted spaced">Follow the lead. Open its conversation whenever you need to step in.</p></div>
+    <div><h1>Orchestration runs</h1><p class="muted spaced">Inspect the selected run, its workers and their conversation.</p></div>
     <div class="row"><span id="connection" class="smalltext muted"><span class="status-dot"></span>Connecting</span><button id="refresh" type="button" class="small" hidden>Retry now</button></div>
   </header>
   <div id="error" class="banner error" role="alert" hidden></div>
@@ -37,6 +37,7 @@ __WORKSPACE_NAV_STYLE__</style>
       <p id="monitor-note" class="muted smalltext" role="status">Checking whether background checks are on…</p>
     </div>
   </section>
+  <details class="run-settings" id="run-settings"><summary>Run settings</summary>
   <section class="panel session" aria-labelledby="automatic-label">
     <div class="session-grid">
       <div><h2 id="automatic-label">Automatic orchestration</h2><p id="automatic-note" class="muted smalltext spaced" role="status">Checking automatic startup...</p></div>
@@ -53,6 +54,8 @@ __WORKSPACE_NAV_STYLE__</style>
       </fieldset><button id="lead-save" type="button" class="primary" aria-describedby="lead-note" hidden disabled>Save lead switch</button></div>
     </div>
   </section>
+  __TEAM_MIX__
+  </details>
   <section class="panel session" aria-label="Selected orchestrator">
     <div class="session-grid">
       <div><label class="label" for="run">Project run</label><select id="run"><option value="">Loading runs…</option></select><p id="run-id" class="muted smalltext spaced"></p></div>
@@ -282,26 +285,21 @@ __WORKSPACE_NAV_STYLE__</style>
   }
   for (const id of Object.keys(LEAD_NAMES)) $('lead-' + id).addEventListener('change', () => { leadStaged = id; leadError = ''; renderLead(); });
   $('lead-save').addEventListener('click', saveLead);
-  let services = [];
-  function crumbTarget() { const brain = services.find(s => s.id === 'brain'); if (!brain || !brain.origin) return ''; const scope = new URLSearchParams(); if (memoryProject) scope.set('project', memoryProject); if (selected) scope.set('run', selected); return brain.origin + '/' + (scope.size ? '#' + scope : ''); }
-  function renderCrumb() { const scope = new URLSearchParams(); if (memoryProject) scope.set('project', memoryProject); if (selected) scope.set('run', selected); for (const page of ['usage', 'tasks', 'contributions']) $('crumb-' + page).href = '/' + page + (scope.size ? '?' + scope : ''); const target = crumbTarget(); $('crumb-brain').href = target || '#'; $('crumb-brain').title = target ? 'Open the Memory dashboard' + (selected ? ' for this run' : '') : 'Start the Memory dashboard'; }
-  async function loadServices() { try { services = (await api('/api/services')).services || []; } catch (_) { services = []; } renderCrumb(); }
-  let openingBrain = false;
-  async function openBrain() {
-    if (openingBrain) return;
-    openingBrain = true;
-    $('crumb-brain').textContent = 'Memory…';
-    try { const opened = await api('/api/open', {target: 'brain'}); services = [{id: 'brain', origin: opened.origin}]; window.location.href = crumbTarget(); }
-    catch (error) { showError(error); }
-    finally {
-      openingBrain = false;
-      $('crumb-brain').textContent = 'Memory';
-    }
+  function revealSettings() {
+    if (!['#lead','#team-mix'].includes(location.hash)) return;
+    $('run-settings').open = true;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({block:'start'});
   }
-  $('crumb-brain').addEventListener('click', event => {
-    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    event.preventDefault(); return openBrain();
-  });
+  window.addEventListener('hashchange', revealSettings);
+  revealSettings();
+  function renderCrumb() {
+    const scope = new URLSearchParams();
+    if (memoryProject) scope.set('project', memoryProject);
+    if (selected) scope.set('run', selected);
+    for (const page of ['usage','tasks','contributions']) $('crumb-'+page).href='/'+page+(scope.size?'?'+scope:'');
+    $('crumb-brain').href='/memory'+(scope.size?'#'+scope:'');
+  }
+
   function connection() {
     const dot = document.createElement('span'); dot.className = 'status-dot' + (lastFailure ? ' offline' : document.hidden ? ' paused' : '');
     $('connection').replaceChildren(dot, document.createTextNode(lastFailure ? 'Connection interrupted · retrying automatically' : document.hidden ? 'Refresh paused' : lastSuccess ? 'Auto-refresh on · every 5 seconds' : 'Connecting'));
@@ -585,7 +583,7 @@ __WORKSPACE_NAV_STYLE__</style>
     refresh();
   });
   $('memory-project').addEventListener('change', () => { memoryProject = $('memory-project').value; const address = new URL(location.href); address.searchParams.set('project', memoryProject); if (selected) address.searchParams.set('run', selected); history.replaceState(null, '', address); renderCrumb(); });
-  $('refresh').addEventListener('click', () => { loadServices(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh(); });
+  $('refresh').addEventListener('click', () => { loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh(); });
   $('older').addEventListener('click', async () => {
     if (olderBusy || !hasMore || !selected) return;
     olderBusy = true; $('older').disabled = true; $('older').textContent = 'Loading older messages…';
@@ -615,7 +613,7 @@ __WORKSPACE_NAV_STYLE__</style>
   document.addEventListener('visibilitychange', () => { connection(); if (!document.hidden) { loadAutomatic(); loadMonitor(); loadReadiness(); refresh(); } });
   setInterval(() => { connection(); if (!document.hidden) { loadAutomatic(); loadMonitor(); refresh(); } }, 5000);
   setInterval(() => { if (!document.hidden) loadReadiness(); }, 30000);
-  renderCrumb(); loadServices(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh();
+  renderCrumb(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh();
 })();
 </script>
 </body>
@@ -629,8 +627,7 @@ from team_mix_page import HTML as TEAM_MIX_HTML, JS as TEAM_MIX_JS, STYLE as TEA
 # The shared navigation; the server fills in the current lead for the chip.
 PAGE = PAGE.replace('__WORKSPACE_NAV__', static_markup('viewer', 'viewer', '__WORKSPACE_LEAD__')).replace('__WORKSPACE_NAV_STYLE__', THEME + STYLE + OPERATIONS_STYLE + TEAM_MIX_STYLE)
 PAGE = PAGE.replace('  <footer>', OPERATIONS_HTML + '\n  <footer>', 1)
-PAGE = PAGE.replace('  renderCrumb(); loadServices(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh();', OPERATIONS_JS + '\n  renderCrumb(); loadServices(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh();', 1)
+PAGE = PAGE.replace('  renderCrumb(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh();', OPERATIONS_JS + '\n  renderCrumb(); loadAutomatic(); loadMonitor(); loadReadiness(); loadLead(); refresh();', 1)
 # The team mix sits right after the lead switch it complements.
-PAGE = PAGE.replace('  <section class="panel session" aria-label="Selected orchestrator">',
-                    TEAM_MIX_HTML + '  <section class="panel session" aria-label="Selected orchestrator">', 1)
-PAGE = PAGE.replace('  renderCrumb(); loadServices();', TEAM_MIX_JS + '\n  renderCrumb(); loadServices();', 1)
+PAGE = PAGE.replace('__TEAM_MIX__', TEAM_MIX_HTML)
+PAGE = PAGE.replace('  renderCrumb();', TEAM_MIX_JS + '\n  renderCrumb();', 1)

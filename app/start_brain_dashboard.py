@@ -15,7 +15,7 @@ from paths import ROOT
 from brain_store import safe_path
 from usage_guard import file_lock
 
-SERVICE = 'orchestrator-brain-dashboard'
+from coordinator_viewer import SERVICE
 
 
 def running_state(path, service=SERVICE):
@@ -70,7 +70,7 @@ def _start_server(argv, root):
         return process
 
 
-def open_dashboard(root=ROOT,open_browser=True,*,service=SERVICE,script='brain_dashboard.py',state_name='brain-dashboard'):
+def open_dashboard(root=ROOT,open_browser=True,*,service=SERVICE,script='coordinator_viewer.py',state_name='coordinator-viewer'):
     root=Path(root).resolve()
     state_path=safe_path(root,root/('runtime/'+state_name+'.json'))
     lock_path=safe_path(root,root/('runtime/'+state_name+'-launch.lock'))
@@ -90,7 +90,7 @@ def open_dashboard(root=ROOT,open_browser=True,*,service=SERVICE,script='brain_d
             if state is None:
                 if process.poll() is None:process.terminate();process.wait(timeout=5)
                 raise RuntimeError('Dashboard did not start. Run python orchestrator.py brain dashboard for the diagnostic.')
-    if open_browser:webbrowser.open(state['origin']+'/')
+    if open_browser:webbrowser.open(state['origin']+'/memory')
     return dict(state,reused=reused)
 
 

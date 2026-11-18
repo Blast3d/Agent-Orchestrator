@@ -24,7 +24,7 @@ function $(id) {if (!nodes.has(id)) nodes.set(id, {id,disabled:false,hidden:fals
 let api=async()=>{throw Error('No request expected');};
 '''
         begin = PAGE.index('  let leadState = null')
-        end = PAGE.index('  let services = [];', begin)
+        end = PAGE.index('  function revealSettings()', begin)
         setup += PAGE[begin:end]
         setup += '\n(async()=>{\n' + scenario + '\n})().catch(e=>{console.error(e);process.exitCode=1;});'
         result = subprocess.run([shutil.which('node')], input=setup, text=True,

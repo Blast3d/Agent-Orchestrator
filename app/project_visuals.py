@@ -103,9 +103,7 @@ class ProjectLibrary:
                 'projects': sorted(projects.values(), key=lambda p: (p['date'], p['id']), reverse=True),
                 'unavailable_reports': unavailable}
 
-    def render(self, output=None, template=None):
-        dataset = self.collect()
-        standard_template = template is None
+    def page(self, dataset, template=None):
         template = Path(template) if template else self.root / 'app/assets/project-map.html'
         from workspace_navigation import THEME
         # Shared tokens go in before the data, so report text never reaches the style placeholder.
@@ -117,9 +115,14 @@ class ProjectLibrary:
         # Report titles are untrusted text. Prevent closing the embedded data tag.
         for character, escaped in (('&', '\\u0026'), ('<', '\\u003c'), ('>', '\\u003e'), ('\u2028', '\\u2028'), ('\u2029', '\\u2029')):
             payload = payload.replace(character, escaped)
+        return page.replace(marker, payload)
+
+    def render(self, output=None, template=None):
+        dataset = self.collect()
+        page = self.page(dataset, template)
+        standard_template = template is None
         target = Path(output) if output else self.state / 'project-map.html'
         target.parent.mkdir(parents=True, exist_ok=True)
-        page = page.replace(marker, payload)
         if standard_template:
             from workspace_navigation import decorate_report, write_navigation_script
             # Exporting a copy elsewhere must not invent sibling report files.

@@ -27,7 +27,7 @@ const fieldLabels={query:'What are you trying to find out?',claim:'Claim or prop
 function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(cls)n.className=cls;return n;}
 function notice(text,error=false){$('notice').textContent=text;$('notice').classList.toggle('error',error);$('notice').hidden=!text;}
 function currentWorkflow(){return state.workflows.find(row=>row.workflow===$('workflow').value);}
-function saveScope(){const hash=new URLSearchParams({project:state.project});if(state.run)hash.set('run',state.run);history.replaceState(null,'','#'+hash.toString());$('back').href='/#'+hash.toString();$('skill-packs').href='/skills'+$('back').href.slice(1);}
+function saveScope(){const hash=new URLSearchParams({project:state.project});if(state.run)hash.set('run',state.run);history.replaceState(null,'','#'+hash.toString());$('back').href='/memory#'+hash;$('skill-packs').href='/skills#'+hash;}
 function requestStatus(text,error=false){$('request-status').textContent=text;$('request-status').classList.toggle('warning',error);$('request-status').hidden=!text;}
 function showAdvice(){if($('result').hidden)return;$('result').focus({preventScroll:true});$('result').scrollIntoView({block:'start',behavior:'auto'});}
 function clearResult(){$('result').hidden=true;$('result-body').replaceChildren();$('view-result').hidden=true;requestStatus('');}
@@ -56,4 +56,4 @@ $('project').addEventListener('input',()=>syncScope($('project').value,$('run').
 
 from workspace_navigation import STYLE, THEME, static_markup  # noqa: E402
 
-PAGE = PAGE.replace('__WORKSPACE_NAV__', static_markup('brain', 'brain', '__WORKSPACE_LEAD__')).replace('__WORKSPACE_NAV_STYLE__', THEME + STYLE)
+PAGE = PAGE.replace('__WORKSPACE_NAV__', static_markup('jev', 'brain', '__WORKSPACE_LEAD__')).replace('__WORKSPACE_NAV_STYLE__', THEME + STYLE)

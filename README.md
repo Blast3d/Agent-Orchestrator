@@ -1,5 +1,7 @@
 # Agent Orchestrator
 
+Open **Workspace** in the OpenWhispr control panel for runs, tasks and reviewed memory. Reports and team settings open in the same window. The portable Python installation also supports `python orchestrator.py viewer` and `viewer --page memory` through the shared loopback service.
+
 Coordinate AI coding assistants, track their work, and keep reviewed project
 memory on your Windows PC. **Codex is the default lead**, called **ASTRA** in the
 workflow documentation.
@@ -91,11 +93,6 @@ result. Use `lead role` to inspect session duties and the
 [coordinator handoff guide](docs/coordinator-handoff.md) for supported transfers
 and recovery. Historical Fable records and launcher names remain for compatibility;
 the current paused-model policy still applies.
-
-In the original development workspace, **Open Panel Results.cmd** opens the
-historical thirteen-agent experiment, its vote and estimated contribution shares.
-This local-report shortcut is excluded from distribution ZIPs because its
-`.orchestration` report is not packaged.
 
 **Open Orchestrator Viewer.cmd** shows the selected run's lead, progress and saved
 conversation, with older-message paging and a provider-specific **Open Codex

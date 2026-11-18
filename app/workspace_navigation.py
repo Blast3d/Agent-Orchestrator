@@ -24,19 +24,21 @@ REPORT_ROUTES = {'/usage': 'usage-dashboard.html', '/contributions': 'project-ma
 LIVE_ROUTES = {'/tasks': 'task-inbox.html'}
 SCRIPT_NAME = 'workspace-navigation.js'
 PAGES = (
-    ('viewer', 'Orchestrator'), ('usage', 'Usage'), ('tasks', 'Tasks'), ('brain', 'Memory'),
+    ('viewer', 'Orchestrator'), ('tasks', 'Tasks'), ('brain', 'Memory'), ('usage', 'Usage'),
     ('contributions', 'Contributions'), ('experiments', 'Experiments'), ('system-map', 'System map'),
+    ('skills', 'Skill packs'), ('jev', 'Jev'), ('team-mix', 'Team mix'),
 )
 ROUTES = {'usage': '/usage', 'tasks': '/tasks', 'contributions': '/contributions', 'system-map': '/system-map'}
 FILES = {'usage': 'usage-dashboard.html', 'tasks': 'task-inbox.html', 'contributions': 'project-map.html',
          'system-map': 'system-map.html'}
 # Pages that live on exactly one server: page -> (service, path).
-SERVICE_PAGES = {'viewer': ('viewer', '/'), 'brain': ('brain', '/'), 'experiments': ('viewer', '/experiments')}
+SERVICE_PAGES = {'viewer': ('viewer', '/'), 'brain': ('viewer', '/memory'), 'experiments': ('viewer', '/experiments'),
+                 'skills': ('viewer', '/skills'), 'jev': ('viewer', '/jev'), 'team-mix': ('viewer', '/#team-mix')}
 LAUNCHERS = {'viewer': 'Open Orchestrator Viewer.cmd', 'brain': 'Open Brain Dashboard.cmd'}
 SERVICE_TITLES = {'viewer': 'Orchestrator', 'brain': 'Memory'}
 # Shared design tokens. Every page maps its own colors to these, so all pages
 # follow the system light or dark preference together. Text pairs meet WCAG AA.
-THEME = '''
+_LIGHT_THEME = '''
 :root{color-scheme:light dark;--ws-font:system-ui,-apple-system,"Segoe UI",sans-serif;
 --ws-bg:#f5f4ef;--ws-surface:#fffefa;--ws-surface-2:#f1f0e9;--ws-raised:#ffffff;--ws-line:#d6dbd3;--ws-line-strong:#aeb9b0;
 --ws-text:#1a2b33;--ws-muted:#56656c;--ws-faint:#66747a;--ws-accent:#1b6b5d;--ws-accent-ink:#ffffff;--ws-accent-soft:#dcefe8;
@@ -46,7 +48,8 @@ THEME = '''
 --ws-shadow:0 10px 30px #1a2b3314;--ws-overlay:#1a2b3399;--ws-nav-bg:#ffffff;--ws-nav-current:#e4f1ec;
 --ws-graph-bg:#f7f7f2;--ws-graph-edge:rgba(26,43,51,.16);--ws-graph-edge-strong:rgba(26,43,51,.6);
 --ws-kind-fact:#3d62b8;--ws-kind-preference:#9a6a12;--ws-kind-episode:#1f7a63;--ws-kind-procedure:#7a4fb8}
-@media(prefers-color-scheme:dark){:root{
+'''
+_DARK_COLORS = '''
 --ws-bg:#10151d;--ws-surface:#18212d;--ws-surface-2:#131b25;--ws-raised:#1e2a38;--ws-line:#303d4e;--ws-line-strong:#4a5d75;
 --ws-text:#edf3fb;--ws-muted:#a7b5c7;--ws-faint:#93a2b5;--ws-accent:#9edbc7;--ws-accent-ink:#10271f;--ws-accent-soft:#173c34;
 --ws-focus:#e6ba77;--ws-good:#7ce0b4;--ws-good-bg:#173c34;--ws-good-line:#2f6b5b;--ws-warn:#ffd792;--ws-warn-bg:#3d321f;
@@ -54,8 +57,12 @@ THEME = '''
 --ws-info:#a3bdff;--ws-info-bg:#1b2e3a;--ws-info-line:#36535a;--ws-violet:#d3abff;--ws-chip:#243041;--ws-track:#293447;
 --ws-shadow:0 12px 40px #0006;--ws-overlay:#040912c9;--ws-nav-bg:#131c27;--ws-nav-current:#23364a;
 --ws-graph-bg:#101722;--ws-graph-edge:rgba(237,243,250,.12);--ws-graph-edge-strong:rgba(237,243,250,.55);
---ws-kind-fact:#94b5ff;--ws-kind-preference:#f4c878;--ws-kind-episode:#79dfc5;--ws-kind-procedure:#c6a0ed}}
+--ws-kind-fact:#94b5ff;--ws-kind-preference:#f4c878;--ws-kind-episode:#79dfc5;--ws-kind-procedure:#c6a0ed
 '''
+THEME = (_LIGHT_THEME
+         + '@media(prefers-color-scheme:dark){:root:not([data-workspace-theme="light"]){' + _DARK_COLORS + '}}\n'
+         + ':root[data-workspace-theme="dark"]{' + _DARK_COLORS + '}\n')
+
 STYLE = '''
 .workspace-navigation{--wn-bg:var(--ws-nav-bg,#131c27);--wn-line:var(--ws-line,#2f3d4f);--wn-text:var(--ws-text,#dce6f1);--wn-muted:var(--ws-muted,#a9b7c6);--wn-current-bg:var(--ws-nav-current,#23364a);--wn-current:var(--ws-text,#ffffff);--wn-accent:var(--ws-accent,#9edbc7);--wn-focus:var(--ws-focus,#e6ba77);box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;background:var(--wn-bg);color:var(--wn-text);border:1px solid var(--wn-line);border-radius:12px;padding:8px 10px;margin:0 0 24px;font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;text-align:left}
 .workspace-navigation ol{display:flex;flex-wrap:wrap;align-items:center;gap:4px;list-style:none;margin:0;padding:0}
@@ -70,6 +77,12 @@ STYLE = '''
 .workspace-navigation .workspace-navigation-status{flex-basis:100%;color:var(--wn-muted);font:13px/1.5 system-ui,sans-serif;margin:2px 4px 4px}
 body>.workspace-navigation{margin:12px 16px 20px}
 @media(max-width:600px){.workspace-navigation{padding:6px}.workspace-navigation a{padding:6px 8px}.workspace-navigation .workspace-lead{padding:4px 10px}}
+.workspace-menu{position:relative}
+.workspace-menu summary{cursor:pointer;border-radius:8px;padding:6px 10px;color:var(--wn-text)}
+.workspace-menu summary:focus-visible{outline:3px solid var(--wn-focus)}
+.workspace-menu details[open]>summary,.workspace-menu details:has([aria-current="page"])>summary{background:var(--wn-current-bg)}
+.workspace-menu ul{position:absolute;z-index:35;min-width:10em;margin:4px 0 0;padding:5px;background:var(--wn-bg);border:1px solid var(--wn-line);border-radius:10px;box-shadow:var(--ws-shadow)}
+.workspace-menu li,.workspace-menu li a{display:block}
 @media print{.workspace-navigation{display:none}}
 '''
 
@@ -135,7 +148,10 @@ def _items(page_id, hrefs, ids, disabled_titles):
         if identifier == page_id:
             attrs += ' aria-current="page"'
         items.append('<li><a' + attrs + '>' + title + '</a></li>')
-    return items
+    def menu(title, links):
+        return ('<li class="workspace-menu"><details><summary>' + title + '</summary><ul>'
+                + ''.join(links) + '</ul></details></li>')
+    return items[:3] + [menu('Reports', items[3:7]), menu('Tools', items[7:])]
 
 
 def _unavailable_title(identifier):
@@ -153,7 +169,7 @@ def navigation_markup(root, page_id, *, report_directory=None, served_by=None, o
     """
     if page_id not in dict(PAGES):
         raise ValueError('Unknown workspace page')
-    origins = _origins(root, served_by, origin)
+    origins = dict.fromkeys(SERVICE_TITLES, _valid_origin(origin)) if served_by else _origins(root)
     hrefs = {}
     for identifier, name in FILES.items():
         if report_directory is not None:
@@ -182,8 +198,8 @@ def static_markup(page_id, served_by, lead=''):
         raise ValueError('Unknown workspace page')
     hrefs = {identifier: route for identifier, route in ROUTES.items()}
     for identifier, (service, path) in SERVICE_PAGES.items():
-        hrefs[identifier] = path if service == served_by else '#'
-    chip = _lead_chip(lead, '/#lead' if served_by == 'viewer' else '#', identifier=True)
+        hrefs[identifier] = path
+    chip = _lead_chip(lead, '/#lead', identifier=True)
     return ('<nav class="workspace-navigation" aria-label="Workspace pages" data-workspace-current="' + page_id + '">'
             '<ol>' + ''.join(_items(page_id, hrefs, True, {})) + '</ol>' + chip +
             '<p class="workspace-navigation-status" data-workspace-status role="status" hidden></p></nav>')
@@ -224,7 +240,7 @@ const launchers=__LAUNCHERS__;
 const lead=__LEAD__;
 const routes={usage:"/usage",tasks:"/tasks",contributions:"/contributions","system-map":"/system-map"};
 const files={usage:"usage-dashboard.html",tasks:"task-inbox.html",contributions:"project-map.html","system-map":"system-map.html"};
-const services={viewer:["viewer","/"],brain:["brain","/"],experiments:["viewer","/experiments"]};
+const services={viewer:["viewer","/"],brain:["viewer","/memory"],skills:["viewer","/skills"],jev:["viewer","/jev"],"team-mix":["viewer","/#team-mix"],experiments:["viewer","/experiments"]};
 const titles={viewer:"Orchestrator",brain:"Memory"};
 // Only these pages understand a project or run scope.
 const scoped={viewer:true,brain:true,usage:true,tasks:true,contributions:true};
@@ -237,7 +253,7 @@ function cleanScope(value){
 function locationScope(){
   const query=new URLSearchParams(location.search);
   // Memory pages keep their scope in the hash; saved reports use query.
-  const hash=location.pathname==="/"||location.pathname==="/jev"?new URLSearchParams(location.hash.slice(1)):null;
+  const hash=["/","/memory","/skills","/jev"].includes(location.pathname)?new URLSearchParams(location.hash.slice(1)):null;
   return cleanScope({project:query.get("project")||(hash&&hash.get("project")),run:query.get("run")||(hash&&hash.get("run"))});
 }
 let scope=locationScope();
@@ -256,9 +272,9 @@ function target(page,fileTarget,link){
     return (fileTarget||files[page])+(params?"?"+params:"")+suffix;
   }
   const service=services[page];
-  const origin=service&&origins[service[0]];
+  const origin=service&&(location.protocol==="file:"?origins[service[0]]:location.origin);
   if(!origin)return null;
-  if(page==="brain")return origin+"/"+(params?"#"+params:"");
+  if(page==="brain")return origin+"/memory"+(params?"#"+params:"");
   return origin+service[1]+(params?"?"+params:"")+suffix;
 }
 function unavailable(link){
@@ -299,7 +315,7 @@ def _json(value):
 
 def navigation_script(root, current=None, origin=None):
     """Return navigation JavaScript with only verified loopback page origins and the lead label."""
-    return (_SCRIPT.replace('__ORIGINS__', _json(_origins(root, current, origin)))
+    return (_SCRIPT.replace('__ORIGINS__', _json(dict.fromkeys(SERVICE_TITLES, _valid_origin(origin)) if current in SERVICE_TITLES else _origins(root)))
             .replace('__LAUNCHERS__', _json(LAUNCHERS)).replace('__LEAD__', _json(lead_label())))
 
 

@@ -34,7 +34,7 @@ const location = {hash:'#project=new-empty-project&run=exact-run'};
 const history = {replaceState(){}};
 function el() {return {};}
 function projectQuery(){return '?project_id='+encodeURIComponent(state.project);}
-function loadServices(){}
+function renderCrumbs(){}
 function saveScope(){}
 function renderRefreshButton(){}
 function render(){}

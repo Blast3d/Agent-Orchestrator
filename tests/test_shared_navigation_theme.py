@@ -17,7 +17,7 @@ import task_inbox
 from usage_report import render_usage
 from workspace_navigation import PAGES, THEME, decorate_report
 
-NAMES = ['Orchestrator', 'Usage', 'Tasks', 'Memory', 'Contributions', 'Experiments', 'System map']
+NAMES = ['Orchestrator', 'Tasks', 'Memory', 'Usage', 'Contributions', 'Experiments', 'System map', 'Skill packs', 'Jev', 'Team mix']
 
 
 def nav_labels(page):
@@ -44,7 +44,7 @@ class SharedNavigationTests(unittest.TestCase):
 
     def test_server_rendered_pages_use_the_shared_navigation_and_mark_their_page(self):
         for module, current in ((coordinator_viewer_page, 'Orchestrator'), (brain_dashboard, 'Memory'),
-                                (experiment_page, 'Experiments'), (jev_workflow_page, 'Memory')):
+                                (experiment_page, 'Experiments'), (jev_workflow_page, 'Jev')):
             with self.subTest(page=module.__name__):
                 self.assertEqual(nav_labels(module.PAGE), NAMES)
                 marked = re.search(r'aria-current="page">([^<]+)</a>', module.PAGE)

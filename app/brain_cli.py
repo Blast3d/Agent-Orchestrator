@@ -63,8 +63,8 @@ def main(argv=None):
     args=parser.parse_args(argv)
     try:
         if args.command=='dashboard':
-            from brain_dashboard import main as dashboard_main
-            return dashboard_main(['--root',str(args.root),'--port',str(args.port)]+(['--open'] if args.open else []))
+            from coordinator_viewer import main as dashboard_main
+            return dashboard_main(['--root',str(args.root),'--port',str(args.port)]+(['--open-memory'] if args.open else []))
         brain=BrainStore(args.root) if args.command not in ('capture','retire-capture') else None
         if args.command in ('init','status'):result=brain.status()
         elif args.command=='propose':

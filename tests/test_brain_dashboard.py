@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'app'))
+from coordinator_viewer import SERVICE, ViewerServer
 from brain_dashboard import MAX_REQUEST_BYTES, PAGE, main, make_server, DashboardHandler
 
 
@@ -408,29 +409,29 @@ class DashboardTests(unittest.TestCase):
 
     def test_launcher_state_is_atomic_has_no_token_and_is_removed_on_close(self):
         state_file = self.root / 'runtime' / 'dashboard.json'
-        server = make_server(self.root, store_factory=lambda root: self.store)
+        server = ViewerServer(self.root)
         observed = []
 
         def during_service(**kwargs):
             observed.append(json.loads(state_file.read_text(encoding='utf-8')))
             self.assertEqual(list(state_file.parent.glob('*.tmp')), [])
 
-        with patch('brain_dashboard.make_server', return_value=server), patch.object(server, 'serve_forever', side_effect=during_service), patch('sys.stdout', new_callable=io.StringIO):
+        with patch('coordinator_viewer.ViewerServer', return_value=server), patch.object(server, 'serve_forever', side_effect=during_service), patch('sys.stdout', new_callable=io.StringIO):
             self.assertEqual(main(['--root', str(self.root), '--state-file', str(state_file)]), 0)
         self.assertEqual(observed, [{'pid': os.getpid(), 'origin': server.origin,
-                                   'service': 'orchestrator-brain-dashboard', 'version': 1,
+                                   'service': SERVICE, 'version': 1,
                                    'instance_id': server.instance_id}])
         self.assertNotIn(server.brain_token, str(observed))
         self.assertFalse(state_file.exists())
 
     def test_launcher_does_not_remove_a_replacement_process_state(self):
         state_file = self.root / 'dashboard.json'
-        server = make_server(self.root, store_factory=lambda root: self.store)
+        server = ViewerServer(self.root)
 
         def during_service(**kwargs):
             state_file.write_text(json.dumps({'pid': os.getpid() + 100, 'origin': 'replacement'}), encoding='utf-8')
 
-        with patch('brain_dashboard.make_server', return_value=server), patch.object(server, 'serve_forever', side_effect=during_service), patch('sys.stdout', new_callable=io.StringIO):
+        with patch('coordinator_viewer.ViewerServer', return_value=server), patch.object(server, 'serve_forever', side_effect=during_service), patch('sys.stdout', new_callable=io.StringIO):
             main(['--root', str(self.root), '--state-file', str(state_file)])
         self.assertEqual(json.loads(state_file.read_text(encoding='utf-8'))['origin'], 'replacement')
 
@@ -478,7 +479,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('setInterval(poll,10000)', PAGE)
         self.assertIn("if(document.hidden||$('refresh').disabled||state.polling)return;", PAGE)
         self.assertIn("!$('detail').open&&!$('editor').open&&!$('action').open&&!$('feedback').open&&!state.searchResults&&state.view!=='graph'", PAGE)
-        self.assertIn("state.cursor=0;state.pending=0;state.recallRevision=null;state.services=[];saveScope();renderCrumbs();$('detail').close();refresh();", PAGE)
+        self.assertIn("state.cursor=0;state.pending=0;state.recallRevision=null;saveScope();renderCrumbs();$('detail').close();refresh();", PAGE)
 
     def test_real_store_change_feed_advances_after_writes_without_content(self):
         from brain_store import BrainStore
@@ -518,11 +519,10 @@ class DashboardTests(unittest.TestCase):
 
     def test_page_has_orchestrator_crumb_and_run_deep_links(self):
         self.assertIn('id="crumb-viewer"', PAGE)
-        self.assertIn("api('/api/services'+projectQuery()+(run?", PAGE)
-        self.assertIn("api('/api/open',{target:'viewer'})", PAGE)
-        self.assertIn("new URLSearchParams(location.hash.slice(1)).get('project')", PAGE)
-        self.assertIn("query.set('run',viewer.run)", PAGE)
-        self.assertIn("new URLSearchParams({project:state.project})", PAGE)
+        self.assertNotIn("api('/api/open'", PAGE)
+        self.assertIn("new URLSearchParams(location.hash.slice(1))", PAGE)
+        self.assertIn("scope.set('run',state.run)", PAGE)
+        self.assertIn("$('crumb-viewer').href='/'+query", PAGE)
 
 
 if __name__ == '__main__':

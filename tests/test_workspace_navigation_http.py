@@ -91,7 +91,11 @@ class WorkspaceNavigationHTTPTests(unittest.TestCase):
                 with self.subTest(page=server.page_id, route=route):
                     status, headers, page = self.request(server, route + '?project=shared%20library&run=fixture-run')
                     self.assertEqual(status, 200, page)
-                    self.assertEqual(page, self.report)
+                    if server.page_id == 'viewer':
+                        self.assertNotIn(self.report_script, page)
+                        self.assertIn('aria-label="Workspace pages"', page)
+                    else:
+                        self.assertEqual(page, self.report)
                     self.assertEqual(headers['Cache-Control'], 'no-store')
                     self.assertEqual(headers['X-Frame-Options'], 'DENY')
                     self.assertEqual(headers['Referrer-Policy'], 'no-referrer')
@@ -101,9 +105,12 @@ class WorkspaceNavigationHTTPTests(unittest.TestCase):
 
     def test_report_csp_hashes_match_exact_script_and_style_while_network_calls_stay_disabled(self):
         for server in self.servers:
-            _, headers, _ = self.request(server, '/usage')
+            _, headers, body = self.request(server, '/usage')
             policy = headers['Content-Security-Policy']
-            for code in (self.report_script, self.report_style):
+            import re
+            code_blocks = [match.group(2) for match in re.finditer(r'<(script|style)(?: [^>]*)?>(.*?)</\1>', body, re.S) if match.group(2)]
+            self.assertTrue(code_blocks)
+            for code in code_blocks:
                 digest = base64.b64encode(hashlib.sha256(code.encode('utf-8')).digest()).decode('ascii')
                 self.assertIn("'sha256-" + digest + "'", policy)
             self.assertIn("script-src 'self'", policy)
@@ -119,6 +126,9 @@ class WorkspaceNavigationHTTPTests(unittest.TestCase):
         for server in self.servers:
             status, headers, body = self.request(server, '/usage')
             self.assertEqual(status, 200)
+            if server.page_id == 'viewer':
+                self.assertNotIn('window.fixture', body)
+                continue
             self.assertEqual(body, page)
             self.assertIn("'sha256-" + digest + "'", headers['Content-Security-Policy'])
 
@@ -177,6 +187,10 @@ class WorkspaceNavigationHTTPTests(unittest.TestCase):
         (self.runtime / 'project-map.html').write_bytes(b'Z' * (8 * 1024 * 1024 + 1))
         for server in self.servers:
             status, _, body = self.request(server, '/usage')
+            if server.page_id == 'viewer':
+                self.assertEqual(status, 200)
+                self.assertEqual(self.request(server, '/contributions')[0], 200)
+                continue
             self.assertEqual(status, 404)
             self.assertIn('Report unavailable', body)
             self.assertIn('href="/"', body)
@@ -196,7 +210,7 @@ class WorkspaceNavigationHTTPTests(unittest.TestCase):
             self.skipTest('File symlinks unavailable on this host: ' + str(error.winerror))
         for server in self.servers:
             status, _, body = self.request(server, '/usage')
-            self.assertEqual(status, 400)
+            self.assertEqual(status, 200 if server.page_id == 'viewer' else 400)
             self.assertNotIn('PRIVATE_OUTSIDE_REPORT', body)
             self.assertNotIn(str(secret), body)
 
@@ -216,13 +230,12 @@ class WorkspaceNavigationHTTPTests(unittest.TestCase):
         self.assertEqual(self.store.mock_calls, [])
 
     def test_unwritable_file_sidecar_does_not_prevent_either_http_dashboard_starting(self):
-        for module, factory, page_id in ((brain_dashboard, 'make_server', 'brain'),
-                                         (coordinator_viewer, 'ViewerServer', 'viewer')):
-            with self.subTest(page=page_id):
-                server = MagicMock(root=self.root, page_id=page_id,
+        for module in (brain_dashboard, coordinator_viewer):
+            with self.subTest(launcher=module.__name__):
+                server = MagicMock(root=self.root, page_id='viewer',
                                    origin='http://127.0.0.1:4242', instance_id='a' * 32)
                 server.__enter__.return_value = server
-                with patch.object(module, factory, return_value=server), \
+                with patch.object(coordinator_viewer, 'ViewerServer', return_value=server), \
                         patch('workspace_navigation.write_navigation_script', side_effect=PermissionError('fixture sidecar locked')), \
                         patch('builtins.print'):
                     self.assertEqual(module.main(['--root', str(self.root)]), 0)
