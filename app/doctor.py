@@ -37,6 +37,9 @@ def diagnose():
                      'app/assets/orchestration-context.md', 'docs/startup-and-closeout.md',
                      'app/antigravity_boundary.py', 'app/antigravity_deny_tools.py', 'app/antigravity_progress.py',
                      'app/codex_worker.py', 'app/codex_progress.py',
+                     'app/scoped_files.py', 'app/scoped_files_mcp.py', 'app/scoped_routes.py',
+                     'app/scoped_validation.py', 'app/worker_worktree.py', 'app/worktree_cli.py',
+                     'app/antigravity_scoped_tools.py', 'docs/scoped-worker-tools.md',
                      'app/brain_store.py','app/brain_cli.py','app/brain_dashboard.py','app/brain_interface.py',
                      'app/storage_budget.py','app/start_brain_dashboard.py','Open Brain Dashboard.cmd',
                      'runtime/policy.json', 'skills/multi-model-orchestrator/SKILL.md'):

@@ -235,6 +235,8 @@ manual controls appear for an error or updates deferred while reading/editing.
 
 Use `python orchestrator.py team --type audit --independent-workstreams 6 --cap 3` for a read-only team plan based on independent work, saved quota and measured task timings; it also shows a near-equal allocation across the non-lead families. During a run, `python orchestrator.py balance --run RUN` reports each family's dispatched and accepted tasks, and `python orchestrator.py run auto --run RUN ...` sends the next assignment to the least-used eligible family. The cap counts simultaneous workers; the lead is separate. The viewer's **Worker activity** panel shows dispatch phases, elapsed time, provider progress, deadlines and memory receipts. See [team sizing and latency](docs/team-sizing.md).
 
+**Scoped file tools** let Claude, Grok and Gemini workers edit a disposable git worktree with file tools only (no commands, web or other tool servers); the lead reviews the collected patch and applies it with `python orchestrator.py worktree apply JOB_ID`. Add `--worktree-from REPO` to `run`. Each route needs a current live validation proof; Codex is held. See [scoped worker tools](docs/scoped-worker-tools.md).
+
 Every finalized worker task now saves a **contribution audit**, and Codex includes a combined audit when an orchestrated task finishes. It shows estimated accepted-work percentages by agent and category, alongside separate delegation and reported-token usage. Rejected drafts remain visible as usage. Unknown measurements remain unknown. See [contribution audits](docs/contribution-audits.md) for evidence rules and commands.
 
 ## Clear briefs and remembered assignments

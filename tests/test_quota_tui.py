@@ -52,6 +52,16 @@ def claude_screen():
 
 
 class ClaudeQuotaParserTests(unittest.TestCase):
+    def test_new_analytics_cache_tip_does_not_make_fresh_bars_look_cached(self):
+        tip = 'Longer sessions are more expensive even when cached. /compact mid-task, /clear when switching to new tasks.\n'
+        display = claude_screen() + "What's contributing to your limits usage?\n" + tip
+        result = parse_claude_screen(display, cli_version='2.1.288')
+        self.assertEqual([w['remaining_pct'] for w in result['windows']], [2, 20, 89])
+        with self.assertRaises(ValueError):
+            parse_claude_screen(claude_screen() + tip, cli_version='2.1.288')
+        with self.assertRaises(ValueError):
+            parse_claude_screen(display + 'Showing cached usage\n', cli_version='2.1.288')
+
     def test_optional_analytics_failure_does_not_hide_loaded_account_bars(self):
         notice = 'Per-model breakdown unavailable (rate limited \u2014 try again in a moment)\n'
         display = claude_screen() + "What's contributing to your limits usage?\n" + notice

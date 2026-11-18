@@ -27,10 +27,11 @@ def main():
                'vscode-bots': ('vscode_bots.py', None),
                'viewer': ('start_coordinator_viewer.py', None), 'map': ('system_map.py', None),
                'voice': ('voice_gateway.py', None), 'relay': ('relay_bridge.py', None),
-               'notifications': ('completion_notifications.py', None)}
+               'notifications': ('completion_notifications.py', None),
+               'worktree': ('worktree_cli.py', None)}
     if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
         print('Agent Orchestrator: the lead switch picks Claude (Opus 5.5), ASTRA or Sol (see lead selected); the runner-up continues through an explicit handoff.\n'
-              'Commands: automatic, start, closeout, brain, jev, skills, lead, viewer, voice, relay, notifications, watch, team, balance, mix, tiers, updates, remember, map, doctor, status, refresh, dashboard, inbox, summary, visuals, brief-check, run, review, contributions, tasks, monitor, stop-monitor, local, inventory, vscode-bots\n'
+              'Commands: automatic, start, closeout, brain, jev, skills, lead, viewer, voice, relay, notifications, watch, team, balance, mix, tiers, updates, remember, map, doctor, status, refresh, dashboard, inbox, summary, visuals, brief-check, run, review, worktree, contributions, tasks, monitor, stop-monitor, local, inventory, vscode-bots\n'
               'Examples:\n  python orchestrator.py doctor\n  python orchestrator.py refresh --provider claude\n'
               '  python orchestrator.py balance --run RUN_DIR\n'
               '  python orchestrator.py mix show [--run RUN_DIR]   |   mix set --family claude --value 40   |   mix set --preset code\n'

@@ -21,7 +21,7 @@ from paths import VENDOR, WORKSPACES
 sys.path.insert(0, str(VENDOR))
 VERIFIED_GROK_VERSIONS = {"1.0.13"}
 # Enabled only after a real /usage display and its refresh transition are tested.
-VERIFIED_CLAUDE_VERSIONS: set[str] = {"2.1.263"}
+VERIFIED_CLAUDE_VERSIONS: set[str] = {"2.1.263", "2.1.288"}
 
 
 def utc_now() -> str:
@@ -148,10 +148,10 @@ def parse_claude_screen(display: str, *, cli_version: str,
     The collector owns freshness. Parser fixtures can exercise unknown UI
     versions, but run_claude will not accept a version until it is live-verified.
     """
-    # In 2.1.263 the optional local per-model analytics can be rate limited
-    # while both account allowance bars have freshly loaded. Ignore only that
-    # exact ancillary notice, after its known section heading. Keep rejecting
-    # quota errors, loading indicators and all other ambiguous failures.
+    # Optional local analytics may mention caching or be rate limited while
+    # both account allowance bars have freshly loaded. Ignore only these exact
+    # ancillary lines after their known section heading. Keep rejecting quota
+    # errors, loading indicators and all other ambiguous failures.
     analytics = False
     checked_lines = []
     for line in display.splitlines():
@@ -159,6 +159,8 @@ def parse_claude_screen(display: str, *, cli_version: str,
         if stripped == "What's contributing to your limits usage?":
             analytics = True
         if analytics and re.fullmatch(r"Per-model breakdown unavailable \(rate limited [\u2014-] try again in a moment\)", stripped):
+            continue
+        if analytics and stripped == "Longer sessions are more expensive even when cached. /compact mid-task, /clear when switching to new tasks.":
             continue
         checked_lines.append(line)
     checked_display = '\n'.join(checked_lines)

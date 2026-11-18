@@ -196,9 +196,11 @@ circumvented through another transport to the same provider; complete permitted
 work and report any remaining block accurately.
 
 Assign each worker a bounded task using
-[task-contract.md](references/task-contract.md): input set, output path/schema,
-file ownership, permitted tools, acceptance criteria, stopping condition, and
-expected return report. Prompts guide behavior; actual tool permissions enforce
+[task-contract.md](references/task-contract.md): the outcome and its reason,
+input set, what to avoid, output path/schema, file ownership, permitted tools,
+pass/fail acceptance checks, stopping condition, and expected return report.
+The reasons behind these fields are in the maintained application's
+`docs/working-rules.md`. Prompts guide behavior; actual tool permissions enforce
 execution limits. Inspect returned output before executing generated code.
 
 For supplied-text work, use `brief-check` to inspect objective, inputs, required

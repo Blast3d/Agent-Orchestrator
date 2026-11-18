@@ -63,6 +63,35 @@ relevant approved recall in their actual assignment, with the exact run, role,
 input scope, deliverable, and acceptance checks. Record the assignment and its
 context; a packet saved on disk alone does not prove it was supplied to a worker.
 
+## Brief, review and integrate
+
+A brief states the outcome and why it is wanted, what to avoid, and a check
+that can fail, fixed before dispatch. A supplied-text worker gets one turn: the
+brief is all it knows and its answer is the whole artifact. Leave the method to
+the worker unless the result must fit a particular approach; a lighter tier
+needs complete inputs and an exact output shape, not more steps. For tone or
+format, give two or three examples that differ and name the traits to copy;
+when independent takes are wanted, share examples of format only.
+
+Answer your own questions from the workspace first. Ask the user only what
+would change the deliverable, once, and hold back only the work that answer
+could invalidate. Reuse existing authorization; obtain any missing permission
+before destructive or outward-facing work. Keep work whose parts depend on
+each other's decisions
+with one owner, who may be a worker; the other families then review that
+artifact against stated criteria instead of receiving a split or a second
+implementation.
+
+Accept a task only after you have run its acceptance check or, where it cannot
+be executed, compared the returned evidence with it. A worker's own "passed"
+and agreement between models are claims. Never relax a check to fill a family's
+share. Record why a task was rejected, and turn a user correction or a cause
+that would recur into a scoped, dated rule that states its reason, where it
+will be read: the contract, a skill, a project lesson or a test. When workers
+gave competing answers to the same question, keep the strongest distinct option
+instead of a blend and list the alternatives and judgment calls in the final
+report.
+
 ## Worker duties
 
 Stay within the assigned scope and tools. Return results to the recorded lead;

@@ -57,7 +57,7 @@ def _read_json(path):
 
 
 def _contract(value):
-    if not isinstance(value, dict) or not _CONTRACT_KEYS <= set(value) or set(value)-_CONTRACT_KEYS-{'memory_query','memory_policy','memory_profile','memory_depth','timeout_seconds','codex_model','codex_effort','skill_plan_binding','model_tier'}:
+    if not isinstance(value, dict) or not _CONTRACT_KEYS <= set(value) or set(value)-_CONTRACT_KEYS-{'memory_query','memory_policy','memory_profile','memory_depth','timeout_seconds','codex_model','codex_effort','skill_plan_binding','model_tier','scoped'}:
         raise ValueError('Assignment contract must contain declared identity fields and supported optional settings')
     if 'model_tier' in value:
         tier = value['model_tier']
@@ -65,6 +65,13 @@ def _contract(value):
                 or set(tier) != {'model', 'effort'} or not isinstance(tier['model'], str)
                 or not tier['model'] or tier['effort'] not in (None, 'low', 'medium', 'high')):
             raise ValueError('Model tier identity is invalid')
+    if 'scoped' in value:
+        scoped = value['scoped']
+        if (not isinstance(scoped, dict) or set(scoped) != {'repo', 'ref'}
+                or not isinstance(scoped['repo'], str) or not 1 <= len(scoped['repo']) <= 1024
+                or not isinstance(scoped['ref'], str) or not 1 <= len(scoped['ref']) <= 200
+                or scoped['ref'].startswith('-')):
+            raise ValueError('Scoped worktree identity requires a repository path and ref')
     if 'skill_plan_binding' in value:
         binding = value['skill_plan_binding']
         if (not isinstance(binding, dict) or set(binding) != {'plan_id', 'context_sha256'}

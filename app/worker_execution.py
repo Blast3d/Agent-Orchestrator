@@ -15,8 +15,9 @@ from task_store import write_json
 from worker_progress import ClaudeProgress
 from antigravity_progress import AntigravityProgress, AntigravityProtocolError
 from codex_progress import CodexProgress, CodexProtocolError
+from scoped_routes import ScopedToolViolation
 
-_PROTOCOL_ERRORS = (AntigravityProtocolError, CodexProtocolError)
+_PROTOCOL_ERRORS = (AntigravityProtocolError, CodexProtocolError, ScopedToolViolation)
 
 
 class WorkerInterrupted(Exception):
@@ -52,7 +53,8 @@ def _read_pipe_chunk(handle, size):
     return os.read(handle.fileno(), size)
 
 
-def invoke_cloud(command, stdin, work, env, *, timeout_seconds=None, protocol='claude', expected_model=None):
+def invoke_cloud(command, stdin, work, env, *, timeout_seconds=None, protocol='claude', expected_model=None,
+                 parser=None, cwd=None):
     """Read both pipes concurrently; progress never extends the hard deadline.
 
     Windows communicate() buffers stdout until EOF. Dedicated pipe readers
@@ -68,8 +70,9 @@ def invoke_cloud(command, stdin, work, env, *, timeout_seconds=None, protocol='c
                                      command[command.index('--output-format') + 1] == 'stream-json')
     if protocol not in ('claude', 'antigravity', 'codex'):
         raise ValueError('Unknown worker stream protocol')
-    parser = (AntigravityProgress(expected_model=expected_model) if protocol == 'antigravity' else
-              CodexProgress(expected_model=expected_model) if protocol == 'codex' else ClaudeProgress())
+    # Scoped routes supply a parser that audits their file-tool allowlist.
+    parser = parser or (AntigravityProgress(expected_model=expected_model) if protocol == 'antigravity' else
+                        CodexProgress(expected_model=expected_model) if protocol == 'codex' else ClaudeProgress())
     started = time.monotonic()
     last_persist = 0.0
     output_chars = 0
@@ -155,7 +158,7 @@ def invoke_cloud(command, stdin, work, env, *, timeout_seconds=None, protocol='c
             return False
 
     persist('starting', True)
-    process = subprocess.Popen(command, cwd=work, env=env, stdin=subprocess.PIPE,
+    process = subprocess.Popen(command, cwd=cwd or work, env=env, stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
 

@@ -17,6 +17,9 @@ from execution_limits import timeout_for_task
 from worker_execution import WorkerInterrupted, invoke_cloud
 from antigravity_boundary import boundary_error, BoundaryHeld
 from cli_updates import gemini_admission_error
+import scoped_routes
+import worker_worktree
+from scoped_routes import ScopedHeld
 from storage_budget import StorageBudget, StorageLimitError
 from task_activity import PhaseTracker
 from memory_usage import recall_plan, contract_fields
@@ -284,6 +287,12 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                     prompt_bytes=len(raw_prompt), requested_output=str(args.output.absolute()),
                     brief_check=brief_report, require_brief_check=require_brief)
     metadata.update(requested_timeout_seconds=override,timeout_policy='explicit' if override is not None else 'size-default')
+    # Scoped mode edits a disposable worktree of this repository through file tools only.
+    scoped = None
+    if getattr(args, 'worktree_from', None):
+        scoped = {'repo': str(Path(args.worktree_from).resolve()), 'ref': getattr(args, 'worktree_ref', None) or 'HEAD'}
+        metadata['scoped'] = scoped
+    prefix = scoped_routes.PREFIX if scoped else PREFIX
     if getattr(args, 'handoff_from_job_id', None):
         metadata.update(handoff_from_job_id=args.handoff_from_job_id,
                         handoff_reason=getattr(args, 'handoff_reason', 'Confirmed allowance limit'))
@@ -328,6 +337,8 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
         if args.worker == 'gemini' and model_tier['model'] != 'gemini-3.8-flash-high':
             contract['model_tier'] = {'model': model_tier['model'], 'effort': None}
         contract.update(contract_fields(memory_plan))
+        if scoped:
+            contract['scoped'] = scoped
         if skill_plan:
             contract['skill_plan_binding'] = metadata['skill_plan_binding']
         if override is not None:
@@ -403,6 +414,8 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
         if encoding_error or (require_brief and not brief_report['ok']):
             result.update(status='held', execution_status='held',
                           reason='The brief needs correction before this task can start. Read brief_check for the missing sections or errors.')
+        elif scoped and (held_reason := scoped_routes.proof_error(args.worker)):
+            result.update(status='held', execution_status='held', reason=held_reason)
         elif args.worker == 'gemini' and (held_reason := gemini_admission_error(boundary=boundary_error)):
             result.update(status='held', execution_status='held', reason=held_reason)
         elif args.worker == 'local-chat' and len(prompt) > 10000:
@@ -424,7 +437,7 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                 prompt += '\n\n## Lead-reviewed task skills\n' + selected['text']
             from memory_delivery import BYTE_LIMITS, fit as fit_memory, heading as memory_heading
             byte_limit = BYTE_LIMITS.get(args.worker)
-            if byte_limit and len(((PREFIX if provider else '') + prompt).encode('utf-8')) > byte_limit:
+            if byte_limit and len(((prefix if provider else '') + prompt).encode('utf-8')) > byte_limit:
                 raise BoundaryHeld('The operating guide and task exceed this worker transport; split the task before recall.')
             if provider:
                 readiness, _ = cloud_command(args.worker, '', workspaces / 'tasks' / job_id,
@@ -447,7 +460,7 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                 brain = BrainStore(storage_root)
                 recalled = brain.search(memory_query, project_id, **profile_options)
                 recalled = fit_memory(recalled, worker=args.worker, base_prompt=prompt,
-                                      prefix=PREFIX if provider else '', profile=memory_plan['profile'])
+                                      prefix=prefix if provider else '', profile=memory_plan['profile'])
                 if recalled['context']:
                     prompt += memory_heading(memory_plan['profile']) + recalled['context']
                 result['memory_context'] = {'ids': [r['id'] for r in recalled['results']],
@@ -468,7 +481,7 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                     raise ValueError('Local brief and recalled memory exceed the small chat profile')
             if args.worker == 'local-chat' and len(prompt) > 10000:
                 raise ValueError('Local brief and operating guidance exceed the small chat profile')
-            supplied = (PREFIX if provider else '') + prompt
+            supplied = (prefix if provider else '') + prompt
             result['orchestration_context']['request_sha256'] = hashlib.sha256(supplied.encode('utf-8')).hexdigest()
             result['orchestration_context']['request_chars'] = len(supplied)
             work = workspaces / 'tasks' / job_id
@@ -513,7 +526,21 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                         result['memory_context']['delivery_validation'] = validation
                         if validation['status'] != 'current':
                             raise BoundaryHeld('Memory changed during preparation; nothing was sent. Reload evidence in a new assignment.')
-                    if provider:
+                    if scoped:
+                        # Created only after admission, so a held task leaves no worktree.
+                        try:
+                            result['scoped'] = dict(scoped, worktree=worker_worktree.create(
+                                scoped['repo'], scoped['ref'], work / 'tree'))
+                        except worker_worktree.WorktreeError as exc:
+                            raise BoundaryHeld(f'The scoped worktree could not be created: {exc}') from exc
+                        invocation = scoped_routes.prepare(args.worker, prompt, work, work / 'tree',
+                            worker_environment(), model=codex_model if args.worker == 'codex' else claude_model,
+                            effort=codex_effort if args.worker == 'codex' else getattr(args, 'claude_effort', 'medium'),
+                            timeout_seconds=effective_timeout)
+                        command, stdin = invocation['command'], invocation['stdin']
+                        result['execution_configuration'] = dict(result.get('execution_configuration') or {},
+                            scoped_file_tools=True, worktree_repo=scoped['repo'], worktree_ref=scoped['ref'])
+                    elif provider:
                         command, stdin = cloud_command(args.worker, prompt, work,
                             claude_model, claude_effort,
                             codex_model=codex_model, codex_effort=codex_effort,
@@ -527,7 +554,7 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                             raise ValueError('Configured official worker executable is unavailable')
                     if args.worker == 'gemini':
                         from antigravity_boundary import verify_prepared
-                        verify_prepared(work)
+                        verify_prepared(work, scoped_routes.agy_hook_config((work / 'tree').resolve()) if scoped else None)
                     result.update(reservation_id=decision['reservation_id'], status='running',
                                   execution_status='running', started_at=timestamp())
                     if provider:
@@ -559,6 +586,10 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                             import codex_worker
                             env = codex_worker.environment(env)
                             options = {'protocol': 'codex', 'expected_model': codex_model}
+                        if scoped:
+                            options = {key: invocation[key] for key in ('protocol', 'parser', 'cwd')}
+                            options['expected_model'] = invocation.get('expected_model')
+                            env = invocation['env']
                         completed = invoke_cloud(command, stdin, work, env,
                                                  timeout_seconds=result['timeout_seconds'], **options)
                         result['process_pid'] = getattr(completed, 'process_pid', None)
@@ -595,7 +626,7 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
                         raise ValueError('Worker returned no answer')
                     result.update(status='awaiting_review', execution_status='succeeded',
                                   review_status='pending', response=response)
-    except (BoundaryHeld, StorageLimitError, OperatingContextError) as exc:
+    except (BoundaryHeld, ScopedHeld, StorageLimitError, OperatingContextError) as exc:
         result.update(status='held', execution_status='held', reason=str(exc))
     except WorkerInterrupted as exc:
         uncertain = True
@@ -675,6 +706,16 @@ def _dispatch(args, *, guard_factory=Guard, store=None, workspaces=None):
             result['cleanup_errors'].append({'step': 'activity_save', 'error': activity.error})
         # Publish review eligibility only once every dispatcher write is done.
         # Otherwise a reviewer can accept a task while a late save restores pending.
+        if (scoped_tree := (result.get('scoped') or {}).get('worktree')):
+            # The patch is collected into the task folder for review; the worktree goes.
+            try:
+                if execution_started:
+                    result['scoped']['collected'] = worker_worktree.collect(scoped_tree, store.root / job_id / 'scoped')
+                worker_worktree.remove(scoped_tree)
+                result['scoped']['worktree_removed'] = True
+            except (worker_worktree.WorktreeError, OSError) as exc:
+                result['cleanup_errors'].append({'step': 'scoped_worktree', 'error': str(exc)[:200]})
+            persist()
         result['finalized_at'] = timestamp()
         persist()
     return result
@@ -773,6 +814,9 @@ def main(argv=None):
     parser.add_argument('--timeout-seconds',type=int,help='Explicit hosted-worker deadline, 30..1800 seconds; changes assignment identity')
     parser.add_argument('--fallback-worker', action='append', choices=['claude', 'grok', 'codex', 'gemini', 'local-chat'], default=[],
                         help='Suitable approved alternate for confirmed quota limits; repeat to set the order')
+    parser.add_argument('--worktree-from', type=Path,
+                        help='Scoped mode: the worker edits a disposable worktree of this repository with file tools only')
+    parser.add_argument('--worktree-ref', default='HEAD', help='Commit or ref for the scoped worktree (default HEAD)')
     parser.add_argument('--no-auto-fallback', action='store_true',
                         help='Disable configured alternates for a task with narrower provider scope')
     from task_handoff import apply_automatic_fallbacks, dispatch_with_handoff

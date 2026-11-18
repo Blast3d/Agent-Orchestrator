@@ -434,7 +434,8 @@ def self_test():
         }[role]
         failures = {case['case'] for case in seeded['cases'] if not case['passed']}
         assert reference['all_passed'] and intended <= failures, (role, intended - failures)
-        assert public[role] == [row for row in cases(role) if row['public']], 'public fixture drift'
+        assert public[role] == [{key: value for key, value in row.items() if key != 'group'}
+                                for row in cases(role) if row['public']], 'public fixture drift'
         def mutates(*values):
             result = REFERENCES[role](*values)
             if isinstance(values[0], list):

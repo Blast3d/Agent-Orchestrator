@@ -256,6 +256,10 @@ def _configuration(args, frozen_contract=None):
         contract.update(codex_model=codex_model, codex_effort=getattr(args, 'codex_effort', 'medium'))
     from memory_usage import recall_plan, contract_fields
     contract.update(contract_fields(recall_plan(args)))
+    if getattr(args, 'worktree_from', None):
+        # Only scoped plans carry this key; each fallback still needs its own scoped proof.
+        contract['scoped'] = {'repo': str(Path(args.worktree_from).resolve()),
+                              'ref': getattr(args, 'worktree_ref', None) or 'HEAD'}
     if getattr(args,'timeout_seconds',None) is not None:
         from execution_limits import timeout_for_task
         contract['timeout_seconds']=timeout_for_task(args.size,args.timeout_seconds)

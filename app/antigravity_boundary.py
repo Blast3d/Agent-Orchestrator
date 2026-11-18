@@ -87,15 +87,17 @@ def local_command_payload(payload, name):
         raise BoundaryHeld('Antigravity did not confirm a local zero-usage inspection.') from exc
 
 
-def validate_discovery(payload, hook_path):
+def validate_discovery(payload, hook_path, hook=None):
     local_command_payload(payload, 'hooks')
+    hook = hook or hook_config()
+    name = next(iter(hook))
     try:
         hooks = payload['command']['data']['hooks']
         if not isinstance(hooks, list) or len(hooks) != 1:
             raise ValueError()
-        expected = hook_config()['orchestrator-no-tools']['PreToolUse'][0]['hooks'][0]
+        expected = hook[name]['PreToolUse'][0]['hooks'][0]
         entry = hooks[0]
-        if (entry.get('name') != 'orchestrator-no-tools' or entry.get('enabled') is not True
+        if (entry.get('name') != name or entry.get('enabled') is not True
                 or Path(entry.get('source', '')).resolve() != hook_path.resolve()
                 or entry.get('actions') != [{'event': 'PreToolUse', 'matcher': '*',
                     'type': 'command', 'command': expected['command'], 'timeout_seconds': 5}]):
@@ -110,7 +112,7 @@ def configuration_hashes():
             ('antigravity-cli/settings.json', 'config/config.json', 'config/mcp_config.json')}
 
 
-def verify_prepared(work):
+def verify_prepared(work, hook=None):
     try:
         work = Path(work)
         preflight = json.loads((work / 'antigravity-preflight.json').read_text(encoding='utf-8'))
@@ -121,7 +123,7 @@ def verify_prepared(work):
                 or preflight.get('executable_sha256') != digest(EXE)
                 or preflight.get('handler_sha256') != digest(HANDLER)
                 or preflight.get('hook_sha256') != digest(work / '.agents/hooks.json')
-                or json.loads((work / '.agents/hooks.json').read_text(encoding='utf-8')) != hook_config()):
+                or json.loads((work / '.agents/hooks.json').read_text(encoding='utf-8')) != (hook or hook_config())):
             raise BoundaryHeld(error or 'Antigravity settings changed after permission preflight.')
     except (OSError, ValueError, TypeError, AttributeError) as exc:
         if isinstance(exc, BoundaryHeld):
@@ -129,7 +131,9 @@ def verify_prepared(work):
         raise BoundaryHeld('Antigravity prepared permission evidence is unavailable.') from exc
 
 
-def prepare(work, env):
+def prepare(work, env, hook=None, add_dir=None):
+    """The scoped route passes its path-checking hook and the worktree as add_dir."""
+    hook = hook or hook_config()
     error = boundary_error()
     if error:
         raise BoundaryHeld(error)
@@ -139,7 +143,7 @@ def prepare(work, env):
         raise BoundaryHeld('Antigravity needs a new isolated assignment folder.')
     settings.mkdir()
     hook_path = settings / 'hooks.json'
-    write_json(hook_path, hook_config())
+    write_json(hook_path, hook)
     # Do not add a real connector or initialize a newly configured global server.
     global_mcp = Path.home() / '.gemini/config/mcp_config.json'
     try:
@@ -149,7 +153,8 @@ def prepare(work, env):
     except (OSError, ValueError) as exc:
         raise BoundaryHeld('Antigravity global MCP configuration needs review.') from exc
     config_before = configuration_hashes()
-    common = [str(EXE), '--add-dir', str(work), '--mode', 'plan', '--sandbox']
+    common = [str(EXE), '--add-dir', str(work), *(['--add-dir', str(add_dir)] if add_dir else []),
+              '--mode', 'accept-edits' if add_dir else 'plan', '--sandbox']
     effective = {}
     for command in ('hooks', 'config'):
         response = subprocess.run(common + ['-p', '/' + command, '--output-format', 'json',
@@ -162,7 +167,7 @@ def prepare(work, env):
                 raise ValueError()
             local_command_payload(payload, command)
             if command == 'hooks':
-                validate_discovery(payload, hook_path)
+                validate_discovery(payload, hook_path, hook)
             else:
                 effective = payload['command']['data']['config']
                 if (effective.get('useG1Credits') is not False
@@ -176,7 +181,7 @@ def prepare(work, env):
     # Check again after the CLI commands; disable auto-update only in this child.
     error = boundary_error()
     try:
-        changed = (json.loads(hook_path.read_text(encoding='utf-8')) != hook_config()
+        changed = (json.loads(hook_path.read_text(encoding='utf-8')) != hook
                    or config_before != configuration_hashes())
     except (OSError, ValueError) as exc:
         raise BoundaryHeld('Antigravity permission settings became unreadable.') from exc
@@ -187,7 +192,7 @@ def prepare(work, env):
         'configuration_hashes': config_before, 'validation_sha256': digest(VALIDATION),
         'handler_sha256': digest(HANDLER), 'executable_sha256': digest(EXE),
         'credit_overage': False, 'permission_mode': effective['toolPermission'],
-        'scope': 'supplied text only; all agent tool calls denied'})
+        'scope': ('scoped file tools in ' + str(add_dir)) if add_dir else 'supplied text only; all agent tool calls denied'})
     return common
 
 
@@ -196,15 +201,16 @@ def command_line_units(command):
     return len(subprocess.list2cmdline(command).encode('utf-16-le')) // 2
 
 
-def command_for(prompt, work, env, timeout_seconds=None):
+def command_for(prompt, work, env, timeout_seconds=None, hook=None, add_dir=None):
     # The agent stops itself shortly before the dispatcher's own task deadline.
     print_timeout = (90 if timeout_seconds is None
                      else max(PRINT_TIMEOUT_MARGIN_SECONDS, int(timeout_seconds) - PRINT_TIMEOUT_MARGIN_SECONDS))
     tail = ['--output-format', 'stream-json', '--disable-slash-commands', '--model', MODEL,
             '--print-timeout', f'{print_timeout}s', '--log-file', str(Path(work) / 'private-agy.log')]
     # The brief travels as one argument; refuse it before preparing anything.
-    planned = [str(EXE), '--add-dir', str(Path(work).resolve()), '--mode', 'plan', '--sandbox', '-p', prompt, *tail]
+    planned = [str(EXE), '--add-dir', str(Path(work).resolve()), *(['--add-dir', str(add_dir)] if add_dir else []),
+               '--mode', 'accept-edits' if add_dir else 'plan', '--sandbox', '-p', prompt, *tail]
     if command_line_units(planned) > MAX_COMMAND_LINE_UNITS:
         raise BoundaryHeld('Antigravity supplied-text brief exceeds the Windows command-line limit; split the assignment.')
-    common = prepare(work, env)
+    common = prepare(work, env, hook, add_dir)
     return common + ['-p', prompt, *tail]

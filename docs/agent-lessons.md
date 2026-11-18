@@ -1,5 +1,17 @@
 # Verified project lessons
 
+## Keep ancillary Claude usage tips out of quota freshness checks
+
+When Claude Code `/usage` shows complete account bars but the collector times
+out, inspect which rendered line triggered the parser's stale-data check.
+Claude Code 2.1.288 added a local analytics tip saying cached sessions cost
+more; scanning the whole screen for `cached` rejected that tip as if the account
+bars were stale. `app/quota_tui.py` now ignores only the exact tip after the
+analytics heading. Other cached, loading and error text still fails closed.
+On 2026-11-07, 45 focused checks passed and a fresh zero-token `/usage` refresh
+returned both account windows. Revalidate each new CLI version against a live
+loading-to-loaded transition before adding it to the verified version set.
+
 ## Keep advisory quota preference separate from admission
 
 When an advisory worker stays held below 20%, trace both admission and alternate
