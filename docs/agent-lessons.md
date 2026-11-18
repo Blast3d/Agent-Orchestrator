@@ -83,3 +83,7 @@ then succeeded in 2.8 seconds. The official panel showed zero model calls and
 the normalized reader accepted the fresh result. Next time, keep quota reads in
 an empty directory outside the repository; do not approve a trust prompt for
 the source checkout merely to refresh allowance data.
+
+### Jev returns valid decisions with extended billing details
+
+On November 17, 2026, a synthetic OpenRouter decision included `usage.is_byok` and `usage.cost_details`. The previous allowlist rejected the entire answer. The connector now validates the billing fields and still checks the pinned model, provider, distribution and token counts. For a recurrence, inspect a synthetic response shape and replay it offline. The regression is in `tests/test_jev_openrouter.py`.

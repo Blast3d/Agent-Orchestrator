@@ -407,8 +407,16 @@ def _response(raw, questions):
     usage = value.get('usage')
     if usage is None:
         usage = {}
-    if not isinstance(usage, dict) or usage.keys() - {'input_tokens', 'output_tokens', 'cost'}:
+    if not isinstance(usage, dict) or usage.keys() - {'input_tokens', 'output_tokens', 'cost', 'is_byok', 'cost_details'}:
         raise ValueError('Invalid usage metadata')
+    if 'is_byok' in usage and type(usage['is_byok']) is not bool:
+        raise ValueError('Invalid billing mode')
+    details = usage.get('cost_details')
+    if details is not None and (not isinstance(details, dict)
+            or details.keys() - {'upstream_inference_cost', 'upstream_inference_prompt_cost',
+                                 'upstream_inference_completions_cost'}
+            or any(value is not None and not _number(value, 0, 1_000_000) for value in details.values())):
+        raise ValueError('Invalid billing detail')
     for name in ('input_tokens', 'output_tokens'):
         number = usage.get(name)
         if number is not None and (type(number) is not int or not 0 <= number <= 1_000_000_000):

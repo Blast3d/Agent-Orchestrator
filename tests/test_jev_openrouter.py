@@ -293,6 +293,18 @@ class JevTests(unittest.TestCase):
         self.assertEqual(usage['attempts'], 1)
         self.assertNotIn('Synthetic', json.dumps(usage))
 
+    def test_openrouter_extended_billing_metadata(self):
+        self.configure()
+        response = deepcopy(RESPONSE)
+        response['usage'].update(is_byok=False, cost_details={
+            'upstream_inference_cost': 0.00001365, 'upstream_inference_prompt_cost': 0.00001365,
+            'upstream_inference_completions_cost': 0})
+        self.reply(response)
+        self.assertEqual(self.evaluate()['status'], 'ok')
+        response['usage']['cost_details']['upstream_inference_cost'] = 'untrusted text'
+        self.reply(response)
+        self.assert_invalid_response()
+
     def test_missing_usage_stays_unknown(self):
         self.configure()
         response = deepcopy(RESPONSE)
