@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import sqlite3
 import tempfile
-from threading import Thread
+from threading import Event, Thread
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
@@ -18,9 +18,12 @@ from voice_gateway import Dispatcher, Journal, handler
 class FakeDispatcher:
     def __init__(self):
         self.started = []
+        self.accepted = Event()
+        self.continued = Event()
 
     def start(self, request_id, *, continuation=False):
         self.started.append((request_id, continuation))
+        (self.continued if continuation else self.accepted).set()
 
 
 class VoiceGatewayTests(unittest.TestCase):
@@ -53,6 +56,7 @@ class VoiceGatewayTests(unittest.TestCase):
             self.call('/v1/requests', body, token='wrong')
         self.assertEqual(denied.exception.code, 403)
         self.assertEqual(self.call('/v1/requests', body)[0], 202)
+        self.assertTrue(self.dispatcher.accepted.wait(3))
         self.assertTrue(self.call('/v1/requests', body)[1]['reused'])
         self.assertEqual(self.dispatcher.started, [('voice-1234', False)])
         with self.assertRaises(HTTPError) as conflict:
@@ -64,10 +68,12 @@ class VoiceGatewayTests(unittest.TestCase):
     def test_question_answer_and_uncertain_recovery(self):
         body = {'schema_version': 1, 'request_id': 'voice-5678', 'text': 'Which project?', 'project_id': 'openwhispr'}
         self.call('/v1/requests', body)
+        self.assertTrue(self.dispatcher.accepted.wait(3))
         self.journal.transition('voice-5678', 'started', 'started', {})
         self.journal.question('voice-5678', 'question-1', 'Which project?')
         status, answer = self.call('/v1/requests/voice-5678/answers', {'question_id': 'question-1', 'text': 'OpenWhispr'})
         self.assertEqual((status, answer['status']), (200, 'answered'))
+        self.assertTrue(self.dispatcher.continued.wait(3))
         self.assertEqual(self.dispatcher.started[-1], ('voice-5678', True))
         self.assertTrue(self.call('/v1/requests/voice-5678/answers',
                                   {'question_id': 'question-1', 'text': 'OpenWhispr'})[1]['reused'])

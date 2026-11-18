@@ -702,7 +702,7 @@ class HTTPTests(unittest.TestCase):
         status, headers, body = self.request(path='/?run=fixture&project=alpha',
                                              headers=navigation, authorized=False)
         self.assertEqual(status, 200)
-        self.assertIn('Your session, in view.', body)
+        self.assertIn('<h1>Orchestration runs</h1>', body)
         self.assertEqual(headers['X-Frame-Options'], 'DENY')
         self.assertEqual(self.request(path='/api/runs', headers=navigation)[0], 403)
         self.assertEqual(self.request('POST', '/api/attach', payload={'run': 'fixture'}, headers=navigation)[0], 403)
